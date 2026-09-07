@@ -1,0 +1,14 @@
+{
+  "name": "gestion-edificios",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix apps/api\" \"npm run dev --prefix apps/web\"",
+    "install:all": "npm install --prefix apps/api && npm install --prefix apps/web",
+    "db:migrate": "npm run db:migrate --prefix apps/api",
+    "test": "npm test --prefix apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
