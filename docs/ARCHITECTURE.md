@@ -24,7 +24,7 @@ Los módulos funcionales son:
 | Frontend | React.js | Interfaz web dinámica para el administrador. |
 | Backend | Node.js + Express | API REST sencilla de integrar con React.js. |
 | Persistencia | MySQL | Base relacional, transaccional y apropiada para datos financieros. |
-| Acceso a datos | `mysql2` | Consultas parametrizadas y soporte de transacciones MySQL. |
+| Acceso a datos | ORM + SQL parametrizado (`mysql2`) | El ORM cubre CRUD y relaciones simples; el SQL explícito cubre finanzas, reportes, agregaciones y bloqueos. El driver de MySQL es `mysql2`. |
 | Contrato | REST/JSON | Contrato simple y ampliamente interoperable. |
 | Validación | Zod en los límites de entrada | Evita que datos inválidos entren al dominio. |
 | Autenticación | Sesión basada en cookie HttpOnly | Evita exponer credenciales de sesión al JavaScript del navegador. |
@@ -58,11 +58,11 @@ flowchart LR
 2. El middleware de seguridad identifica al usuario y el edificio autorizado.
 3. El controlador valida la forma de la entrada y delega al caso de uso.
 4. El caso de uso aplica las reglas de negocio y coordina repositorios.
-5. El repositorio ejecuta la consulta mediante `mysql2` dentro de una transacción cuando corresponda.
+5. El repositorio persiste o consulta mediante ORM o SQL parametrizado, dentro de una transacción cuando corresponda.
 6. El backend registra la operación auditable y devuelve una respuesta con formato consistente.
 7. React actualiza la pantalla y presenta el resultado o los errores de validación.
 
-Los controladores no contienen reglas de negocio y el dominio no conoce Express, `mysql2` ni React.js.
+Los controladores no contienen reglas de negocio. El dominio no conoce Express, el ORM, `mysql2` ni React.js.
 
 ## 4. Estructura del repositorio
 
@@ -86,7 +86,8 @@ proyecto-2/
 │   │   ├── database/
 │   │   │   ├── migrations/
 │   │   │   ├── seeds/
-│   │   │   └── connection.js
+│   │   │   ├── models/              # Esquema o modelos del ORM
+│   │   │   └── connection.js        # Pool mysql2 compartido con el ORM
 │   │   └── tests/
 │   └── web/
 │       ├── src/
@@ -124,7 +125,7 @@ modules/assets/
 │   ├── use-cases/            # Registrar, consultar, actualizar, etc.
 │   └── dto/                  # Datos de entrada y salida del caso de uso
 ├── infrastructure/
-│   ├── persistence/          # Implementaciones de repositorios con mysql2
+│   ├── persistence/          # Repositorios: ORM para CRUD, SQL para consultas exigentes
 │   └── services/             # Integraciones externas del módulo
 └── presentation/
     ├── http/                 # Controladores, rutas y esquemas Zod
@@ -136,9 +137,28 @@ modules/assets/
 - `presentation` puede depender de `application`.
 - `application` puede depender de `domain` y de interfaces de repositorio.
 - `infrastructure` implementa las interfaces definidas por `application` o `domain`.
-- `domain` no depende de ninguna librería de infraestructura.
+- `domain` no depende de ninguna librería de infraestructura. Tampoco conoce el ORM ni el SQL.
 - Un módulo no consulta directamente las tablas internas de otro módulo; utiliza casos de uso o contratos definidos.
 - Las operaciones que modifican varias entidades financieras deben ejecutarse dentro de una transacción.
+- Los repositorios son el único lugar que elige entre ORM y SQL. Los casos de uso piden intenciones (`aplicarPago`, `listarActivosPorEdificio`), no consultas.
+
+### Estrategia de acceso a datos
+
+El sistema usa **ambos** enfoques de forma deliberada. No es opcional mezclarlos al azar: cada repositorio elige el mecanismo según el tipo de operación.
+
+| Enfoque | Uso |
+|---|---|
+| ORM | Altas, lecturas, actualizaciones, borrado lógico y relaciones simples de catálogo: edificios, unidades, activos, proveedores, pólizas, usuarios, roles, adjuntos, hitos. |
+| SQL parametrizado | Facturación y recaudo, aplicación de pagos, saldos, reversiones, intereses, ejecución presupuestal, reportes, vencimientos de jobs y cualquier `SELECT ... FOR UPDATE`. |
+
+Reglas:
+
+- El ORM se apoya en el pool de `mysql2`. El SQL crudo se ejecuta con el API de consultas nativas del ORM o con `mysql2`, **siempre parametrizado**.
+- Una operación de negocio que abre transacción debe completar ORM y SQL dentro de **la misma** transacción.
+- Está prohibido concatenar valores de usuario en SQL. Está prohibido hidratar colecciones grandes en memoria para calcular totales que MySQL puede agregar.
+- El ORM no sustituye migraciones: el esquema se versiona en `database/migrations`.
+- No se usa sincronización automática de esquema (`sync`, `push` no controlado) en ambientes compartidos o producción.
+- Un listado paginado no carga relaciones completas por defecto, ni con ORM ni con `JOIN` innecesarios.
 
 ## 6. Responsabilidad de cada módulo
 
@@ -168,7 +188,7 @@ Entidades principales: `InsurancePolicy`, `PolicyCoverage`, `PolicyAsset`, `Insu
 
 ### Facturación y recaudo
 
-Gestiona la generación de conceptos y facturas, pagos, aplicación de pagos, saldos a favor, recibos e intereses de mora. Es el módulo con mayor exigencia transaccional.
+Gestiona la generación de conceptos y facturas, pagos, aplicación de pagos, saldos a favor, recibos e intereses de mora. Es el módulo con mayor exigencia transaccional y el que más debe apoyarse en SQL explícito.
 
 Entidades principales: `BillingPeriod`, `Charge`, `Invoice`, `InvoiceLine`, `Payment`, `PaymentAllocation`, `CashReceipt`, `LateInterest`.
 
@@ -182,7 +202,7 @@ Reglas esenciales:
 
 ### Presupuesto
 
-Gestiona presupuestos anuales, categorías, versiones y ejecución. Debe distinguir valores presupuestados, comprometidos, ejecutados y disponibles.
+Gestiona presupuestos anuales, categorías, versiones y ejecución. Debe distinguir valores presupuestados, comprometidos, ejecutados y disponibles. Las consultas de ejecución y disponibilidad se resuelven con SQL agregado, no recalculando el presupuesto en memoria.
 
 Entidades principales: `AnnualBudget`, `BudgetLine`, `BudgetExecution`.
 
@@ -202,6 +222,7 @@ Entidades principales: `Project`, `ProjectQuote`, `ProjectMilestone`, `ProjectPr
 - Los estados se modelan como valores controlados y sus cambios importantes se registran en tablas de historial.
 - Las eliminaciones de registros operativos deben ser lógicas cuando exista trazabilidad financiera o administrativa.
 - Las migraciones son obligatorias: no se modifica la base de datos manualmente en ambientes compartidos.
+- El ORM mapea tablas y relaciones; no es la fuente de verdad del esquema. La fuente de verdad son las migraciones SQL.
 
 Relaciones de alto nivel:
 
@@ -266,7 +287,7 @@ La paginación usa `page`, `pageSize`, `sort` y filtros explícitos. Los endpoin
 
 - Contraseñas con hash resistente, nunca almacenadas en texto plano.
 - Cookies de sesión `HttpOnly`, `Secure` en producción y política `SameSite` adecuada.
-- Validación de entrada en cada endpoint y consultas parametrizadas mediante ORM.
+- Validación de entrada en cada endpoint. Toda consulta a MySQL, por ORM o SQL, debe ser parametrizada.
 - Autorización por rol, permiso y edificio asignado.
 - Protección contra CSRF si la estrategia de sesión lo requiere.
 - Límites de frecuencia para autenticación y endpoints sensibles.
@@ -357,6 +378,7 @@ Cada módulo debe entregarse con migración, endpoints, validaciones, permisos, 
 ## 16. Criterios de aceptación arquitectónicos
 
 - El frontend no accede directamente a MySQL.
+- El dominio y los controladores no usan el ORM ni escriben SQL.
 - Ningún controlador contiene reglas financieras o transiciones complejas.
 - Las operaciones financieras importantes son transaccionales e idempotentes cuando aplique.
 - Cada dato pertenece a un edificio o tiene una justificación explícita para ser global.
