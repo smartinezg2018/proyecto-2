@@ -6,6 +6,7 @@ import { ModuleSeguros } from "../features/insurance/InsurancePage.jsx";
 import { ModuleFacturacion } from "../features/billing/BillingPage.jsx";
 import { ModulePresupuesto } from "../features/budget/BudgetPage.jsx";
 import { ModuleProyectos } from "../features/projects/ProjectsPage.jsx";
+import { BuildingsPage } from "../features/administration/BuildingsPage.jsx";
 import {
   Package, Wrench, Shield, Receipt, BarChart3, FolderKanban,
   Bell, Search, Building2, Home, ChevronDown,
@@ -15,6 +16,7 @@ import {
 // ---- Navigation config ----
 const NAV = [
   { id: "home", label: "Panel General", icon: Home },
+  { id: "edificios", label: "Edificios", icon: Building2 },
   { id: "inventario", label: "Inventario", icon: Package },
   { id: "mantenimientos", label: "Mantenimientos", icon: Wrench },
   { id: "seguros", label: "Seguros y Pólizas", icon: Shield },
@@ -31,6 +33,7 @@ export default function App() {
   const renderModule = () => {
     switch (active) {
       case "home": return <ModuleHome />;
+      case "edificios": return <BuildingsPage />;
       case "inventario": return <ModuleInventario />;
       case "mantenimientos": return <ModuleMantenimientos />;
       case "seguros": return <ModuleSeguros />;
