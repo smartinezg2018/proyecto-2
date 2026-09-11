@@ -35,7 +35,11 @@ export function createBuildingUseCases(repository) {
       const building = normalizeBuildingInput(input);
 
       if (await repository.findByIdentification(building.identification)) {
-        throw new AppError('Ya existe un edificio con esa identificación.', 409, 'DUPLICATE_BUILDING');
+        throw new AppError(
+          'Ya existe un edificio con esa identificación.',
+          409,
+          'DUPLICATE_BUILDING'
+        );
       }
 
       return repository.create({ ...building, createdBy: userId });
@@ -60,7 +64,11 @@ export function createBuildingUseCases(repository) {
 
       await this.getById(id);
       if (await repository.findByIdentification(building.identification, id)) {
-        throw new AppError('Ya existe un edificio con esa identificación.', 409, 'DUPLICATE_BUILDING');
+        throw new AppError(
+          'Ya existe un edificio con esa identificación.',
+          409,
+          'DUPLICATE_BUILDING'
+        );
       }
 
       return repository.update(id, { ...building, updatedBy: userId });

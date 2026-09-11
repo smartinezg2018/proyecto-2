@@ -1,7 +1,6 @@
 Estándares de Nombramiento en JavaScript
 
-Los estándares adoptados se basan en la *Airbnb JavaScript Style Guide*, ampliamente reconocida y validada por la comunidad de desarrollo en JavaScript y Node.js.
-
+Los estándares adoptados se basan en la _Airbnb JavaScript Style Guide_, ampliamente reconocida y validada por la comunidad de desarrollo en JavaScript y Node.js.
 
 <table>
 <thead>

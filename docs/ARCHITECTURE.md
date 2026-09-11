@@ -18,18 +18,18 @@ Los módulos funcionales son:
 
 ## 2. Decisiones arquitectónicas
 
-| Decisión | Elección | Justificación |
-|---|---|---|
-| Estilo | Monolito modular | Reduce complejidad de despliegue y mantiene límites de dominio explícitos. |
-| Frontend | React.js | Interfaz web dinámica para el administrador. |
-| Backend | Node.js + Express | API REST sencilla de integrar con React.js. |
-| Persistencia | MySQL | Base relacional, transaccional y apropiada para datos financieros. |
-| Acceso a datos | ORM + SQL parametrizado (`mysql2`) | El ORM cubre CRUD y relaciones simples; el SQL explícito cubre finanzas, reportes, agregaciones y bloqueos. El driver de MySQL es `mysql2`. |
-| Contrato | REST/JSON | Contrato simple y ampliamente interoperable. |
-| Validación | Zod en los límites de entrada | Evita que datos inválidos entren al dominio. |
-| Autenticación | Sesión basada en cookie HttpOnly | Evita exponer credenciales de sesión al JavaScript del navegador. |
-| Documentación API | OpenAPI | Hace el contrato consultable y facilita pruebas e integración. |
-| Archivos | Almacenamiento externo o volumen dedicado | La base de datos conserva metadatos; no se almacenan binarios grandes en tablas. |
+| Decisión          | Elección                                  | Justificación                                                                                                                               |
+| ----------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Estilo            | Monolito modular                          | Reduce complejidad de despliegue y mantiene límites de dominio explícitos.                                                                  |
+| Frontend          | React.js                                  | Interfaz web dinámica para el administrador.                                                                                                |
+| Backend           | Node.js + Express                         | API REST sencilla de integrar con React.js.                                                                                                 |
+| Persistencia      | MySQL                                     | Base relacional, transaccional y apropiada para datos financieros.                                                                          |
+| Acceso a datos    | ORM + SQL parametrizado (`mysql2`)        | El ORM cubre CRUD y relaciones simples; el SQL explícito cubre finanzas, reportes, agregaciones y bloqueos. El driver de MySQL es `mysql2`. |
+| Contrato          | REST/JSON                                 | Contrato simple y ampliamente interoperable.                                                                                                |
+| Validación        | Zod en los límites de entrada             | Evita que datos inválidos entren al dominio.                                                                                                |
+| Autenticación     | Sesión basada en cookie HttpOnly          | Evita exponer credenciales de sesión al JavaScript del navegador.                                                                           |
+| Documentación API | OpenAPI                                   | Hace el contrato consultable y facilita pruebas e integración.                                                                              |
+| Archivos          | Almacenamiento externo o volumen dedicado | La base de datos conserva metadatos; no se almacenan binarios grandes en tablas.                                                            |
 
 La aplicación debe respetar este stack base. Las librerías auxiliares pueden incorporarse únicamente cuando resuelvan una necesidad concreta y queden documentadas.
 
@@ -146,10 +146,10 @@ modules/assets/
 
 El sistema usa **ambos** enfoques de forma deliberada. No es opcional mezclarlos al azar: cada repositorio elige el mecanismo según el tipo de operación.
 
-| Enfoque | Uso |
-|---|---|
-| ORM | Altas, lecturas, actualizaciones, borrado lógico y relaciones simples de catálogo: edificios, unidades, activos, proveedores, pólizas, usuarios, roles, adjuntos, hitos. |
-| SQL parametrizado | Facturación y recaudo, aplicación de pagos, saldos, reversiones, intereses, ejecución presupuestal, reportes, vencimientos de jobs y cualquier `SELECT ... FOR UPDATE`. |
+| Enfoque           | Uso                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ORM               | Altas, lecturas, actualizaciones, borrado lógico y relaciones simples de catálogo: edificios, unidades, activos, proveedores, pólizas, usuarios, roles, adjuntos, hitos. |
+| SQL parametrizado | Facturación y recaudo, aplicación de pagos, saldos, reversiones, intereses, ejecución presupuestal, reportes, vencimientos de jobs y cualquier `SELECT ... FOR UPDATE`.  |
 
 Reglas:
 
@@ -246,18 +246,18 @@ Prefijo: `/api/v1`.
 
 Ejemplos de recursos:
 
-| Recurso | Operaciones principales |
-|---|---|
-| `/auth` | iniciar sesión, cerrar sesión, usuario actual |
-| `/buildings` | listar, consultar y actualizar edificios |
-| `/buildings/:buildingId/assets` | crear, listar y actualizar activos |
-| `/assets/:assetId/maintenance` | registrar y consultar mantenimientos |
-| `/buildings/:buildingId/policies` | gestionar pólizas y vencimientos |
-| `/buildings/:buildingId/invoices` | generar y consultar facturas |
-| `/buildings/:buildingId/payments` | registrar y aplicar pagos |
-| `/buildings/:buildingId/budget` | administrar presupuesto y ejecución |
-| `/buildings/:buildingId/projects` | administrar proyectos y avances |
-| `/audit-logs` | consultar auditoría autorizada |
+| Recurso                           | Operaciones principales                       |
+| --------------------------------- | --------------------------------------------- |
+| `/auth`                           | iniciar sesión, cerrar sesión, usuario actual |
+| `/buildings`                      | listar, consultar y actualizar edificios      |
+| `/buildings/:buildingId/assets`   | crear, listar y actualizar activos            |
+| `/assets/:assetId/maintenance`    | registrar y consultar mantenimientos          |
+| `/buildings/:buildingId/policies` | gestionar pólizas y vencimientos              |
+| `/buildings/:buildingId/invoices` | generar y consultar facturas                  |
+| `/buildings/:buildingId/payments` | registrar y aplicar pagos                     |
+| `/buildings/:buildingId/budget`   | administrar presupuesto y ejecución           |
+| `/buildings/:buildingId/projects` | administrar proyectos y avances               |
+| `/audit-logs`                     | consultar auditoría autorizada                |
 
 Formato de éxito:
 
@@ -345,11 +345,11 @@ Ambientes recomendados:
 
 Servicios locales sugeridos:
 
-| Servicio | Puerto |
-|---|---:|
-| Frontend React.js | 3000 |
-| API Express | 5000 |
-| MySQL | 3306 |
+| Servicio          | Puerto |
+| ----------------- | -----: |
+| Frontend React.js |   3000 |
+| API Express       |   5000 |
+| MySQL             |   3306 |
 
 En producción se recomienda servir el frontend detrás de un proxy HTTPS y mantener la base de datos en una red privada. Las migraciones se ejecutan como paso controlado del despliegue, nunca al iniciar cada instancia sin coordinación.
 
