@@ -1,45 +1,64 @@
-﻿import { useState } from "react";
-import { ModuleHome } from "../features/home/HomePage.jsx";
-import { ModuleInventario } from "../features/assets/AssetsPage.jsx";
-import { ModuleMantenimientos } from "../features/maintenance/MaintenancePage.jsx";
-import { ModuleSeguros } from "../features/insurance/InsurancePage.jsx";
-import { ModuleFacturacion } from "../features/billing/BillingPage.jsx";
-import { ModulePresupuesto } from "../features/budget/BudgetPage.jsx";
-import { ModuleProyectos } from "../features/projects/ProjectsPage.jsx";
-import { BuildingsPage } from "../features/administration/BuildingsPage.jsx";
+﻿import { useState } from 'react';
+import { ModuleHome } from '../features/home/HomePage.jsx';
+import { ModuleInventario } from '../features/assets/AssetsPage.jsx';
+import { ModuleMantenimientos } from '../features/maintenance/MaintenancePage.jsx';
+import { ModuleSeguros } from '../features/insurance/InsurancePage.jsx';
+import { ModuleFacturacion } from '../features/billing/BillingPage.jsx';
+import { ModulePresupuesto } from '../features/budget/BudgetPage.jsx';
+import { ModuleProyectos } from '../features/projects/ProjectsPage.jsx';
+import { BuildingsPage } from '../features/administration/BuildingsPage.jsx';
 import {
-  Package, Wrench, Shield, Receipt, BarChart3, FolderKanban,
-  Bell, Search, Building2, Home, ChevronDown,
-  ChevronRight, Menu, Settings
-} from "lucide-react";
+  Package,
+  Wrench,
+  Shield,
+  Receipt,
+  BarChart3,
+  FolderKanban,
+  Bell,
+  Search,
+  Building2,
+  Home,
+  ChevronDown,
+  ChevronRight,
+  Menu,
+  Settings
+} from 'lucide-react';
 
 // ---- Navigation config ----
 const NAV = [
-  { id: "home", label: "Panel General", icon: Home },
-  { id: "edificios", label: "Edificios", icon: Building2 },
-  { id: "inventario", label: "Inventario", icon: Package },
-  { id: "mantenimientos", label: "Mantenimientos", icon: Wrench },
-  { id: "seguros", label: "Seguros y Pólizas", icon: Shield },
-  { id: "facturacion", label: "Facturación", icon: Receipt },
-  { id: "presupuesto", label: "Presupuesto", icon: BarChart3 },
-  { id: "proyectos", label: "Proyectos", icon: FolderKanban },
+  { id: 'home', label: 'Panel General', icon: Home },
+  { id: 'edificios', label: 'Edificios', icon: Building2 },
+  { id: 'inventario', label: 'Inventario', icon: Package },
+  { id: 'mantenimientos', label: 'Mantenimientos', icon: Wrench },
+  { id: 'seguros', label: 'Seguros y Pólizas', icon: Shield },
+  { id: 'facturacion', label: 'Facturación', icon: Receipt },
+  { id: 'presupuesto', label: 'Presupuesto', icon: BarChart3 },
+  { id: 'proyectos', label: 'Proyectos', icon: FolderKanban }
 ];
 
 // ---- App Shell ----
 export default function App() {
-  const [active, setActive] = useState("home");
+  const [active, setActive] = useState('home');
   const [collapsed, setCollapsed] = useState(false);
 
   const renderModule = () => {
     switch (active) {
-      case "home": return <ModuleHome />;
-      case "edificios": return <BuildingsPage />;
-      case "inventario": return <ModuleInventario />;
-      case "mantenimientos": return <ModuleMantenimientos />;
-      case "seguros": return <ModuleSeguros />;
-      case "facturacion": return <ModuleFacturacion />;
-      case "presupuesto": return <ModulePresupuesto />;
-      case "proyectos": return <ModuleProyectos />;
+      case 'home':
+        return <ModuleHome />;
+      case 'edificios':
+        return <BuildingsPage />;
+      case 'inventario':
+        return <ModuleInventario />;
+      case 'mantenimientos':
+        return <ModuleMantenimientos />;
+      case 'seguros':
+        return <ModuleSeguros />;
+      case 'facturacion':
+        return <ModuleFacturacion />;
+      case 'presupuesto':
+        return <ModulePresupuesto />;
+      case 'proyectos':
+        return <ModuleProyectos />;
     }
   };
 
@@ -54,7 +73,9 @@ export default function App() {
         style={{ width: collapsed ? 64 : 232 }}
       >
         {/* Brand */}
-        <div className={`flex items-center gap-3 border-b border-white/5 ${collapsed ? "px-3 py-4 justify-center" : "px-4 py-4"}`}>
+        <div
+          className={`flex items-center gap-3 border-b border-white/5 ${collapsed ? 'px-3 py-4 justify-center' : 'px-4 py-4'}`}
+        >
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <Building2 size={15} className="text-white" />
           </div>
@@ -68,14 +89,14 @@ export default function App() {
 
         {/* Nav */}
         <nav className="flex-1 py-2 overflow-y-auto">
-          {NAV.map(item => {
+          {NAV.map((item) => {
             const isActive = active === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => setActive(item.id)}
                 title={collapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 transition-colors text-left ${collapsed ? "px-0 justify-center py-2.5" : "px-4 py-2.5"} ${isActive ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
+                className={`w-full flex items-center gap-3 transition-colors text-left ${collapsed ? 'px-0 justify-center py-2.5' : 'px-4 py-2.5'} ${isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
               >
                 <item.icon size={17} className="flex-shrink-0" />
                 {!collapsed && (
@@ -99,8 +120,8 @@ export default function App() {
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={`w-full flex items-center gap-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg py-2 transition-colors ${collapsed ? "justify-center px-0" : "px-3"}`}
-            title={collapsed ? "Expandir menú" : "Contraer menú"}
+            className={`w-full flex items-center gap-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg py-2 transition-colors ${collapsed ? 'justify-center px-0' : 'px-3'}`}
+            title={collapsed ? 'Expandir menú' : 'Contraer menú'}
           >
             <Menu size={15} className="flex-shrink-0" />
             {!collapsed && <span className="text-xs font-semibold">Contraer menú</span>}
@@ -140,7 +161,9 @@ export default function App() {
 
             {/* User */}
             <button className="flex items-center gap-2.5 hover:bg-slate-50 rounded-lg px-2 py-1 transition-colors">
-              <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">AM</div>
+              <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                AM
+              </div>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-bold text-slate-800 leading-tight">Ana Martínez</p>
                 <p className="text-xs text-slate-400 leading-tight">Administradora</p>
@@ -152,9 +175,7 @@ export default function App() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-6xl mx-auto">
-            {renderModule()}
-          </div>
+          <div className="max-w-6xl mx-auto">{renderModule()}</div>
         </main>
       </div>
     </div>
