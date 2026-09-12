@@ -97,6 +97,13 @@ export function getAssetHistory(assetId) {
   return apiRequest(`/api/v1/assets/${assetId}/history`);
 }
 
+export function registerAssetAcquisitionCost(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/acquisition-cost`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

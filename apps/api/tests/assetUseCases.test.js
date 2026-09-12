@@ -52,6 +52,12 @@ function createRepositories() {
       },
       async findHistoryByAsset(assetId) {
         return history.filter((entry) => String(entry.assetId) === String(assetId));
+      },
+      async updateAcquisitionCost(id, changes, historyEntries = []) {
+        const index = assets.findIndex((asset) => String(asset.id) === String(id));
+        assets[index] = { ...assets[index], ...changes };
+        history.push(...historyEntries.map((entry) => ({ ...entry, assetId: Number(id) })));
+        return assets[index];
       }
     }
   };
@@ -142,6 +148,47 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('registra el costo de adquisición con valor, fecha y documento', async () => {
+  const { assetRepository, buildingRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository);
+  const created = await useCases.create(1, validAsset);
+
+  const updated = await useCases.registerAcquisitionCost(
+    created.id,
+    {
+      acquisitionCost: 18500000,
+      acquisitionDate: '2024-01-15',
+      acquisitionDocument: 'FAC-2024-018'
+    },
+    7
+  );
+
+  assert.equal(updated.acquisitionCost, 18500000);
+  assert.equal(updated.acquisitionDocument, 'FAC-2024-018');
+  const costChange = assetRepository.history.find((entry) => entry.field === 'acquisitionCost');
+  assert.equal(costChange.newValue, '18500000');
+  assert.equal(costChange.createdBy, 7);
+});
+
+test('rechaza un costo de adquisición negativo', async () => {
+  const { assetRepository, buildingRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository);
+  const created = await useCases.create(1, validAsset);
+
+  await assert.rejects(
+    () =>
+      useCases.registerAcquisitionCost(created.id, {
+        acquisitionCost: -1,
+        acquisitionDate: '2024-01-15'
+      }),
+    (error) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(error.message, /numérico y no negativo/);
+      return true;
+    }
+  );
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {

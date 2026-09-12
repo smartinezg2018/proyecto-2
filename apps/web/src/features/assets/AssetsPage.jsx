@@ -6,6 +6,7 @@ import {
   getAssetHistory,
   getAssets,
   getBuildings,
+  registerAssetAcquisitionCost,
   updateAsset
 } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -43,6 +44,8 @@ const HISTORY_FIELD_LABELS = {
   type: 'Tipo',
   location: 'Ubicación',
   acquisitionDate: 'Fecha de adquisición',
+  acquisitionCost: 'Costo de adquisición',
+  acquisitionDocument: 'Documento de compra',
   code: 'Código'
 };
 
@@ -67,6 +70,12 @@ const emptyEditForm = {
 const emptyStatusForm = {
   status: 'en_mantenimiento',
   reason: ''
+};
+
+const emptyCostForm = {
+  acquisitionCost: '',
+  acquisitionDate: '',
+  acquisitionDocument: ''
 };
 
 function getChangeTypeLabel(changeType) {
@@ -104,6 +113,7 @@ export function ModuleInventario() {
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [statusForm, setStatusForm] = useState(emptyStatusForm);
+  const [costForm, setCostForm] = useState(emptyCostForm);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
@@ -164,6 +174,11 @@ export function ModuleInventario() {
 
   async function openAsset(asset) {
     setSelectedAsset(asset);
+    setCostForm({
+      acquisitionCost: asset.acquisitionCost ?? '',
+      acquisitionDate: asset.acquisitionDate || '',
+      acquisitionDocument: asset.acquisitionDocument || ''
+    });
     setIsCreateOpen(false);
     setStatus({ type: '', message: '' });
     try {
@@ -216,6 +231,25 @@ export function ModuleInventario() {
       setSelectedAsset(response.data);
       setStatus({ type: 'success', message: 'Activo actualizado correctamente.' });
       setIsEditOpen(false);
+      await loadAssets(buildingId);
+      await loadHistory(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitAcquisitionCost(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    try {
+      const response = await registerAssetAcquisitionCost(selectedAsset.id, {
+        acquisitionCost: Number(costForm.acquisitionCost),
+        acquisitionDate: costForm.acquisitionDate,
+        acquisitionDocument: costForm.acquisitionDocument
+      });
+      setSelectedAsset(response.data);
+      setStatus({ type: 'success', message: 'Costo de adquisición registrado.' });
       await loadAssets(buildingId);
       await loadHistory(selectedAsset.id);
     } catch (error) {
@@ -467,10 +501,72 @@ export function ModuleInventario() {
               <p>
                 <strong>Adquisicion:</strong> {selectedAsset.acquisitionDate}
               </p>
+              <p>
+                <strong>Costo de adquisición:</strong>{' '}
+                {selectedAsset.acquisitionCost === null ||
+                selectedAsset.acquisitionCost === undefined
+                  ? 'Sin registrar'
+                  : selectedAsset.acquisitionCost}
+              </p>
+              <p>
+                <strong>Documento de compra:</strong>{' '}
+                {selectedAsset.acquisitionDocument || 'Sin documento'}
+              </p>
               <p className="sm:col-span-2">
                 <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
               </p>
             </div>
+            <form
+              onSubmit={submitAcquisitionCost}
+              className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"
+            >
+              <h4 className="sm:col-span-2 text-sm font-bold text-slate-800">
+                Registrar costo de adquisición
+              </h4>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Valor *</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costForm.acquisitionCost}
+                  onChange={(event) =>
+                    setCostForm({ ...costForm, acquisitionCost: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <input
+                  type="date"
+                  value={costForm.acquisitionDate}
+                  onChange={(event) =>
+                    setCostForm({ ...costForm, acquisitionDate: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Documento de compra
+                </span>
+                <input
+                  value={costForm.acquisitionDocument}
+                  onChange={(event) =>
+                    setCostForm({ ...costForm, acquisitionDocument: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar costo
+                </ActionButton>
+              </div>
+            </form>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">

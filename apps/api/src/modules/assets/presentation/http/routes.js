@@ -3,7 +3,12 @@ import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
 import { createAssetUseCases } from '../../application/assetUseCases.js';
 import { AssetRepository } from '../../infrastructure/assetRepository.js';
-import { changeAssetStatusSchema, createAssetSchema, updateAssetSchema } from './assetSchemas.js';
+import {
+  changeAssetStatusSchema,
+  createAssetSchema,
+  registerAcquisitionCostSchema,
+  updateAssetSchema
+} from './assetSchemas.js';
 
 export const assetsRoutes = Router();
 const assetUseCases = createAssetUseCases(new AssetRepository(), new BuildingRepository());
@@ -33,6 +38,19 @@ assetsRoutes.post(
       request.user?.id ?? null
     );
     response.status(201).json({ data: asset, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.put(
+  '/:assetId/acquisition-cost',
+  validateBody(registerAcquisitionCostSchema),
+  asyncHandler(async (request, response) => {
+    const asset = await assetUseCases.registerAcquisitionCost(
+      request.params.assetId,
+      request.body,
+      request.user?.id ?? null
+    );
+    response.json({ data: asset, meta: { requestId: request.id } });
   })
 );
 

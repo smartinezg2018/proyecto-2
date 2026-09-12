@@ -15,7 +15,9 @@ export const createAssetSchema = z.object({
       'El estado del activo no es válido. Use activo, en_mantenimiento, fuera_de_servicio o retirado.'
   }),
   location: z.string().optional().nullable(),
-  acquisitionDate: dateSchema
+  acquisitionDate: dateSchema,
+  acquisitionCost: z.number().nonnegative().nullable().optional(),
+  acquisitionDocument: z.string().optional().nullable()
 });
 
 export const updateAssetSchema = z.object({
@@ -24,6 +26,14 @@ export const updateAssetSchema = z.object({
   type: z.enum(ASSET_TYPES, { error: 'El tipo de activo no es válido.' }),
   location: z.string().optional().nullable(),
   acquisitionDate: dateSchema
+});
+
+export const registerAcquisitionCostSchema = z.object({
+  acquisitionCost: z
+    .number({ error: 'El campo acquisitionCost debe ser numérico y no negativo.' })
+    .nonnegative('El campo acquisitionCost debe ser numérico y no negativo.'),
+  acquisitionDate: dateSchema,
+  acquisitionDocument: z.string().optional().nullable()
 });
 
 export const changeAssetStatusSchema = z.object({

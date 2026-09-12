@@ -34,6 +34,11 @@ function mapAsset(asset) {
     status: data.status,
     location: data.location,
     acquisitionDate: formatDate(data.acquisitionDate),
+    acquisitionCost:
+      data.acquisitionCost === null || data.acquisitionCost === undefined
+        ? null
+        : Number(data.acquisitionCost),
+    acquisitionDocument: data.acquisitionDocument ?? null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
@@ -89,6 +94,8 @@ export class AssetRepository {
           status: asset.status,
           location: asset.location,
           acquisitionDate: asset.acquisitionDate,
+          acquisitionCost: asset.acquisitionCost,
+          acquisitionDocument: asset.acquisitionDocument,
           createdBy: asset.createdBy,
           updatedBy: asset.createdBy
         },
@@ -125,6 +132,23 @@ export class AssetRepository {
   async updateStatus(id, status, updatedBy, historyEntries = []) {
     await sequelize.transaction(async (transaction) => {
       await Asset.update({ status, updatedBy }, { where: { id }, transaction });
+      await insertHistory(id, historyEntries, transaction);
+    });
+
+    return this.findById(id);
+  }
+
+  async updateAcquisitionCost(id, asset, historyEntries = []) {
+    await sequelize.transaction(async (transaction) => {
+      await Asset.update(
+        {
+          acquisitionDate: asset.acquisitionDate,
+          acquisitionCost: asset.acquisitionCost,
+          acquisitionDocument: asset.acquisitionDocument,
+          updatedBy: asset.updatedBy
+        },
+        { where: { id }, transaction }
+      );
       await insertHistory(id, historyEntries, transaction);
     });
 

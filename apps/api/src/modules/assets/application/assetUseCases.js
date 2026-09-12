@@ -27,14 +27,36 @@ function validateAcquisitionDate(value) {
   }
 }
 
+function parseNonNegativeNumber(value, fieldName, { required = false } = {}) {
+  if (value === undefined || value === null || value === '') {
+    if (required) {
+      throw new AppError(`El campo ${fieldName} es obligatorio.`, 400, 'VALIDATION_ERROR');
+    }
+    return null;
+  }
+
+  const amount = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new AppError(
+      `El campo ${fieldName} debe ser numérico y no negativo.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  return amount;
+}
+
 function validateCreateInput(input) {
   requiredText(input.code, 'code');
   requiredText(input.name, 'name');
   optionalText(input.description, 'description');
   optionalText(input.location, 'location');
+  optionalText(input.acquisitionDocument, 'acquisitionDocument');
   requiredText(input.type, 'type');
   requiredText(input.status, 'status');
   validateAcquisitionDate(input.acquisitionDate);
+  parseNonNegativeNumber(input.acquisitionCost, 'acquisitionCost');
 
   if (!ASSET_TYPES.includes(input.type)) {
     throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
@@ -70,7 +92,9 @@ function normalizeAssetInput(input, buildingId) {
     type: input.type,
     status: input.status,
     location: input.location?.trim() || null,
-    acquisitionDate: input.acquisitionDate
+    acquisitionDate: input.acquisitionDate,
+    acquisitionCost: parseNonNegativeNumber(input.acquisitionCost, 'acquisitionCost'),
+    acquisitionDocument: input.acquisitionDocument?.trim() || null
   };
 }
 
@@ -205,6 +229,36 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
     async getHistory(id) {
       await this.getById(id);
       return assetRepository.findHistoryByAsset(id);
+    },
+
+    async registerAcquisitionCost(id, input, userId = null) {
+      const current = await this.getById(id);
+      optionalText(input.acquisitionDocument, 'acquisitionDocument');
+      validateAcquisitionDate(input.acquisitionDate);
+      const acquisitionCost = parseNonNegativeNumber(input.acquisitionCost, 'acquisitionCost', {
+        required: true
+      });
+      const changes = {
+        acquisitionDate: input.acquisitionDate,
+        acquisitionCost,
+        acquisitionDocument: input.acquisitionDocument?.trim() || null
+      };
+      const historyEntries = ['acquisitionDate', 'acquisitionCost', 'acquisitionDocument']
+        .filter((field) => stringifyValue(current[field]) !== stringifyValue(changes[field]))
+        .map((field) => ({
+          changeType: 'actualizacion',
+          field,
+          oldValue: stringifyValue(current[field]),
+          newValue: stringifyValue(changes[field]),
+          reason: 'Registro de costo de adquisición',
+          createdBy: userId
+        }));
+
+      return assetRepository.updateAcquisitionCost(
+        id,
+        { ...changes, updatedBy: userId },
+        historyEntries
+      );
     }
   };
 }

@@ -35,6 +35,8 @@ export const Asset = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false
     },
+    acquisitionCost: DataTypes.DECIMAL(15, 2),
+    acquisitionDocument: DataTypes.STRING(150),
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
   },
