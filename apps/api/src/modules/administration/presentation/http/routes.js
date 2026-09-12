@@ -1,13 +1,21 @@
 import { Router } from 'express';
+import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { createBuildingUseCases } from '../../application/buildingUseCases.js';
+import { createUnitUseCases } from '../../application/unitUseCases.js';
 import { BuildingRepository } from '../../infrastructure/buildingRepository.js';
+import { UnitRepository } from '../../infrastructure/unitRepository.js';
+import { createUnitSchema } from './unitSchemas.js';
 import { createProfileUseCases } from '../../application/profileUseCases.js';
 import { ProfileRepository } from '../../infrastructure/profileRepository.js';
 import { createUserUseCases } from '../../application/userUseCases.js';
 import { UserRepository } from '../../infrastructure/userRepository.js';
 
 export const administrationRoutes = Router();
-const buildingUseCases = createBuildingUseCases(new BuildingRepository());
+const buildingRepository = new BuildingRepository();
+const unitRepository = new UnitRepository();
+const buildingUseCases = createBuildingUseCases(buildingRepository);
+const unitUseCases = createUnitUseCases(unitRepository, buildingRepository);
+
 const profileUseCases = createProfileUseCases(new ProfileRepository());
 const userUseCases = createUserUseCases(new UserRepository());
 const asyncHandler = (handler) => (request, response, next) => {
@@ -74,5 +82,29 @@ administrationRoutes.put(
       request.user?.id ?? null
     );
     response.json({ data: building, meta: { requestId: request.id } });
+  })
+);
+
+administrationRoutes.get(
+  '/buildings/:buildingId/units',
+  asyncHandler(async (request, response) => {
+    const units = await unitUseCases.listByBuilding(request.params.buildingId);
+    response.json({
+      data: units,
+      meta: { requestId: request.id, page: 1, pageSize: units.length }
+    });
+  })
+);
+
+administrationRoutes.post(
+  '/buildings/:buildingId/units',
+  validateBody(createUnitSchema),
+  asyncHandler(async (request, response) => {
+    const unit = await unitUseCases.create(
+      request.params.buildingId,
+      request.body,
+      request.user?.id ?? null
+    );
+    response.status(201).json({ data: unit, meta: { requestId: request.id } });
   })
 );

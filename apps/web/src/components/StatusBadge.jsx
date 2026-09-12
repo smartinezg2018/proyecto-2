@@ -1,6 +1,12 @@
 const statusClasses = {
   Activo: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
   Mantenimiento: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  'En mantenimiento': 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  'Fuera de servicio': 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  Retirado: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+  Ocupada: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  Desocupada: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+  Inhabitada: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
   'Dado de Baja': 'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
   'Al día': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
   'En mora': 'bg-red-50 text-red-700 ring-1 ring-red-200',
