@@ -1,4 +1,5 @@
 import { AppError } from '../../../shared/errors/AppError.js';
+import { hashPassword } from '../../auth/infrastructure/password.js';
 
 const requiredFields = ['identification', 'name', 'email'];
 const fieldLengths = { identification: 50, name: 150, email: 150 };
@@ -31,7 +32,8 @@ export function createUserUseCases(repository) {
         identification: input.identification.trim(),
         name: input.name.trim(),
         email: input.email.trim().toLowerCase(),
-        status: input.status
+        status: input.status,
+        ...(input.password ? { passwordHash: await hashPassword(input.password) } : {})
       };
 
       if (await repository.findByEmail(user.email)) {

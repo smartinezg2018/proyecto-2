@@ -7,7 +7,10 @@ export class UserRepository {
   }
 
   async findByEmail(email) {
-    const [rows] = await this.pool.execute('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+    const [rows] = await this.pool.execute(
+      'SELECT id, identification, name, email, status, password_hash AS passwordHash FROM users WHERE email = ? LIMIT 1',
+      [email]
+    );
     return rows[0] ?? null;
   }
 
@@ -34,9 +37,17 @@ export class UserRepository {
     let result;
     try {
       [result] = await this.pool.execute(
-        `INSERT INTO users (identification, name, email, status, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [user.identification, user.name, user.email, user.status, user.createdBy, user.createdBy]
+        `INSERT INTO users (identification, name, email, status, password_hash, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          user.identification,
+          user.name,
+          user.email,
+          user.status,
+          user.passwordHash ?? null,
+          user.createdBy,
+          user.createdBy
+        ]
       );
     } catch (error) {
       // Los índices únicos también protegen ante registros simultáneos.
