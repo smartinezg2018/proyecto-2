@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { createBuildingUseCases } from '../../application/buildingUseCases.js';
+import { createPersonUseCases } from '../../application/personUseCases.js';
 import { createUnitUseCases } from '../../application/unitUseCases.js';
 import { BuildingRepository } from '../../infrastructure/buildingRepository.js';
+import { PersonRepository } from '../../infrastructure/personRepository.js';
 import { UnitRepository } from '../../infrastructure/unitRepository.js';
+import { createPersonSchema } from './personSchemas.js';
 import { createUnitSchema } from './unitSchemas.js';
 import { createProfileUseCases } from '../../application/profileUseCases.js';
 import { ProfileRepository } from '../../infrastructure/profileRepository.js';
@@ -13,8 +16,10 @@ import { UserRepository } from '../../infrastructure/userRepository.js';
 export const administrationRoutes = Router();
 const buildingRepository = new BuildingRepository();
 const unitRepository = new UnitRepository();
+const personRepository = new PersonRepository();
 const buildingUseCases = createBuildingUseCases(buildingRepository);
 const unitUseCases = createUnitUseCases(unitRepository, buildingRepository);
+const personUseCases = createPersonUseCases(personRepository, unitRepository);
 
 const profileUseCases = createProfileUseCases(new ProfileRepository());
 const userUseCases = createUserUseCases(new UserRepository());
@@ -106,5 +111,25 @@ administrationRoutes.post(
       request.user?.id ?? null
     );
     response.status(201).json({ data: unit, meta: { requestId: request.id } });
+  })
+);
+
+administrationRoutes.get(
+  '/persons',
+  asyncHandler(async (request, response) => {
+    const persons = await personUseCases.list();
+    response.json({
+      data: persons,
+      meta: { requestId: request.id, page: 1, pageSize: persons.length }
+    });
+  })
+);
+
+administrationRoutes.post(
+  '/persons',
+  validateBody(createPersonSchema),
+  asyncHandler(async (request, response) => {
+    const person = await personUseCases.registerResponsible(request.body, request.user?.id ?? null);
+    response.status(201).json({ data: person, meta: { requestId: request.id } });
   })
 );
