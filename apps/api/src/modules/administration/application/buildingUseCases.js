@@ -1,6 +1,6 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 
-const requiredFields = ['name', 'identification', 'address'];
+const requiredFields = ['name', 'nit', 'address'];
 
 function validateBuildingInput(input) {
   for (const field of requiredFields) {
@@ -21,7 +21,7 @@ function validateBuildingInput(input) {
 function normalizeBuildingInput(input) {
   return {
     name: input.name.trim(),
-    identification: input.identification.trim(),
+    nit: input.nit.trim(),
     address: input.address.trim(),
     phone: input.phone?.trim() || null,
     email: input.email?.trim() || null
@@ -34,12 +34,8 @@ export function createBuildingUseCases(repository) {
       validateBuildingInput(input);
       const building = normalizeBuildingInput(input);
 
-      if (await repository.findByIdentification(building.identification)) {
-        throw new AppError(
-          'Ya existe un edificio con esa identificación.',
-          409,
-          'DUPLICATE_BUILDING'
-        );
+      if (await repository.findByNit(building.nit)) {
+        throw new AppError('Ya existe un edificio con ese NIT.', 409, 'DUPLICATE_BUILDING');
       }
 
       return repository.create({ ...building, createdBy: userId });
@@ -63,12 +59,8 @@ export function createBuildingUseCases(repository) {
       const building = normalizeBuildingInput(input);
 
       await this.getById(id);
-      if (await repository.findByIdentification(building.identification, id)) {
-        throw new AppError(
-          'Ya existe un edificio con esa identificación.',
-          409,
-          'DUPLICATE_BUILDING'
-        );
+      if (await repository.findByNit(building.nit, id)) {
+        throw new AppError('Ya existe un edificio con ese NIT.', 409, 'DUPLICATE_BUILDING');
       }
 
       return repository.update(id, { ...building, updatedBy: userId });

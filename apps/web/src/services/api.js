@@ -1,16 +1,4 @@
-export async function getBuildings() {
-  const response = await fetch('/api/v1/administration/buildings', {
-    credentials: 'include'
-  });
-
-  if (!response.ok) {
-    throw new Error('No fue posible consultar los edificios.');
-  }
-
-  return response.json();
-}
-
-async function buildingRequest(url, options = {}) {
+async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -25,20 +13,42 @@ async function buildingRequest(url, options = {}) {
   return payload;
 }
 
+export function getBuildings() {
+  return apiRequest('/api/v1/administration/buildings');
+}
+
 export function getBuilding(buildingId) {
-  return buildingRequest(`/api/v1/administration/buildings/${buildingId}`);
+  return apiRequest(`/api/v1/administration/buildings/${buildingId}`);
 }
 
 export function createBuilding(building) {
-  return buildingRequest('/api/v1/administration/buildings', {
+  return apiRequest('/api/v1/administration/buildings', {
     method: 'POST',
     body: JSON.stringify(building)
   });
 }
 
 export function updateBuilding(buildingId, building) {
-  return buildingRequest(`/api/v1/administration/buildings/${buildingId}`, {
+  return apiRequest(`/api/v1/administration/buildings/${buildingId}`, {
     method: 'PUT',
     body: JSON.stringify(building)
+  });
+}
+
+export function getUnits(buildingId) {
+  return apiRequest(`/api/v1/administration/buildings/${buildingId}/units`);
+}
+
+export function createUnit(buildingId, unit) {
+  return apiRequest(`/api/v1/administration/buildings/${buildingId}/units`, {
+    method: 'POST',
+    body: JSON.stringify(unit)
+  });
+}
+
+export function createResponsible(person) {
+  return apiRequest('/api/v1/administration/persons', {
+    method: 'POST',
+    body: JSON.stringify(person)
   });
 }

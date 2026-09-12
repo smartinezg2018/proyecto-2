@@ -17,11 +17,10 @@ function createRepository() {
     async findById(id) {
       return buildings.find((building) => String(building.id) === String(id)) ?? null;
     },
-    async findByIdentification(identification, excludedId = null) {
+    async findByNit(nit, excludedId = null) {
       return (
         buildings.find(
-          (building) =>
-            building.identification === identification && String(building.id) !== String(excludedId)
+          (building) => building.nit === nit && String(building.id) !== String(excludedId)
         ) ?? null
       );
     },
@@ -40,7 +39,7 @@ test('registra un edificio y conserva el usuario creador', async () => {
   const building = await useCases.create(
     {
       name: 'Torre Central',
-      identification: 'NIT-123',
+      nit: 'NIT-123',
       address: 'Carrera 1 # 2-3',
       phone: '3001234567'
     },
@@ -51,10 +50,10 @@ test('registra un edificio y conserva el usuario creador', async () => {
   assert.equal(building.createdBy, 7);
 });
 
-test('rechaza edificios con identificación duplicada', async () => {
+test('rechaza edificios con NIT duplicado', async () => {
   const repository = createRepository();
   const useCases = createBuildingUseCases(repository);
-  const input = { name: 'Torre Central', identification: 'NIT-123', address: 'Carrera 1' };
+  const input = { name: 'Torre Central', nit: 'NIT-123', address: 'Carrera 1' };
 
   await useCases.create(input);
   await assert.rejects(() => useCases.create(input), {
@@ -68,7 +67,7 @@ test('actualiza datos y conserva el usuario que modifica', async () => {
   const useCases = createBuildingUseCases(repository);
   const created = await useCases.create({
     name: 'Torre Central',
-    identification: 'NIT-123',
+    nit: 'NIT-123',
     address: 'Carrera 1'
   });
 
@@ -76,7 +75,7 @@ test('actualiza datos y conserva el usuario que modifica', async () => {
     created.id,
     {
       name: 'Torre Central Actualizada',
-      identification: 'NIT-123',
+      nit: 'NIT-123',
       address: 'Carrera 2'
     },
     9

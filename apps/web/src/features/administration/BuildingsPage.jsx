@@ -6,7 +6,7 @@ import { ActionButton } from '../../components/ActionButton.jsx';
 
 const emptyForm = {
   name: '',
-  identification: '',
+  nit: '',
   address: '',
   phone: '',
   email: ''
@@ -58,7 +58,7 @@ export function BuildingsPage() {
     setEditingId(building.id);
     setForm({
       name: building.name,
-      identification: building.identification,
+      nit: building.nit,
       address: building.address,
       phone: building.phone || '',
       email: building.email || ''
@@ -114,7 +114,7 @@ export function BuildingsPage() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              {['Nombre', 'Identificación', 'Dirección', 'Contacto', 'Acciones'].map((heading) => (
+              {['Nombre', 'NIT', 'Dirección', 'Contacto', 'Acciones'].map((heading) => (
                 <th
                   key={heading}
                   className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
@@ -129,7 +129,7 @@ export function BuildingsPage() {
               <tr key={building.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="px-4 py-3 text-sm font-semibold text-slate-800">{building.name}</td>
                 <td className="px-4 py-3 font-mono text-xs text-blue-600">
-                  {building.identification}
+                  {building.nit}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-500">{building.address}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">
@@ -190,7 +190,7 @@ export function BuildingsPage() {
           <form onSubmit={submitForm} className="grid gap-4 sm:grid-cols-2">
             {[
               ['name', 'Nombre'],
-              ['identification', 'Identificación'],
+              ['nit', 'NIT'],
               ['address', 'Dirección'],
               ['phone', 'Teléfono'],
               ['email', 'Correo electrónico']
@@ -198,13 +198,13 @@ export function BuildingsPage() {
               <label key={name} className={name === 'address' ? 'sm:col-span-2' : ''}>
                 <span className="mb-1 block text-xs font-bold text-slate-500">
                   {label}
-                  {['name', 'identification', 'address'].includes(name) ? ' *' : ''}
+                  {['name', 'nit', 'address'].includes(name) ? ' *' : ''}
                 </span>
                 <input
                   name={name}
                   value={form[name]}
                   onChange={updateField}
-                  required={['name', 'identification', 'address'].includes(name)}
+                  required={['name', 'nit', 'address'].includes(name)}
                   type={name === 'email' ? 'email' : 'text'}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
                 />
@@ -236,7 +236,7 @@ export function BuildingsPage() {
               <strong>Nombre:</strong> {selectedBuilding.name}
             </p>
             <p>
-              <strong>Identificación:</strong> {selectedBuilding.identification}
+              <strong>NIT:</strong> {selectedBuilding.nit}
             </p>
             <p>
               <strong>Dirección:</strong> {selectedBuilding.address}

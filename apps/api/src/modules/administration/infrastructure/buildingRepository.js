@@ -4,11 +4,11 @@ export class BuildingRepository {
   async create(building) {
     const [result] = await database.execute(
       `INSERT INTO buildings
-        (name, identification, address, phone, email, created_by, updated_by)
+        (name, nit, address, phone, email, created_by, updated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         building.name,
-        building.identification,
+        building.nit,
         building.address,
         building.phone,
         building.email,
@@ -22,7 +22,7 @@ export class BuildingRepository {
 
   async findAll() {
     const [rows] = await database.execute(
-      `SELECT id, name, identification, address, phone, email,
+      `SELECT id, name, nit, address, phone, email,
               created_by AS createdBy, updated_by AS updatedBy,
               created_at AS createdAt, updated_at AS updatedAt
        FROM buildings
@@ -34,7 +34,7 @@ export class BuildingRepository {
 
   async findById(id) {
     const [rows] = await database.execute(
-      `SELECT id, name, identification, address, phone, email,
+      `SELECT id, name, nit, address, phone, email,
               created_by AS createdBy, updated_by AS updatedBy,
               created_at AS createdAt, updated_at AS updatedAt
        FROM buildings
@@ -45,13 +45,13 @@ export class BuildingRepository {
     return rows[0] ?? null;
   }
 
-  async findByIdentification(identification, excludedId = null) {
+  async findByNit(nit, excludedId = null) {
     const [rows] = await database.execute(
       `SELECT id
        FROM buildings
-       WHERE identification = ? AND (? IS NULL OR id <> ?)
+       WHERE nit = ? AND (? IS NULL OR id <> ?)
        LIMIT 1`,
-      [identification, excludedId, excludedId]
+      [nit, excludedId, excludedId]
     );
 
     return rows[0] ?? null;
@@ -60,12 +60,12 @@ export class BuildingRepository {
   async update(id, building) {
     await database.execute(
       `UPDATE buildings
-       SET name = ?, identification = ?, address = ?, phone = ?,
+       SET name = ?, nit = ?, address = ?, phone = ?,
            email = ?, updated_by = ?
        WHERE id = ?`,
       [
         building.name,
-        building.identification,
+        building.nit,
         building.address,
         building.phone,
         building.email,

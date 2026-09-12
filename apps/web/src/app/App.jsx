@@ -7,6 +7,7 @@ import { ModuleFacturacion } from '../features/billing/BillingPage.jsx';
 import { ModulePresupuesto } from '../features/budget/BudgetPage.jsx';
 import { ModuleProyectos } from '../features/projects/ProjectsPage.jsx';
 import { BuildingsPage } from '../features/administration/BuildingsPage.jsx';
+import { UnitsPage } from '../features/administration/UnitsPage.jsx';
 import {
   Package,
   Wrench,
@@ -21,13 +22,15 @@ import {
   ChevronDown,
   ChevronRight,
   Menu,
-  Settings
+  Settings,
+  DoorOpen
 } from 'lucide-react';
 
 // ---- Navigation config ----
 const NAV = [
   { id: 'home', label: 'Panel General', icon: Home },
   { id: 'edificios', label: 'Edificios', icon: Building2 },
+  { id: 'inmuebles', label: 'Inmuebles', icon: DoorOpen },
   { id: 'inventario', label: 'Inventario', icon: Package },
   { id: 'mantenimientos', label: 'Mantenimientos', icon: Wrench },
   { id: 'seguros', label: 'Seguros y Pólizas', icon: Shield },
@@ -47,6 +50,8 @@ export default function App() {
         return <ModuleHome />;
       case 'edificios':
         return <BuildingsPage />;
+      case 'inmuebles':
+        return <UnitsPage />;
       case 'inventario':
         return <ModuleInventario />;
       case 'mantenimientos':
