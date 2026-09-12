@@ -72,6 +72,24 @@ export function getAssets(buildingId) {
   return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`);
 }
 
+export function searchAssets(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.q) {
+    params.set('q', filters.q);
+  }
+  if (filters.buildingId) {
+    params.set('buildingId', filters.buildingId);
+  }
+  if (filters.type) {
+    params.set('type', filters.type);
+  }
+  if (filters.status) {
+    params.set('status', filters.status);
+  }
+  const query = params.toString();
+  return apiRequest(`/api/v1/assets/search${query ? `?${query}` : ''}`);
+}
+
 export function createAsset(buildingId, asset) {
   return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`, {
     method: 'POST',

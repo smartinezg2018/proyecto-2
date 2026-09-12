@@ -37,6 +37,17 @@ assetsRoutes.post(
 );
 
 assetsRoutes.get(
+  '/search',
+  asyncHandler(async (request, response) => {
+    const assets = await assetUseCases.search(request.query);
+    response.json({
+      data: assets,
+      meta: { requestId: request.id, page: 1, pageSize: assets.length }
+    });
+  })
+);
+
+assetsRoutes.get(
   '/:assetId/history',
   asyncHandler(async (request, response) => {
     const history = await assetUseCases.getHistory(request.params.assetId);

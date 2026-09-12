@@ -145,6 +145,31 @@ export class AssetRepository {
     return assets.map(mapAsset);
   }
 
+  async search({ q, buildingId, type, status } = {}) {
+    const where = {};
+
+    if (buildingId) {
+      where.buildingId = buildingId;
+    }
+    if (type) {
+      where.type = type;
+    }
+    if (status) {
+      where.status = status;
+    }
+    if (q) {
+      const term = `%${q}%`;
+      where[Op.or] = [{ code: { [Op.like]: term } }, { name: { [Op.like]: term } }];
+    }
+
+    const assets = await Asset.findAll({
+      where,
+      order: [['code', 'ASC']]
+    });
+
+    return assets.map(mapAsset);
+  }
+
   async findByBuildingAndCode(buildingId, code, excludedId = null) {
     const where = { buildingId, code };
     if (excludedId !== null && excludedId !== undefined) {

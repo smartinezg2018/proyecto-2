@@ -4,8 +4,8 @@ import {
   changeAssetStatus,
   createAsset,
   getAssetHistory,
-  getAssets,
   getBuildings,
+  searchAssets,
   updateAsset
 } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -109,6 +109,9 @@ export function ModuleInventario() {
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   async function loadBuildings() {
     try {
@@ -122,15 +125,26 @@ export function ModuleInventario() {
     }
   }
 
-  async function loadAssets(selectedBuildingId) {
-    if (!selectedBuildingId) {
+  async function loadAssets(selectedBuildingId, filters) {
+    const applied = filters ?? {
+      q: searchQuery,
+      type: filterType,
+      status: filterStatus
+    };
+
+    if (!selectedBuildingId && !applied.q && !applied.type && !applied.status) {
       setAssets([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await getAssets(selectedBuildingId);
+      const response = await searchAssets({
+        q: applied.q,
+        buildingId: selectedBuildingId,
+        type: applied.type,
+        status: applied.status
+      });
       setAssets(response.data);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -251,21 +265,71 @@ export function ModuleInventario() {
         }
       />
 
-      <label className="mb-4 block max-w-sm">
-        <span className="mb-1 block text-xs font-bold text-slate-500">Edificio</span>
-        <select
-          value={buildingId}
-          onChange={(event) => setBuildingId(event.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-        >
-          {buildings.length === 0 && <option value="">No hay edificios registrados</option>}
-          {buildings.map((building) => (
-            <option key={building.id} value={building.id}>
-              {building.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          loadAssets(buildingId);
+        }}
+        className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+      >
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Edificio</span>
+          <select
+            value={buildingId}
+            onChange={(event) => setBuildingId(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">Todos los edificios</option>
+            {buildings.map((building) => (
+              <option key={building.id} value={building.id}>
+                {building.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Código o nombre</span>
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar activo"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+        </label>
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Tipo</span>
+          <select
+            value={filterType}
+            onChange={(event) => setFilterType(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">Todos</option>
+            {ASSET_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Estado</span>
+          <select
+            value={filterStatus}
+            onChange={(event) => setFilterStatus(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">Todos</option>
+            {ASSET_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-end">
+          <ActionButton type="submit">Buscar activos</ActionButton>
+        </div>
+      </form>
 
       {status.message && (
         <p
@@ -314,9 +378,9 @@ export function ModuleInventario() {
             {!isLoading && assets.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
-                  {buildingId
-                    ? 'No hay activos registrados en este edificio.'
-                    : 'Registra un edificio antes de crear activos.'}
+                  {buildingId || searchQuery || filterType || filterStatus
+                    ? 'No hay activos que coincidan con la búsqueda.'
+                    : 'Registra un edificio o busca activos por código, nombre, tipo o estado.'}
                 </td>
               </tr>
             )}

@@ -40,6 +40,26 @@ function createRepositories() {
       async findAllByBuilding(buildingId) {
         return assets.filter((asset) => String(asset.buildingId) === String(buildingId));
       },
+      async search({ q, buildingId, type, status } = {}) {
+        return assets.filter((asset) => {
+          if (buildingId && String(asset.buildingId) !== String(buildingId)) {
+            return false;
+          }
+          if (type && asset.type !== type) {
+            return false;
+          }
+          if (status && asset.status !== status) {
+            return false;
+          }
+          if (q) {
+            const term = q.toLowerCase();
+            return (
+              asset.code.toLowerCase().includes(term) || asset.name.toLowerCase().includes(term)
+            );
+          }
+          return true;
+        });
+      },
       async findByBuildingAndCode(buildingId, code, excludedId = null) {
         return (
           assets.find(
@@ -142,6 +162,34 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('busca activos por código o nombre y combina filtros de edificio, tipo y estado', async () => {
+  const { assetRepository, buildingRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository);
+  await useCases.create(1, validAsset);
+  await useCases.create(1, {
+    ...validAsset,
+    code: 'ACT-002',
+    name: 'Bomba de agua',
+    type: 'hidraulico'
+  });
+
+  const byName = await useCases.search({ q: 'Ascensor' });
+  assert.equal(byName.length, 1);
+  assert.equal(byName[0].code, 'ACT-001');
+
+  const byCode = await useCases.search({ q: 'ACT-002' });
+  assert.equal(byCode.length, 1);
+  assert.equal(byCode[0].name, 'Bomba de agua');
+
+  const combined = await useCases.search({
+    buildingId: 1,
+    type: 'hidraulico',
+    status: 'activo'
+  });
+  assert.equal(combined.length, 1);
+  assert.equal(combined[0].code, 'ACT-002');
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {

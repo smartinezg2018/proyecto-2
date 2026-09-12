@@ -146,6 +146,39 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
       return assetRepository.findAllByBuilding(buildingId);
     },
 
+    async search(filters = {}) {
+      const q = typeof filters.q === 'string' ? filters.q.trim() : '';
+      const buildingId = filters.buildingId ? Number(filters.buildingId) : null;
+      const type = filters.type || null;
+      const status = filters.status || null;
+
+      if (buildingId) {
+        const building = await buildingRepository.findById(buildingId);
+        if (!building) {
+          throw new AppError('El edificio no existe.', 404, 'BUILDING_NOT_FOUND');
+        }
+      }
+
+      if (type && !ASSET_TYPES.includes(type)) {
+        throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
+      }
+
+      if (status && !ASSET_STATUSES.includes(status)) {
+        throw new AppError(
+          'El estado del activo no es válido. Use activo, en_mantenimiento, fuera_de_servicio o retirado.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      return assetRepository.search({
+        q: q || null,
+        buildingId,
+        type,
+        status
+      });
+    },
+
     async getById(id) {
       const asset = await assetRepository.findById(id);
       if (!asset) {
