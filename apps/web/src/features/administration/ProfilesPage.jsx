@@ -23,7 +23,7 @@ export function ProfilesPage() {
       try {
         const response = await getPermissions(controller.signal);
         if (!controller.signal.aborted) setPermissions(response.data);
-      } catch (error) {
+      } catch {
         if (!controller.signal.aborted) setLoadError("No fue posible cargar las funcionalidades. Intenta nuevamente.");
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);

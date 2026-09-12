@@ -30,7 +30,9 @@ test('MySQL: persiste usuarios y protege correo e identificación incluso en reg
     const [rows] = await pool.execute(
       'SELECT identification, name, email, status, created_by, updated_by FROM users WHERE id = ?', [user.id]
     );
-    assert.deepEqual(rows[0], { ...input, created_by: 7, updated_by: 7 });
+    for (const [field, value] of Object.entries(input)) assert.equal(rows[0][field], value);
+    assert.equal(rows[0].created_by, 7);
+    assert.equal(rows[0].updated_by, 7);
     assert.equal(user.createdBy, 7);
     assert.ok(user.createdAt);
     assert.ok(user.updatedAt);

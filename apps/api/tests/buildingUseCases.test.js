@@ -18,9 +18,12 @@ function createRepository() {
       return buildings.find((building) => String(building.id) === String(id)) ?? null;
     },
     async findByIdentification(identification, excludedId = null) {
-      return buildings.find((building) => (
-        building.identification === identification && String(building.id) !== String(excludedId)
-      )) ?? null;
+      return (
+        buildings.find(
+          (building) =>
+            building.identification === identification && String(building.id) !== String(excludedId)
+        ) ?? null
+      );
     },
     async update(id, changes) {
       const index = buildings.findIndex((building) => String(building.id) === String(id));
@@ -34,12 +37,15 @@ test('registra un edificio y conserva el usuario creador', async () => {
   const repository = createRepository();
   const useCases = createBuildingUseCases(repository);
 
-  const building = await useCases.create({
-    name: 'Torre Central',
-    identification: 'NIT-123',
-    address: 'Carrera 1 # 2-3',
-    phone: '3001234567'
-  }, 7);
+  const building = await useCases.create(
+    {
+      name: 'Torre Central',
+      identification: 'NIT-123',
+      address: 'Carrera 1 # 2-3',
+      phone: '3001234567'
+    },
+    7
+  );
 
   assert.equal(building.name, 'Torre Central');
   assert.equal(building.createdBy, 7);
@@ -51,19 +57,30 @@ test('rechaza edificios con identificación duplicada', async () => {
   const input = { name: 'Torre Central', identification: 'NIT-123', address: 'Carrera 1' };
 
   await useCases.create(input);
-  await assert.rejects(() => useCases.create(input), { code: 'DUPLICATE_BUILDING', statusCode: 409 });
+  await assert.rejects(() => useCases.create(input), {
+    code: 'DUPLICATE_BUILDING',
+    statusCode: 409
+  });
 });
 
 test('actualiza datos y conserva el usuario que modifica', async () => {
   const repository = createRepository();
   const useCases = createBuildingUseCases(repository);
-  const created = await useCases.create({ name: 'Torre Central', identification: 'NIT-123', address: 'Carrera 1' });
-
-  const updated = await useCases.update(created.id, {
-    name: 'Torre Central Actualizada',
+  const created = await useCases.create({
+    name: 'Torre Central',
     identification: 'NIT-123',
-    address: 'Carrera 2'
-  }, 9);
+    address: 'Carrera 1'
+  });
+
+  const updated = await useCases.update(
+    created.id,
+    {
+      name: 'Torre Central Actualizada',
+      identification: 'NIT-123',
+      address: 'Carrera 2'
+    },
+    9
+  );
 
   assert.equal(updated.name, 'Torre Central Actualizada');
   assert.equal(updated.updatedBy, 9);

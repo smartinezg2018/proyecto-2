@@ -28,7 +28,9 @@ test('persiste perfiles y asociaciones en MySQL y rechaza permisos inexistentes'
       const profile = await useCases.create({ name: 'Perfil de prueba', description: 'Descripción persistida', permissionIds }, 7);
       createdIds.push(profile.id);
       const [rows] = await pool.execute('SELECT name, description, created_by FROM profiles WHERE id = ?', [profile.id]);
-      assert.deepEqual(rows[0], { name: 'Perfil de prueba', description: 'Descripción persistida', created_by: 7 });
+      assert.equal(rows[0].name, 'Perfil de prueba');
+      assert.equal(rows[0].description, 'Descripción persistida');
+      assert.equal(rows[0].created_by, 7);
       const [links] = await pool.execute('SELECT permission_id FROM profile_permissions WHERE profile_id = ?', [profile.id]);
       assert.deepEqual(links.map((link) => link.permission_id), [...new Set(permissionIds)]);
       assert.deepEqual(profile.permissionIds, [...new Set(permissionIds)]);
