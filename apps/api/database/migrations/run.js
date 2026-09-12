@@ -13,16 +13,19 @@ function splitStatements(sql) {
     .filter((statement) => statement.length > 0);
 }
 
+let connection;
 try {
+  connection = await database.getConnection();
   for (const file of files) {
     const migration = await fs.readFile(path.join(currentDirectory, file), 'utf8');
     for (const statement of splitStatements(migration)) {
-      await database.query(statement);
+      await connection.query(statement);
     }
     console.log(`Applied ${file}`);
   }
   console.log('Database migrations completed.');
 } finally {
+  connection?.release();
   await database.end();
   await sequelize.close();
 }

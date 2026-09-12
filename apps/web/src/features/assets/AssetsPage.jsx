@@ -296,7 +296,9 @@ export function ModuleInventario() {
                 onClick={() => openAsset(asset)}
                 className={`border-b border-slate-50 hover:bg-slate-50 cursor-pointer ${selectedAsset?.id === asset.id ? 'bg-blue-50' : ''}`}
               >
-                <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">{asset.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">
+                  {asset.code}
+                </td>
                 <td className="px-4 py-3 text-sm font-semibold text-slate-800">{asset.name}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">
                   {ASSET_TYPE_LABELS[asset.type] || asset.type}
