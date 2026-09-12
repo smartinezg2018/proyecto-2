@@ -72,6 +72,10 @@ export function getAssets(buildingId) {
   return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`);
 }
 
+export function getAsset(assetId) {
+  return apiRequest(`/api/v1/assets/${assetId}`);
+}
+
 export function createAsset(buildingId, asset) {
   return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`, {
     method: 'POST',

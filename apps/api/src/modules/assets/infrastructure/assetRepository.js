@@ -165,4 +165,12 @@ export class AssetRepository {
 
     return history.map(mapHistory);
   }
+
+  async findRelationsByAsset(_assetId) {
+    return {
+      provider: null,
+      maintenances: [],
+      policies: []
+    };
+  }
 }

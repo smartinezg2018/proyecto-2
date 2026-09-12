@@ -52,6 +52,9 @@ function createRepositories() {
       },
       async findHistoryByAsset(assetId) {
         return history.filter((entry) => String(entry.assetId) === String(assetId));
+      },
+      async findRelationsByAsset() {
+        return { provider: null, maintenances: [], policies: [] };
       }
     }
   };
@@ -142,6 +145,21 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('consulta el detalle técnico, económico y administrativo del activo', async () => {
+  const { assetRepository, buildingRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository);
+  const created = await useCases.create(1, validAsset);
+
+  const detail = await useCases.getDetail(created.id);
+
+  assert.equal(detail.technical.type, 'electromecanico');
+  assert.equal(detail.economic.acquisitionDate, '2024-01-15');
+  assert.equal(detail.administrative.code, 'ACT-001');
+  assert.equal(detail.relations.provider, null);
+  assert.deepEqual(detail.relations.maintenances, []);
+  assert.deepEqual(detail.relations.policies, []);
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {

@@ -3,6 +3,7 @@ import { Pencil, Plus, RefreshCcw, Save, X } from 'lucide-react';
 import {
   changeAssetStatus,
   createAsset,
+  getAsset,
   getAssetHistory,
   getAssets,
   getBuildings,
@@ -163,12 +164,14 @@ export function ModuleInventario() {
   }
 
   async function openAsset(asset) {
-    setSelectedAsset(asset);
     setIsCreateOpen(false);
     setStatus({ type: '', message: '' });
     try {
+      const response = await getAsset(asset.id);
+      setSelectedAsset(response.data);
       await loadHistory(asset.id);
     } catch (error) {
+      setSelectedAsset(asset);
       setStatus({ type: 'error', message: error.message });
     }
   }
@@ -447,29 +450,85 @@ export function ModuleInventario() {
                 </button>
               </div>
             </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Código:</strong> {selectedAsset.code}
-              </p>
-              <p>
-                <strong>Nombre:</strong> {selectedAsset.name}
-              </p>
-              <p>
-                <strong>Tipo:</strong> {ASSET_TYPE_LABELS[selectedAsset.type] || selectedAsset.type}
-              </p>
-              <p>
-                <strong>Estado:</strong>{' '}
-                {ASSET_STATUS_LABELS[selectedAsset.status] || selectedAsset.status}
-              </p>
-              <p>
-                <strong>Ubicación:</strong> {selectedAsset.location || 'Sin ubicación'}
-              </p>
-              <p>
-                <strong>Adquisicion:</strong> {selectedAsset.acquisitionDate}
-              </p>
-              <p className="sm:col-span-2">
-                <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
-              </p>
+            <div className="space-y-4 text-sm">
+              <section>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Información administrativa
+                </h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <p>
+                    <strong>Código:</strong> {selectedAsset.code}
+                  </p>
+                  <p>
+                    <strong>Nombre:</strong> {selectedAsset.name}
+                  </p>
+                  <p>
+                    <strong>Estado:</strong>{' '}
+                    {ASSET_STATUS_LABELS[selectedAsset.status] || selectedAsset.status}
+                  </p>
+                  <p>
+                    <strong>Edificio:</strong> {selectedAsset.buildingId}
+                  </p>
+                </div>
+              </section>
+              <section>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Información técnica
+                </h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <p>
+                    <strong>Tipo:</strong>{' '}
+                    {ASSET_TYPE_LABELS[selectedAsset.type] || selectedAsset.type}
+                  </p>
+                  <p>
+                    <strong>Ubicación:</strong> {selectedAsset.location || 'Sin ubicación'}
+                  </p>
+                  <p className="sm:col-span-2">
+                    <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
+                  </p>
+                </div>
+              </section>
+              <section>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Información económica
+                </h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <p>
+                    <strong>Fecha de adquisición:</strong> {selectedAsset.acquisitionDate}
+                  </p>
+                  <p>
+                    <strong>Costo de adquisición:</strong>{' '}
+                    {selectedAsset.economic?.acquisitionCost ?? 'Sin registrar'}
+                  </p>
+                  <p className="sm:col-span-2">
+                    <strong>Documento de compra:</strong>{' '}
+                    {selectedAsset.economic?.acquisitionDocument || 'Sin documento'}
+                  </p>
+                </div>
+              </section>
+              <section>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Relaciones
+                </h4>
+                <div className="grid gap-3">
+                  <p>
+                    <strong>Proveedor:</strong>{' '}
+                    {selectedAsset.relations?.provider?.name || 'Sin proveedor asociado'}
+                  </p>
+                  <p>
+                    <strong>Mantenimientos:</strong>{' '}
+                    {selectedAsset.relations?.maintenances?.length
+                      ? `${selectedAsset.relations.maintenances.length} registro(s)`
+                      : 'Sin mantenimientos'}
+                  </p>
+                  <p>
+                    <strong>Pólizas:</strong>{' '}
+                    {selectedAsset.relations?.policies?.length
+                      ? `${selectedAsset.relations.policies.length} póliza(s)`
+                      : 'Sin pólizas'}
+                  </p>
+                </div>
+              </section>
             </div>
           </div>
 

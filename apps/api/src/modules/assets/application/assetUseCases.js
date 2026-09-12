@@ -155,6 +155,42 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
       return asset;
     },
 
+    async getDetail(id) {
+      const asset = await this.getById(id);
+      const relations = assetRepository.findRelationsByAsset
+        ? await assetRepository.findRelationsByAsset(id)
+        : { provider: null, maintenances: [], policies: [] };
+
+      return {
+        ...asset,
+        technical: {
+          type: asset.type,
+          location: asset.location,
+          description: asset.description
+        },
+        economic: {
+          acquisitionDate: asset.acquisitionDate,
+          acquisitionCost: asset.acquisitionCost ?? null,
+          acquisitionDocument: asset.acquisitionDocument ?? null
+        },
+        administrative: {
+          code: asset.code,
+          name: asset.name,
+          status: asset.status,
+          buildingId: asset.buildingId,
+          createdBy: asset.createdBy,
+          updatedBy: asset.updatedBy,
+          createdAt: asset.createdAt,
+          updatedAt: asset.updatedAt
+        },
+        relations: {
+          provider: relations.provider ?? null,
+          maintenances: relations.maintenances ?? [],
+          policies: relations.policies ?? []
+        }
+      };
+    },
+
     async update(id, input, userId = null) {
       validateUpdateInput(input);
       const current = await this.getById(id);

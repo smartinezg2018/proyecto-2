@@ -63,7 +63,7 @@ assetsRoutes.patch(
 assetsRoutes.get(
   '/:assetId',
   asyncHandler(async (request, response) => {
-    const asset = await assetUseCases.getById(request.params.assetId);
+    const asset = await assetUseCases.getDetail(request.params.assetId);
     response.json({ data: asset, meta: { requestId: request.id } });
   })
 );
