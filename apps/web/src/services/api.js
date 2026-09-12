@@ -42,3 +42,21 @@ export function updateBuilding(buildingId, building) {
     body: JSON.stringify(building)
   });
 }
+
+export function createUser(user) {
+  return buildingRequest('/api/v1/administration/users', {
+    method: 'POST',
+    body: JSON.stringify(user)
+  });
+}
+
+export function createProfile(profile) {
+  return buildingRequest('/api/v1/administration/profiles', {
+    method: 'POST',
+    body: JSON.stringify(profile)
+  });
+}
+
+export function getPermissions(signal) {
+  return buildingRequest('/api/v1/administration/permissions', { signal });
+}

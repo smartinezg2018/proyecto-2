@@ -7,10 +7,12 @@ import { ModuleFacturacion } from "../features/billing/BillingPage.jsx";
 import { ModulePresupuesto } from "../features/budget/BudgetPage.jsx";
 import { ModuleProyectos } from "../features/projects/ProjectsPage.jsx";
 import { BuildingsPage } from "../features/administration/BuildingsPage.jsx";
+import { UsersPage } from "../features/administration/UsersPage.jsx";
+import { ProfilesPage } from "../features/administration/ProfilesPage.jsx";
 import {
   Package, Wrench, Shield, Receipt, BarChart3, FolderKanban,
   Bell, Search, Building2, Home, ChevronDown,
-  ChevronRight, Menu, Settings
+  ChevronRight, Menu, Settings, Users, ShieldCheck
 } from "lucide-react";
 
 // ---- Navigation config ----
@@ -23,6 +25,8 @@ const NAV = [
   { id: "facturacion", label: "Facturación", icon: Receipt },
   { id: "presupuesto", label: "Presupuesto", icon: BarChart3 },
   { id: "proyectos", label: "Proyectos", icon: FolderKanban },
+  { id: "usuarios", label: "Usuarios", icon: Users },
+  { id: "perfiles", label: "Perfiles", icon: ShieldCheck },
 ];
 
 // ---- App Shell ----
@@ -40,6 +44,8 @@ export default function App() {
       case "facturacion": return <ModuleFacturacion />;
       case "presupuesto": return <ModulePresupuesto />;
       case "proyectos": return <ModuleProyectos />;
+      case "usuarios": return <UsersPage />;
+      case "perfiles": return <ProfilesPage />;
     }
   };
 
