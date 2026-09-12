@@ -31,6 +31,7 @@ export const Asset = sequelize.define(
       allowNull: false
     },
     location: DataTypes.STRING(150),
+    providerId: DataTypes.BIGINT.UNSIGNED,
     acquisitionDate: {
       type: DataTypes.DATEONLY,
       allowNull: false

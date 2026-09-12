@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Pencil, Plus, RefreshCcw, Save, X } from 'lucide-react';
 import {
+  assignAssetProvider,
   changeAssetStatus,
   createAsset,
   getAssetHistory,
   getAssets,
   getBuildings,
+  getProviders,
   updateAsset
 } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -43,7 +45,8 @@ const HISTORY_FIELD_LABELS = {
   type: 'Tipo',
   location: 'Ubicación',
   acquisitionDate: 'Fecha de adquisición',
-  code: 'Código'
+  code: 'Código',
+  providerId: 'Proveedor'
 };
 
 const emptyCreateForm = {
@@ -109,6 +112,16 @@ export function ModuleInventario() {
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [providers, setProviders] = useState([]);
+  const [providerMode, setProviderMode] = useState('existing');
+  const [providerForm, setProviderForm] = useState({
+    providerId: '',
+    name: '',
+    contactName: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
 
   async function loadBuildings() {
     try {
@@ -144,8 +157,18 @@ export function ModuleInventario() {
     setHistory(response.data);
   }
 
+  async function loadProviders() {
+    try {
+      const response = await getProviders();
+      setProviders(response.data);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
   useEffect(() => {
     loadBuildings();
+    loadProviders();
   }, []);
 
   useEffect(() => {
@@ -217,6 +240,32 @@ export function ModuleInventario() {
       setStatus({ type: 'success', message: 'Activo actualizado correctamente.' });
       setIsEditOpen(false);
       await loadAssets(buildingId);
+      await loadHistory(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitProvider(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    const payload =
+      providerMode === 'existing'
+        ? { providerId: Number(providerForm.providerId) }
+        : {
+            name: providerForm.name,
+            contactName: providerForm.contactName,
+            email: providerForm.email,
+            phone: providerForm.phone,
+            address: providerForm.address
+          };
+
+    try {
+      const response = await assignAssetProvider(selectedAsset.id, payload);
+      setSelectedAsset(response.data);
+      setStatus({ type: 'success', message: 'Proveedor asociado al activo.' });
+      await loadProviders();
       await loadHistory(selectedAsset.id);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -470,7 +519,88 @@ export function ModuleInventario() {
               <p className="sm:col-span-2">
                 <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
               </p>
+              <p className="sm:col-span-2">
+                <strong>Proveedor:</strong>{' '}
+                {selectedAsset.provider
+                  ? `${selectedAsset.provider.name} · ${selectedAsset.provider.phone || selectedAsset.provider.email || 'Sin contacto'}`
+                  : 'Sin proveedor asociado'}
+              </p>
             </div>
+            <form
+              onSubmit={submitProvider}
+              className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"
+            >
+              <h4 className="sm:col-span-2 text-sm font-bold text-slate-800">
+                Registrar proveedor del activo
+              </h4>
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Modo</span>
+                <select
+                  value={providerMode}
+                  onChange={(event) => setProviderMode(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="existing">Seleccionar existente</option>
+                  <option value="new">Registrar nuevo</option>
+                </select>
+              </label>
+              {providerMode === 'existing' ? (
+                <label className="sm:col-span-2">
+                  <span className="mb-1 block text-xs font-bold text-slate-500">Proveedor *</span>
+                  <select
+                    value={providerForm.providerId}
+                    onChange={(event) =>
+                      setProviderForm({ ...providerForm, providerId: event.target.value })
+                    }
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="">Seleccione un proveedor</option>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <>
+                  {[
+                    ['name', 'Nombre *'],
+                    ['contactName', 'Contacto'],
+                    ['email', 'Correo'],
+                    ['phone', 'Teléfono']
+                  ].map(([name, label]) => (
+                    <label key={name}>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">{label}</span>
+                      <input
+                        value={providerForm[name]}
+                        onChange={(event) =>
+                          setProviderForm({ ...providerForm, [name]: event.target.value })
+                        }
+                        required={name === 'name'}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                      />
+                    </label>
+                  ))}
+                  <label className="sm:col-span-2">
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Dirección</span>
+                    <input
+                      value={providerForm.address}
+                      onChange={(event) =>
+                        setProviderForm({ ...providerForm, address: event.target.value })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                </>
+              )}
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar proveedor
+                </ActionButton>
+              </div>
+            </form>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">

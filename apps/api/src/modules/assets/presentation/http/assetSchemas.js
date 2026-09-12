@@ -26,6 +26,27 @@ export const updateAssetSchema = z.object({
   acquisitionDate: dateSchema
 });
 
+export const createProviderSchema = z.object({
+  name: z.string().trim().min(1, 'El campo name es obligatorio.'),
+  contactName: z.string().optional().nullable(),
+  email: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable()
+});
+
+export const assignProviderSchema = z
+  .object({
+    providerId: z.number().int().positive().optional(),
+    name: z.string().trim().optional(),
+    contactName: z.string().optional().nullable(),
+    email: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    address: z.string().optional().nullable()
+  })
+  .refine((value) => value.providerId || (value.name && value.name.trim().length > 0), {
+    message: 'Debe seleccionar un proveedor existente o registrar uno nuevo.'
+  });
+
 export const changeAssetStatusSchema = z.object({
   status: z.enum(ASSET_STATUSES, {
     error:

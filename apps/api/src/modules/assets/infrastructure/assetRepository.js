@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import { sequelize } from '../../../../database/connection.js';
-import { Asset, AssetHistory } from '../../../../database/models/index.js';
+import { Asset, AssetHistory, Provider } from '../../../../database/models/index.js';
 
 function formatDate(value) {
   if (!value) {
@@ -33,6 +33,17 @@ function mapAsset(asset) {
     type: data.type,
     status: data.status,
     location: data.location,
+    providerId: data.providerId ?? null,
+    provider: data.provider
+      ? {
+          id: data.provider.id,
+          name: data.provider.name,
+          contactName: data.provider.contactName,
+          email: data.provider.email,
+          phone: data.provider.phone,
+          address: data.provider.address
+        }
+      : null,
     acquisitionDate: formatDate(data.acquisitionDate),
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
@@ -132,13 +143,25 @@ export class AssetRepository {
   }
 
   async findById(id) {
-    const asset = await Asset.findByPk(id);
+    const asset = await Asset.findByPk(id, {
+      include: [{ model: Provider, as: 'provider', required: false }]
+    });
     return mapAsset(asset);
+  }
+
+  async assignProvider(id, providerId, updatedBy, historyEntries = []) {
+    await sequelize.transaction(async (transaction) => {
+      await Asset.update({ providerId, updatedBy }, { where: { id }, transaction });
+      await insertHistory(id, historyEntries, transaction);
+    });
+
+    return this.findById(id);
   }
 
   async findAllByBuilding(buildingId) {
     const assets = await Asset.findAll({
       where: { buildingId },
+      include: [{ model: Provider, as: 'provider', required: false }],
       order: [['code', 'ASC']]
     });
 

@@ -106,7 +106,11 @@ function buildFieldHistory(previous, next, userId) {
     }));
 }
 
-export function createAssetUseCases(assetRepository, buildingRepository) {
+export function createAssetUseCases(
+  assetRepository,
+  buildingRepository,
+  providerRepository = null
+) {
   return {
     async create(buildingId, input, userId = null) {
       const building = await buildingRepository.findById(buildingId);
@@ -205,6 +209,77 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
     async getHistory(id) {
       await this.getById(id);
       return assetRepository.findHistoryByAsset(id);
+    },
+
+    async listProviders() {
+      if (!providerRepository) {
+        return [];
+      }
+      return providerRepository.findAll();
+    },
+
+    async createProvider(input, userId = null) {
+      if (!providerRepository) {
+        throw new AppError(
+          'El repositorio de proveedores no está disponible.',
+          500,
+          'PROVIDER_UNAVAILABLE'
+        );
+      }
+      requiredText(input.name, 'name');
+      optionalText(input.contactName, 'contactName');
+      optionalText(input.email, 'email');
+      optionalText(input.phone, 'phone');
+      optionalText(input.address, 'address');
+
+      const name = input.name.trim();
+      if (await providerRepository.findByName(name)) {
+        throw new AppError('Ya existe un proveedor con ese nombre.', 409, 'DUPLICATE_PROVIDER');
+      }
+
+      return providerRepository.create({
+        name,
+        contactName: input.contactName?.trim() || null,
+        email: input.email?.trim() || null,
+        phone: input.phone?.trim() || null,
+        address: input.address?.trim() || null,
+        createdBy: userId
+      });
+    },
+
+    async assignProvider(assetId, input, userId = null) {
+      if (!providerRepository || !assetRepository.assignProvider) {
+        throw new AppError(
+          'El repositorio de proveedores no está disponible.',
+          500,
+          'PROVIDER_UNAVAILABLE'
+        );
+      }
+
+      const asset = await this.getById(assetId);
+      let provider;
+
+      if (input.providerId) {
+        provider = await providerRepository.findById(input.providerId);
+        if (!provider) {
+          throw new AppError('El proveedor no existe.', 404, 'PROVIDER_NOT_FOUND');
+        }
+      } else {
+        provider = await this.createProvider(input, userId);
+      }
+
+      const updated = await assetRepository.assignProvider(asset.id, provider.id, userId, [
+        {
+          changeType: 'actualizacion',
+          field: 'providerId',
+          oldValue: stringifyValue(asset.providerId),
+          newValue: stringifyValue(provider.id),
+          reason: 'Asociación de proveedor',
+          createdBy: userId
+        }
+      ]);
+
+      return { ...updated, provider };
     }
   };
 }

@@ -3,10 +3,21 @@ import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
 import { createAssetUseCases } from '../../application/assetUseCases.js';
 import { AssetRepository } from '../../infrastructure/assetRepository.js';
-import { changeAssetStatusSchema, createAssetSchema, updateAssetSchema } from './assetSchemas.js';
+import { ProviderRepository } from '../../infrastructure/providerRepository.js';
+import {
+  assignProviderSchema,
+  changeAssetStatusSchema,
+  createAssetSchema,
+  createProviderSchema,
+  updateAssetSchema
+} from './assetSchemas.js';
 
 export const assetsRoutes = Router();
-const assetUseCases = createAssetUseCases(new AssetRepository(), new BuildingRepository());
+const assetUseCases = createAssetUseCases(
+  new AssetRepository(),
+  new BuildingRepository(),
+  new ProviderRepository()
+);
 
 const asyncHandler = (handler) => (request, response, next) => {
   Promise.resolve(handler(request, response, next)).catch(next);
@@ -33,6 +44,39 @@ assetsRoutes.post(
       request.user?.id ?? null
     );
     response.status(201).json({ data: asset, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.get(
+  '/providers',
+  asyncHandler(async (request, response) => {
+    const providers = await assetUseCases.listProviders();
+    response.json({
+      data: providers,
+      meta: { requestId: request.id, page: 1, pageSize: providers.length }
+    });
+  })
+);
+
+assetsRoutes.post(
+  '/providers',
+  validateBody(createProviderSchema),
+  asyncHandler(async (request, response) => {
+    const provider = await assetUseCases.createProvider(request.body, request.user?.id ?? null);
+    response.status(201).json({ data: provider, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.put(
+  '/:assetId/provider',
+  validateBody(assignProviderSchema),
+  asyncHandler(async (request, response) => {
+    const asset = await assetUseCases.assignProvider(
+      request.params.assetId,
+      request.body,
+      request.user?.id ?? null
+    );
+    response.json({ data: asset, meta: { requestId: request.id } });
   })
 );
 

@@ -97,6 +97,17 @@ export function getAssetHistory(assetId) {
   return apiRequest(`/api/v1/assets/${assetId}/history`);
 }
 
+export function getProviders() {
+  return apiRequest('/api/v1/assets/providers');
+}
+
+export function assignAssetProvider(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/provider`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

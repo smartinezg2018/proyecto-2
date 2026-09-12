@@ -6,11 +6,29 @@ function createRepositories() {
   const buildings = [{ id: 1, name: 'Torre Central' }];
   const assets = [];
   const history = [];
+  const providers = [];
 
   return {
     buildingRepository: {
       async findById(id) {
         return buildings.find((building) => String(building.id) === String(id)) ?? null;
+      }
+    },
+    providerRepository: {
+      providers,
+      async create(provider) {
+        const created = { id: providers.length + 1, ...provider };
+        providers.push(created);
+        return created;
+      },
+      async findById(id) {
+        return providers.find((provider) => String(provider.id) === String(id)) ?? null;
+      },
+      async findByName(name) {
+        return providers.find((provider) => provider.name === name) ?? null;
+      },
+      async findAll() {
+        return [...providers];
       }
     },
     assetRepository: {
@@ -52,6 +70,12 @@ function createRepositories() {
       },
       async findHistoryByAsset(assetId) {
         return history.filter((entry) => String(entry.assetId) === String(assetId));
+      },
+      async assignProvider(id, providerId, updatedBy, historyEntries = []) {
+        const index = assets.findIndex((asset) => String(asset.id) === String(id));
+        assets[index] = { ...assets[index], providerId, updatedBy };
+        history.push(...historyEntries.map((entry) => ({ ...entry, assetId: Number(id) })));
+        return assets[index];
       }
     }
   };
@@ -142,6 +166,37 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('registra un proveedor nuevo y lo asocia al activo', async () => {
+  const { assetRepository, buildingRepository, providerRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository, providerRepository);
+  const created = await useCases.create(1, validAsset);
+
+  const updated = await useCases.assignProvider(
+    created.id,
+    { name: 'Ascensores Andes', contactName: 'Ana Pérez', phone: '3001234567' },
+    8
+  );
+
+  assert.equal(updated.provider.name, 'Ascensores Andes');
+  assert.equal(updated.providerId, updated.provider.id);
+  assert.equal(providerRepository.providers.length, 1);
+});
+
+test('asocia un proveedor existente al activo', async () => {
+  const { assetRepository, buildingRepository, providerRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository, providerRepository);
+  const created = await useCases.create(1, validAsset);
+  const provider = await useCases.createProvider({
+    name: 'Hidráulica Sur',
+    email: 'contacto@sur.com'
+  });
+
+  const updated = await useCases.assignProvider(created.id, { providerId: provider.id });
+
+  assert.equal(updated.providerId, provider.id);
+  assert.equal(updated.provider.name, 'Hidráulica Sur');
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {
