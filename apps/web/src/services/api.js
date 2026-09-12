@@ -52,3 +52,32 @@ export function createResponsible(person) {
     body: JSON.stringify(person)
   });
 }
+
+export function getAssets(buildingId) {
+  return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`);
+}
+
+export function createAsset(buildingId, asset) {
+  return apiRequest(`/api/v1/assets/buildings/${buildingId}/assets`, {
+    method: 'POST',
+    body: JSON.stringify(asset)
+  });
+}
+
+export function updateAsset(assetId, asset) {
+  return apiRequest(`/api/v1/assets/${assetId}`, {
+    method: 'PUT',
+    body: JSON.stringify(asset)
+  });
+}
+
+export function changeAssetStatus(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getAssetHistory(assetId) {
+  return apiRequest(`/api/v1/assets/${assetId}/history`);
+}

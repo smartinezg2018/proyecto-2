@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS assets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  building_id BIGINT UNSIGNED NOT NULL,
+  code VARCHAR(50) NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  description TEXT,
+  type VARCHAR(50) NOT NULL,
+  status VARCHAR(30) NOT NULL,
+  location VARCHAR(150),
+  acquisition_date DATE NOT NULL,
+  created_by BIGINT UNSIGNED,
+  updated_by BIGINT UNSIGNED,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_assets_building_code (building_id, code),
+  KEY idx_assets_building (building_id),
+  KEY idx_assets_status (status),
+  CONSTRAINT fk_assets_building FOREIGN KEY (building_id) REFERENCES buildings (id)
+);
