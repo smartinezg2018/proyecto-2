@@ -1,7 +1,7 @@
 import { AppError } from '../../../shared/errors/AppError.js';
-import { ASSET_STATUSES, ASSET_TYPES } from '../domain/assetCatalog.js';
+import { ASSET_COST_TYPES, ASSET_STATUSES, ASSET_TYPES } from '../domain/assetCatalog.js';
 
-export { ASSET_STATUSES, ASSET_TYPES };
+export { ASSET_COST_TYPES, ASSET_STATUSES, ASSET_TYPES };
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -17,14 +17,17 @@ function optionalText(value, fieldName) {
   }
 }
 
-function validateAcquisitionDate(value) {
+function validateDate(
+  value,
+  message = 'La fecha de adquisición debe tener el formato YYYY-MM-DD.'
+) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
-    throw new AppError(
-      'La fecha de adquisición debe tener el formato YYYY-MM-DD.',
-      400,
-      'VALIDATION_ERROR'
-    );
+    throw new AppError(message, 400, 'VALIDATION_ERROR');
   }
+}
+
+function validateAcquisitionDate(value) {
+  validateDate(value);
 }
 
 function validateCreateInput(input) {
@@ -106,7 +109,33 @@ function buildFieldHistory(previous, next, userId) {
     }));
 }
 
-export function createAssetUseCases(assetRepository, buildingRepository) {
+function parseNonNegativeNumber(value, fieldName) {
+  const amount = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new AppError(
+      `El campo ${fieldName} debe ser numérico y no negativo.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  return amount;
+}
+
+function optionalDate(value, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
+    throw new AppError(
+      `El campo ${fieldName} debe tener el formato YYYY-MM-DD.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  return value;
+}
+
+export function createAssetUseCases(assetRepository, buildingRepository, costRepository = null) {
   return {
     async create(buildingId, input, userId = null) {
       const building = await buildingRepository.findById(buildingId);
@@ -205,6 +234,61 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
     async getHistory(id) {
       await this.getById(id);
       return assetRepository.findHistoryByAsset(id);
+    },
+
+    async createCost(assetId, input, userId = null) {
+      if (!costRepository) {
+        throw new AppError('El repositorio de costos no está disponible.', 500, 'COST_UNAVAILABLE');
+      }
+
+      await this.getById(assetId);
+      if (!ASSET_COST_TYPES.includes(input.type)) {
+        throw new AppError(
+          'El tipo de intervención no es válido. Use reparacion, mejora o mantenimiento.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+      validateDate(
+        input.occurredOn,
+        'La fecha de la intervención debe tener el formato YYYY-MM-DD.'
+      );
+      optionalText(input.description, 'description');
+
+      return costRepository.create({
+        assetId: Number(assetId),
+        type: input.type,
+        amount: parseNonNegativeNumber(input.amount, 'amount'),
+        occurredOn: input.occurredOn,
+        description: input.description?.trim() || null,
+        createdBy: userId
+      });
+    },
+
+    async getCosts(assetId, filters = {}) {
+      if (!costRepository) {
+        return { items: [], total: 0, filters: { type: null, from: null, to: null } };
+      }
+
+      await this.getById(assetId);
+      const type = filters.type || null;
+      if (type && !ASSET_COST_TYPES.includes(type)) {
+        throw new AppError(
+          'El tipo de intervención no es válido. Use reparacion, mejora o mantenimiento.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      const appliedFilters = {
+        type,
+        from: optionalDate(filters.from, 'from'),
+        to: optionalDate(filters.to, 'to')
+      };
+      const items = await costRepository.findByAsset(assetId, appliedFilters);
+      const total = items.reduce((sum, cost) => sum + Number(cost.amount), 0);
+
+      return { items, total, filters: appliedFilters };
     }
   };
 }

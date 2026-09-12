@@ -1,4 +1,5 @@
 import { Asset } from './Asset.js';
+import { AssetCost } from './AssetCost.js';
 import { AssetHistory } from './AssetHistory.js';
 import { Person } from './Person.js';
 import { Unit } from './Unit.js';
@@ -11,5 +12,7 @@ Person.hasMany(UnitResponsible, { foreignKey: 'personId' });
 
 Asset.hasMany(AssetHistory, { foreignKey: 'assetId', as: 'historyEntries' });
 AssetHistory.belongsTo(Asset, { foreignKey: 'assetId' });
+Asset.hasMany(AssetCost, { foreignKey: 'assetId', as: 'costs' });
+AssetCost.belongsTo(Asset, { foreignKey: 'assetId' });
 
-export { Asset, AssetHistory, Person, Unit, UnitResponsible };
+export { Asset, AssetCost, AssetHistory, Person, Unit, UnitResponsible };

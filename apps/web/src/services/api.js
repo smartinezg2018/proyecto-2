@@ -97,6 +97,28 @@ export function getAssetHistory(assetId) {
   return apiRequest(`/api/v1/assets/${assetId}/history`);
 }
 
+export function getAssetCosts(assetId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.type) {
+    params.set('type', filters.type);
+  }
+  if (filters.from) {
+    params.set('from', filters.from);
+  }
+  if (filters.to) {
+    params.set('to', filters.to);
+  }
+  const query = params.toString();
+  return apiRequest(`/api/v1/assets/${assetId}/costs${query ? `?${query}` : ''}`);
+}
+
+export function createAssetCost(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/costs`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

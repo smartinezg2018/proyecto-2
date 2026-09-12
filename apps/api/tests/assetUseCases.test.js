@@ -6,8 +6,33 @@ function createRepositories() {
   const buildings = [{ id: 1, name: 'Torre Central' }];
   const assets = [];
   const history = [];
+  const costs = [];
 
   return {
+    costRepository: {
+      async create(cost) {
+        const created = { id: costs.length + 1, ...cost };
+        costs.push(created);
+        return created;
+      },
+      async findByAsset(assetId, filters = {}) {
+        return costs.filter((cost) => {
+          if (String(cost.assetId) !== String(assetId)) {
+            return false;
+          }
+          if (filters.type && cost.type !== filters.type) {
+            return false;
+          }
+          if (filters.from && cost.occurredOn < filters.from) {
+            return false;
+          }
+          if (filters.to && cost.occurredOn > filters.to) {
+            return false;
+          }
+          return true;
+        });
+      }
+    },
     buildingRepository: {
       async findById(id) {
         return buildings.find((building) => String(building.id) === String(id)) ?? null;
@@ -142,6 +167,42 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('consolida los costos del activo y filtra por tipo y periodo', async () => {
+  const { assetRepository, buildingRepository, costRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository, costRepository);
+  const created = await useCases.create(1, validAsset);
+
+  await useCases.createCost(created.id, {
+    type: 'reparacion',
+    amount: 800000,
+    occurredOn: '2024-03-01',
+    description: 'Cambio de tarjeta'
+  });
+  await useCases.createCost(created.id, {
+    type: 'mantenimiento',
+    amount: 250000,
+    occurredOn: '2024-06-10'
+  });
+  await useCases.createCost(created.id, {
+    type: 'mejora',
+    amount: 1200000,
+    occurredOn: '2025-01-20'
+  });
+
+  const consolidated = await useCases.getCosts(created.id);
+  assert.equal(consolidated.items.length, 3);
+  assert.equal(consolidated.total, 2250000);
+
+  const filtered = await useCases.getCosts(created.id, {
+    type: 'mantenimiento',
+    from: '2024-01-01',
+    to: '2024-12-31'
+  });
+  assert.equal(filtered.items.length, 1);
+  assert.equal(filtered.total, 250000);
+  assert.equal(filtered.filters.type, 'mantenimiento');
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {

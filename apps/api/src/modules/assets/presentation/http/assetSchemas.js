@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASSET_STATUSES, ASSET_TYPES } from '../../domain/assetCatalog.js';
+import { ASSET_COST_TYPES, ASSET_STATUSES, ASSET_TYPES } from '../../domain/assetCatalog.js';
 
 const dateSchema = z
   .string()
@@ -24,6 +24,17 @@ export const updateAssetSchema = z.object({
   type: z.enum(ASSET_TYPES, { error: 'El tipo de activo no es válido.' }),
   location: z.string().optional().nullable(),
   acquisitionDate: dateSchema
+});
+
+export const createAssetCostSchema = z.object({
+  type: z.enum(ASSET_COST_TYPES, {
+    error: 'El tipo de intervención no es válido. Use reparacion, mejora o mantenimiento.'
+  }),
+  amount: z
+    .number({ error: 'El campo amount debe ser numérico y no negativo.' })
+    .nonnegative('El campo amount debe ser numérico y no negativo.'),
+  occurredOn: dateSchema,
+  description: z.string().optional().nullable()
 });
 
 export const changeAssetStatusSchema = z.object({

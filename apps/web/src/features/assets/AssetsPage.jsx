@@ -3,6 +3,8 @@ import { Pencil, Plus, RefreshCcw, Save, X } from 'lucide-react';
 import {
   changeAssetStatus,
   createAsset,
+  createAssetCost,
+  getAssetCosts,
   getAssetHistory,
   getAssets,
   getBuildings,
@@ -64,9 +66,32 @@ const emptyEditForm = {
   acquisitionDate: ''
 };
 
+const COST_TYPE_OPTIONS = [
+  { value: 'reparacion', label: 'Reparación' },
+  { value: 'mejora', label: 'Mejora' },
+  { value: 'mantenimiento', label: 'Mantenimiento' }
+];
+
+const COST_TYPE_LABELS = Object.fromEntries(
+  COST_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
+
 const emptyStatusForm = {
   status: 'en_mantenimiento',
   reason: ''
+};
+
+const emptyCostFilters = {
+  type: '',
+  from: '',
+  to: ''
+};
+
+const emptyCostForm = {
+  type: 'mantenimiento',
+  amount: '',
+  occurredOn: '',
+  description: ''
 };
 
 function getChangeTypeLabel(changeType) {
@@ -101,6 +126,9 @@ export function ModuleInventario() {
   const [assets, setAssets] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [history, setHistory] = useState([]);
+  const [costs, setCosts] = useState({ items: [], total: 0 });
+  const [costFilters, setCostFilters] = useState(emptyCostFilters);
+  const [costForm, setCostForm] = useState(emptyCostForm);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [statusForm, setStatusForm] = useState(emptyStatusForm);
@@ -144,6 +172,11 @@ export function ModuleInventario() {
     setHistory(response.data);
   }
 
+  async function loadCosts(assetId, filters = costFilters) {
+    const response = await getAssetCosts(assetId, filters);
+    setCosts(response.data);
+  }
+
   useEffect(() => {
     loadBuildings();
   }, []);
@@ -151,6 +184,7 @@ export function ModuleInventario() {
   useEffect(() => {
     setSelectedAsset(null);
     setHistory([]);
+    setCosts({ items: [], total: 0 });
     loadAssets(buildingId);
   }, [buildingId]);
 
@@ -168,6 +202,7 @@ export function ModuleInventario() {
     setStatus({ type: '', message: '' });
     try {
       await loadHistory(asset.id);
+      await loadCosts(asset.id);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -218,6 +253,34 @@ export function ModuleInventario() {
       setIsEditOpen(false);
       await loadAssets(buildingId);
       await loadHistory(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitCostFilters(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+    try {
+      await loadCosts(selectedAsset.id, costFilters);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitCost(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+    try {
+      await createAssetCost(selectedAsset.id, {
+        type: costForm.type,
+        amount: Number(costForm.amount),
+        occurredOn: costForm.occurredOn,
+        description: costForm.description
+      });
+      setCostForm(emptyCostForm);
+      setStatus({ type: 'success', message: 'Costo de intervención registrado.' });
+      await loadCosts(selectedAsset.id, costFilters);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -419,87 +482,233 @@ export function ModuleInventario() {
       )}
 
       {selectedAsset && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">Detalle del activo</h3>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => openEditForm(selectedAsset)}
-                  className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-                  title="Actualizar activo"
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  onClick={() => openStatusForm(selectedAsset)}
-                  className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-                  title="Cambiar estado"
-                >
-                  <RefreshCcw size={15} />
-                </button>
-                <button
-                  onClick={() => setSelectedAsset(null)}
-                  className="rounded-md p-2 text-slate-400 hover:bg-slate-100"
-                  title="Cerrar detalle"
-                >
-                  <X size={16} />
-                </button>
+        <>
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-base font-bold text-slate-900">Detalle del activo</h3>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => openEditForm(selectedAsset)}
+                    className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+                    title="Actualizar activo"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    onClick={() => openStatusForm(selectedAsset)}
+                    className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+                    title="Cambiar estado"
+                  >
+                    <RefreshCcw size={15} />
+                  </button>
+                  <button
+                    onClick={() => setSelectedAsset(null)}
+                    className="rounded-md p-2 text-slate-400 hover:bg-slate-100"
+                    title="Cerrar detalle"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <p>
+                  <strong>Código:</strong> {selectedAsset.code}
+                </p>
+                <p>
+                  <strong>Nombre:</strong> {selectedAsset.name}
+                </p>
+                <p>
+                  <strong>Tipo:</strong>{' '}
+                  {ASSET_TYPE_LABELS[selectedAsset.type] || selectedAsset.type}
+                </p>
+                <p>
+                  <strong>Estado:</strong>{' '}
+                  {ASSET_STATUS_LABELS[selectedAsset.status] || selectedAsset.status}
+                </p>
+                <p>
+                  <strong>Ubicación:</strong> {selectedAsset.location || 'Sin ubicación'}
+                </p>
+                <p>
+                  <strong>Adquisicion:</strong> {selectedAsset.acquisitionDate}
+                </p>
+                <p className="sm:col-span-2">
+                  <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
+                </p>
               </div>
             </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Código:</strong> {selectedAsset.code}
-              </p>
-              <p>
-                <strong>Nombre:</strong> {selectedAsset.name}
-              </p>
-              <p>
-                <strong>Tipo:</strong> {ASSET_TYPE_LABELS[selectedAsset.type] || selectedAsset.type}
-              </p>
-              <p>
-                <strong>Estado:</strong>{' '}
-                {ASSET_STATUS_LABELS[selectedAsset.status] || selectedAsset.status}
-              </p>
-              <p>
-                <strong>Ubicación:</strong> {selectedAsset.location || 'Sin ubicación'}
-              </p>
-              <p>
-                <strong>Adquisicion:</strong> {selectedAsset.acquisitionDate}
-              </p>
-              <p className="sm:col-span-2">
-                <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
-              </p>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <h3 className="mb-4 text-base font-bold text-slate-900">Historial del activo</h3>
+              {history.length === 0 ? (
+                <p className="text-sm text-slate-400">Aún no hay cambios registrados.</p>
+              ) : (
+                <ol className="space-y-3">
+                  {history.map((entry) => (
+                    <li key={entry.id} className="border-l-2 border-blue-200 pl-3 text-sm">
+                      <p className="font-semibold text-slate-800">
+                        {getChangeTypeLabel(entry.changeType)}
+                        {entry.field
+                          ? ` · ${HISTORY_FIELD_LABELS[entry.field] || entry.field}`
+                          : ''}
+                      </p>
+                      <p className="text-slate-500">
+                        {formatHistoryValue(entry.field, entry.oldValue)} →{' '}
+                        {formatHistoryValue(entry.field, entry.newValue)}
+                      </p>
+                      {entry.reason && <p className="text-slate-500">Motivo: {entry.reason}</p>}
+                      <p className="text-xs text-slate-400">
+                        {new Date(entry.createdAt).toLocaleString()} - Usuario{' '}
+                        {entry.createdBy ?? 'no registrado'}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
           </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <h3 className="mb-4 text-base font-bold text-slate-900">Historial del activo</h3>
-            {history.length === 0 ? (
-              <p className="text-sm text-slate-400">Aún no hay cambios registrados.</p>
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="mb-4 text-base font-bold text-slate-900">Costos del activo</h3>
+            <form onSubmit={submitCostFilters} className="mb-5 grid gap-3 sm:grid-cols-4">
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Tipo de intervención
+                </span>
+                <select
+                  value={costFilters.type}
+                  onChange={(event) => setCostFilters({ ...costFilters, type: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="">Todos</option>
+                  {COST_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Desde</span>
+                <input
+                  type="date"
+                  value={costFilters.from}
+                  onChange={(event) => setCostFilters({ ...costFilters, from: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Hasta</span>
+                <input
+                  type="date"
+                  value={costFilters.to}
+                  onChange={(event) => setCostFilters({ ...costFilters, to: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <div className="flex items-end">
+                <ActionButton type="submit">Consultar costos</ActionButton>
+              </div>
+            </form>
+            <p className="mb-4 text-sm font-semibold text-slate-800">
+              Costo total de operación: {costs.total ?? 0}
+            </p>
+            {costs.items.length === 0 ? (
+              <p className="text-sm text-slate-400">
+                No hay costos registrados para los filtros indicados.
+              </p>
             ) : (
-              <ol className="space-y-3">
-                {history.map((entry) => (
-                  <li key={entry.id} className="border-l-2 border-blue-200 pl-3 text-sm">
-                    <p className="font-semibold text-slate-800">
-                      {getChangeTypeLabel(entry.changeType)}
-                      {entry.field ? ` · ${HISTORY_FIELD_LABELS[entry.field] || entry.field}` : ''}
-                    </p>
-                    <p className="text-slate-500">
-                      {formatHistoryValue(entry.field, entry.oldValue)} →{' '}
-                      {formatHistoryValue(entry.field, entry.newValue)}
-                    </p>
-                    {entry.reason && <p className="text-slate-500">Motivo: {entry.reason}</p>}
-                    <p className="text-xs text-slate-400">
-                      {new Date(entry.createdAt).toLocaleString()} - Usuario{' '}
-                      {entry.createdBy ?? 'no registrado'}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+              <table className="mb-5 w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {['Tipo', 'Fecha', 'Valor', 'Descripción'].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400"
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {costs.items.map((cost) => (
+                    <tr key={cost.id} className="border-b border-slate-50">
+                      <td className="px-3 py-2 text-sm text-slate-700">
+                        {COST_TYPE_LABELS[cost.type] || cost.type}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-slate-500">{cost.occurredOn}</td>
+                      <td className="px-3 py-2 text-sm font-semibold text-slate-800">
+                        {cost.amount}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-slate-500">
+                        {cost.description || 'Sin descripción'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
+            <form
+              onSubmit={submitCost}
+              className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"
+            >
+              <h4 className="sm:col-span-2 text-sm font-bold text-slate-800">
+                Registrar costo de intervención
+              </h4>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>
+                <select
+                  value={costForm.type}
+                  onChange={(event) => setCostForm({ ...costForm, type: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  {COST_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Valor *</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costForm.amount}
+                  onChange={(event) => setCostForm({ ...costForm, amount: event.target.value })}
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <input
+                  type="date"
+                  value={costForm.occurredOn}
+                  onChange={(event) => setCostForm({ ...costForm, occurredOn: event.target.value })}
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Descripción</span>
+                <input
+                  value={costForm.description}
+                  onChange={(event) =>
+                    setCostForm({ ...costForm, description: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar costo
+                </ActionButton>
+              </div>
+            </form>
           </div>
-        </div>
+        </>
       )}
 
       {isEditOpen && selectedAsset && (

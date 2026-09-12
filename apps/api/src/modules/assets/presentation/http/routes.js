@@ -2,11 +2,21 @@ import { Router } from 'express';
 import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
 import { createAssetUseCases } from '../../application/assetUseCases.js';
+import { AssetCostRepository } from '../../infrastructure/assetCostRepository.js';
 import { AssetRepository } from '../../infrastructure/assetRepository.js';
-import { changeAssetStatusSchema, createAssetSchema, updateAssetSchema } from './assetSchemas.js';
+import {
+  changeAssetStatusSchema,
+  createAssetCostSchema,
+  createAssetSchema,
+  updateAssetSchema
+} from './assetSchemas.js';
 
 export const assetsRoutes = Router();
-const assetUseCases = createAssetUseCases(new AssetRepository(), new BuildingRepository());
+const assetUseCases = createAssetUseCases(
+  new AssetRepository(),
+  new BuildingRepository(),
+  new AssetCostRepository()
+);
 
 const asyncHandler = (handler) => (request, response, next) => {
   Promise.resolve(handler(request, response, next)).catch(next);
@@ -33,6 +43,30 @@ assetsRoutes.post(
       request.user?.id ?? null
     );
     response.status(201).json({ data: asset, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.get(
+  '/:assetId/costs',
+  asyncHandler(async (request, response) => {
+    const costs = await assetUseCases.getCosts(request.params.assetId, request.query);
+    response.json({
+      data: costs,
+      meta: { requestId: request.id, page: 1, pageSize: costs.items.length }
+    });
+  })
+);
+
+assetsRoutes.post(
+  '/:assetId/costs',
+  validateBody(createAssetCostSchema),
+  asyncHandler(async (request, response) => {
+    const cost = await assetUseCases.createCost(
+      request.params.assetId,
+      request.body,
+      request.user?.id ?? null
+    );
+    response.status(201).json({ data: cost, meta: { requestId: request.id } });
   })
 );
 
