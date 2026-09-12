@@ -13,7 +13,7 @@ export function ModuleProyectos() {
     <div>
       <SectionHead
         title="Proyectos"
-        subtitle="Proyectos aprobados en asamblea y su estado de ejecución"
+        subtitle="Proyectos aprobados en asamblea y su estado de ejecuciï¿½n"
         action={
           <Btn>
             <Plus size={14} /> Nuevo Proyecto
@@ -64,7 +64,7 @@ export function ModuleProyectos() {
               <div className="mt-3 flex items-center gap-1 text-xs text-slate-400">
                 <Calendar size={11} />
                 <span>
-                  Fecha límite:{' '}
+                  Fecha lï¿½mite:{' '}
                   <span style={{ fontFamily: "'DM Mono', monospace" }}>{p.deadline}</span>
                 </span>
               </div>
@@ -73,13 +73,13 @@ export function ModuleProyectos() {
                   <button className="text-xs text-blue-600 font-semibold hover:underline">
                     Ver hitos
                   </button>
-                  <span className="text-slate-200">·</span>
+                  <span className="text-slate-200">ï¿½</span>
                   <button className="text-xs text-blue-600 font-semibold hover:underline">
                     Actualizar avance
                   </button>
                   {p.status === 'En Curso' && (
                     <>
-                      <span className="text-slate-200">·</span>
+                      <span className="text-slate-200">ï¿½</span>
                       <button className="text-xs text-emerald-600 font-semibold hover:underline">
                         Finalizar y rendir cuentas
                       </button>
@@ -98,7 +98,7 @@ export function ModuleProyectos() {
           <div>
             <h3 className="text-sm font-bold text-slate-700">Cuadro Comparativo de Cotizaciones</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Reparación Cubierta Torre B · 3 propuestas evaluadas
+              Reparaciï¿½n Cubierta Torre B ï¿½ 3 propuestas evaluadas
             </p>
           </div>
           <Btn variant="secondary">
@@ -113,7 +113,7 @@ export function ModuleProyectos() {
               </th>
               {[
                 { name: 'Constructora Andina SAS', rec: false },
-                { name: 'Técnicos del Norte Ltda.', rec: true },
+                { name: 'Tï¿½cnicos del Norte Ltda.', rec: true },
                 { name: 'BuildPro Colombia', rec: false }
               ].map((p) => (
                 <th
@@ -135,9 +135,9 @@ export function ModuleProyectos() {
           <tbody className="divide-y divide-slate-50">
             {[
               ['Valor Total', '$58.500.000', '$61.000.000', '$72.000.000'],
-              ['Plazo de Ejecución', '90 días', '75 días', '120 días'],
-              ['Garantía de Obra', '12 meses', '24 meses', '18 meses'],
-              ['Experiencia en PH', '8 años', '15 años', '5 años'],
+              ['Plazo de Ejecuciï¿½n', '90 dï¿½as', '75 dï¿½as', '120 dï¿½as'],
+              ['Garantï¿½a de Obra', '12 meses', '24 meses', '18 meses'],
+              ['Experiencia en PH', '8 aï¿½os', '15 aï¿½os', '5 aï¿½os'],
               ['Materiales incluidos', 'Parcial', 'Total', 'Total'],
               ['Referencias verificadas', '2', '5', '1']
             ].map(([criterio, ...vals]) => (

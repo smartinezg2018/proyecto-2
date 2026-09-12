@@ -26,14 +26,14 @@ export function ModuleFacturacion() {
   const totalMora = APARTMENTS.reduce((s, a) => s + a.balance, 0);
   const moraCount = APARTMENTS.filter((a) => a.status === 'En mora').length;
   const recaudoPct = Math.round(
-    (APARTMENTS.filter((a) => a.status === 'Al día').length / APARTMENTS.length) * 100
+    (APARTMENTS.filter((a) => a.status === 'Al dï¿½a').length / APARTMENTS.length) * 100
   );
 
   return (
     <div>
       <SectionHead
-        title="Facturación y Recaudo"
-        subtitle="Control de cartera, facturación y pagos del conjunto"
+        title="Facturaciï¿½n y Recaudo"
+        subtitle="Control de cartera, facturaciï¿½n y pagos del conjunto"
         action={
           <div className="flex gap-2">
             <Btn variant="secondary">
@@ -94,9 +94,9 @@ export function ModuleFacturacion() {
                   'Unidad',
                   'Propietario',
                   'Estado',
-                  'Días Mora',
+                  'Dï¿½as Mora',
                   'Saldo Pendiente',
-                  'Último Pago',
+                  'ï¿½ltimo Pago',
                   'Acciones'
                 ].map((h) => (
                   <th
@@ -128,7 +128,7 @@ export function ModuleFacturacion() {
                     {a.daysLate > 0 ? (
                       <span className="text-red-600 font-bold">{a.daysLate}d</span>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <span className="text-slate-300">ï¿½</span>
                     )}
                   </td>
                   <td
@@ -162,9 +162,9 @@ export function ModuleFacturacion() {
                 Total mora: <strong className="text-red-600">{fmt(totalMora)}</strong>
               </span>
               <span>
-                Aptos al día:{' '}
+                Aptos al dï¿½a:{' '}
                 <strong className="text-emerald-600">
-                  {APARTMENTS.filter((a) => a.status === 'Al día').length}
+                  {APARTMENTS.filter((a) => a.status === 'Al dï¿½a').length}
                 </strong>
               </span>
             </div>
@@ -173,7 +173,7 @@ export function ModuleFacturacion() {
       ) : (
         <div className="bg-white rounded-xl border border-slate-200/80 p-5">
           <h3 className="text-sm font-bold text-slate-700 mb-4">
-            Recaudo mensual vs Mora — Últimos 6 meses
+            Recaudo mensual vs Mora ï¿½ ï¿½ltimos 6 meses
           </h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={BILLING_CHART}>

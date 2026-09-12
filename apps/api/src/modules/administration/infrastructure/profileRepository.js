@@ -7,7 +7,9 @@ export class ProfileRepository {
   }
 
   async findAllPermissions() {
-    const [rows] = await this.pool.execute('SELECT id, code, name FROM permissions ORDER BY id ASC');
+    const [rows] = await this.pool.execute(
+      'SELECT id, code, name FROM permissions ORDER BY id ASC'
+    );
     return rows;
   }
 

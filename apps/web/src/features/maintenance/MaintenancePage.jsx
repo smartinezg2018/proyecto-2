@@ -49,7 +49,7 @@ export function ModuleMantenimientos() {
           </div>
           <div className="flex-1 max-w-xs">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-slate-500">Ejecución presupuestal</span>
+              <span className="text-xs text-slate-500">Ejecuciï¿½n presupuestal</span>
               <span className="text-xs font-bold text-slate-700">62%</span>
             </div>
             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">

@@ -16,8 +16,15 @@ export function createProfileUseCases(repository) {
         throw new AppError('La descripción es demasiado larga.', 400, 'VALIDATION_ERROR');
       }
       const permissionIds = input.permissionIds === undefined ? [] : input.permissionIds;
-      if (!Array.isArray(permissionIds) || permissionIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
-        throw new AppError('permissionIds debe ser una lista de identificadores enteros positivos.', 400, 'VALIDATION_ERROR');
+      if (
+        !Array.isArray(permissionIds) ||
+        permissionIds.some((id) => !Number.isSafeInteger(id) || id <= 0)
+      ) {
+        throw new AppError(
+          'permissionIds debe ser una lista de identificadores enteros positivos.',
+          400,
+          'VALIDATION_ERROR'
+        );
       }
 
       return repository.create({

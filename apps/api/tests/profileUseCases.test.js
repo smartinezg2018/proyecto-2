@@ -16,9 +16,13 @@ function createRepository() {
 
 test('crea un perfil con nombre y descripción, sin permisos', async () => {
   const repository = createRepository();
-  const profile = await createProfileUseCases(repository).create({
-    name: ' Administrador ', description: 'Administra el edificio'
-  }, 7);
+  const profile = await createProfileUseCases(repository).create(
+    {
+      name: ' Administrador ',
+      description: 'Administra el edificio'
+    },
+    7
+  );
   assert.equal(profile.name, 'Administrador');
   assert.equal(profile.description, 'Administra el edificio');
   assert.equal(profile.createdBy, 7);
@@ -28,7 +32,8 @@ test('crea un perfil con nombre y descripción, sin permisos', async () => {
 
 test('asocia funcionalidades sin duplicarlas', async () => {
   const profile = await createProfileUseCases(createRepository()).create({
-    name: 'Administrador', permissionIds: [1, 2, 1]
+    name: 'Administrador',
+    permissionIds: [1, 2, 1]
   });
   assert.deepEqual(profile.permissionIds, [1, 2]);
   assert.equal(profile.description, null);
@@ -37,8 +42,19 @@ test('asocia funcionalidades sin duplicarlas', async () => {
 test('rechaza nombres ausentes, vacíos o demasiado largos', async () => {
   const repository = createRepository();
   const useCases = createProfileUseCases(repository);
-  for (const input of [undefined, null, {}, { name: '' }, { name: '  ' }, { name: 1 }, { name: 'a'.repeat(151) }]) {
-    await assert.rejects(() => useCases.create(input), { code: 'VALIDATION_ERROR', statusCode: 400 });
+  for (const input of [
+    undefined,
+    null,
+    {},
+    { name: '' },
+    { name: '  ' },
+    { name: 1 },
+    { name: 'a'.repeat(151) }
+  ]) {
+    await assert.rejects(() => useCases.create(input), {
+      code: 'VALIDATION_ERROR',
+      statusCode: 400
+    });
   }
   assert.equal(repository.profiles.length, 0);
 });
@@ -47,11 +63,15 @@ test('rechaza descripciones e identificadores inválidos antes de guardar', asyn
   const repository = createRepository();
   const useCases = createProfileUseCases(repository);
   for (const changes of [
-    { description: 1 }, { description: 'á'.repeat(32768) },
-    ...[null, '1', [0], [-1], [1.5], ['1'], [Number.MAX_SAFE_INTEGER + 1]].map((permissionIds) => ({ permissionIds }))
+    { description: 1 },
+    { description: 'á'.repeat(32768) },
+    ...[null, '1', [0], [-1], [1.5], ['1'], [Number.MAX_SAFE_INTEGER + 1]].map((permissionIds) => ({
+      permissionIds
+    }))
   ]) {
     await assert.rejects(() => useCases.create({ name: 'Perfil', ...changes }), {
-      code: 'VALIDATION_ERROR', statusCode: 400
+      code: 'VALIDATION_ERROR',
+      statusCode: 400
     });
   }
   assert.equal(repository.profiles.length, 0);

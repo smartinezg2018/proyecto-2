@@ -20,7 +20,7 @@ export function ModuleInventario() {
     <div>
       <SectionHead
         title="Inventario y Activos"
-        subtitle="Registro y gestión de activos del conjunto residencial"
+        subtitle="Registro y gestiï¿½n de activos del conjunto residencial"
         action={
           <Btn>
             <Plus size={14} /> Registrar Activo
@@ -54,10 +54,10 @@ export function ModuleInventario() {
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               {[
-                'Código',
+                'Cï¿½digo',
                 'Nombre',
-                'Categoría',
-                'Ubicación',
+                'Categorï¿½a',
+                'Ubicaciï¿½n',
                 'Estado',
                 'Proveedor',
                 'Costo Inicial'
@@ -108,11 +108,11 @@ export function ModuleInventario() {
           </span>
           <div className="flex items-center gap-1">
             <button className="px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded-md transition-colors">
-              ‹ Anterior
+              ï¿½ Anterior
             </button>
             <button className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md">1</button>
             <button className="px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded-md transition-colors">
-              Siguiente ›
+              Siguiente ï¿½
             </button>
           </div>
         </div>

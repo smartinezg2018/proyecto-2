@@ -41,12 +41,18 @@ export class UserRepository {
     } catch (error) {
       // Los índices únicos también protegen ante registros simultáneos.
       if (error.code === 'ER_DUP_ENTRY') {
-        const key = error.sqlMessage?.match(/for key '(?:[^']+\.)?(uq_users_email|uq_users_identification)'$/)?.[1];
+        const key = error.sqlMessage?.match(
+          /for key '(?:[^']+\.)?(uq_users_email|uq_users_identification)'$/
+        )?.[1];
         if (key === 'uq_users_email') {
           throw new AppError('Ya existe un usuario con ese correo.', 409, 'DUPLICATE_USER_EMAIL');
         }
         if (key === 'uq_users_identification') {
-          throw new AppError('Ya existe un usuario con esa identificación.', 409, 'DUPLICATE_USER_IDENTIFICATION');
+          throw new AppError(
+            'Ya existe un usuario con esa identificación.',
+            409,
+            'DUPLICATE_USER_IDENTIFICATION'
+          );
         }
       }
       throw error;

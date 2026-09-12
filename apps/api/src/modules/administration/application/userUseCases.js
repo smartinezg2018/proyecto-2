@@ -10,7 +10,11 @@ function validateUserInput(input) {
       throw new AppError(`El campo ${field} es obligatorio.`, 400, 'VALIDATION_ERROR');
     }
     if ([...input[field].trim()].length > fieldLengths[field]) {
-      throw new AppError(`El campo ${field} no puede superar ${fieldLengths[field]} caracteres.`, 400, 'VALIDATION_ERROR');
+      throw new AppError(
+        `El campo ${field} no puede superar ${fieldLengths[field]} caracteres.`,
+        400,
+        'VALIDATION_ERROR'
+      );
     }
   }
 
@@ -34,7 +38,11 @@ export function createUserUseCases(repository) {
         throw new AppError('Ya existe un usuario con ese correo.', 409, 'DUPLICATE_USER_EMAIL');
       }
       if (await repository.findByIdentification(user.identification)) {
-        throw new AppError('Ya existe un usuario con esa identificación.', 409, 'DUPLICATE_USER_IDENTIFICATION');
+        throw new AppError(
+          'Ya existe un usuario con esa identificación.',
+          409,
+          'DUPLICATE_USER_IDENTIFICATION'
+        );
       }
 
       return repository.create({ ...user, createdBy: userId });

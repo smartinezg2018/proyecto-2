@@ -18,7 +18,9 @@ jobs:
           cache: "npm"
 
       - name: Instalar dependencias
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix apps/api
 
       - name: Verificar Formato (Prettier)
         run: npx prettier --check .
