@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASSET_STATUSES, ASSET_TYPES } from '../../domain/assetCatalog.js';
+import { ASSET_STATUSES } from '../../domain/assetCatalog.js';
 
 const dateSchema = z
   .string()
@@ -9,7 +9,7 @@ export const createAssetSchema = z.object({
   code: z.string().trim().min(1, 'El campo code es obligatorio.'),
   name: z.string().trim().min(1, 'El campo name es obligatorio.'),
   description: z.string().optional().nullable(),
-  type: z.enum(ASSET_TYPES, { error: 'El tipo de activo no es válido.' }),
+  type: z.string().trim().min(1, 'El campo type es obligatorio.'),
   status: z.enum(ASSET_STATUSES, {
     error:
       'El estado del activo no es válido. Use activo, en_mantenimiento, fuera_de_servicio o retirado.'
@@ -18,10 +18,19 @@ export const createAssetSchema = z.object({
   acquisitionDate: dateSchema
 });
 
+export const createAssetTypeSchema = z.object({
+  code: z.string().trim().min(1, 'El campo code es obligatorio.'),
+  name: z.string().trim().min(1, 'El campo name es obligatorio.')
+});
+
+export const updateAssetTypeSchema = z.object({
+  name: z.string().trim().min(1, 'El campo name es obligatorio.')
+});
+
 export const updateAssetSchema = z.object({
   name: z.string().trim().min(1, 'El campo name es obligatorio.'),
   description: z.string().optional().nullable(),
-  type: z.enum(ASSET_TYPES, { error: 'El tipo de activo no es válido.' }),
+  type: z.string().trim().min(1, 'El campo type es obligatorio.'),
   location: z.string().optional().nullable(),
   acquisitionDate: dateSchema
 });

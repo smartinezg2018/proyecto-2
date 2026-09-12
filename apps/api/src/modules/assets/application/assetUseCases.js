@@ -36,10 +36,6 @@ function validateCreateInput(input) {
   requiredText(input.status, 'status');
   validateAcquisitionDate(input.acquisitionDate);
 
-  if (!ASSET_TYPES.includes(input.type)) {
-    throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
-  }
-
   if (!ASSET_STATUSES.includes(input.status)) {
     throw new AppError(
       'El estado del activo no es válido. Use activo, en_mantenimiento, fuera_de_servicio o retirado.',
@@ -55,10 +51,6 @@ function validateUpdateInput(input) {
   optionalText(input.location, 'location');
   requiredText(input.type, 'type');
   validateAcquisitionDate(input.acquisitionDate);
-
-  if (!ASSET_TYPES.includes(input.type)) {
-    throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
-  }
 }
 
 function normalizeAssetInput(input, buildingId) {
@@ -106,7 +98,28 @@ function buildFieldHistory(previous, next, userId) {
     }));
 }
 
-export function createAssetUseCases(assetRepository, buildingRepository) {
+export function createAssetUseCases(
+  assetRepository,
+  buildingRepository,
+  assetTypeRepository = null
+) {
+  async function assertValidType(type) {
+    if (assetTypeRepository) {
+      const found = await assetTypeRepository.findByCode(type);
+      if (found) {
+        return;
+      }
+      const catalog = await assetTypeRepository.findAll();
+      if (catalog.length > 0) {
+        throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
+      }
+    }
+
+    if (!ASSET_TYPES.includes(type)) {
+      throw new AppError('El tipo de activo no es válido.', 400, 'VALIDATION_ERROR');
+    }
+  }
+
   return {
     async create(buildingId, input, userId = null) {
       const building = await buildingRepository.findById(buildingId);
@@ -115,6 +128,7 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
       }
 
       validateCreateInput(input);
+      await assertValidType(input.type);
       const asset = normalizeAssetInput(input, buildingId);
 
       if (await assetRepository.findByBuildingAndCode(asset.buildingId, asset.code)) {
@@ -157,6 +171,7 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
 
     async update(id, input, userId = null) {
       validateUpdateInput(input);
+      await assertValidType(input.type);
       const current = await this.getById(id);
       const changes = normalizeUpdateInput(input);
       const historyEntries = buildFieldHistory(current, changes, userId);
@@ -205,6 +220,77 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
     async getHistory(id) {
       await this.getById(id);
       return assetRepository.findHistoryByAsset(id);
+    },
+
+    async listTypes() {
+      if (!assetTypeRepository) {
+        return ASSET_TYPES.map((code) => ({ id: null, code, name: code }));
+      }
+      const types = await assetTypeRepository.findAll();
+      if (types.length > 0) {
+        return types;
+      }
+      return ASSET_TYPES.map((code) => ({ id: null, code, name: code }));
+    },
+
+    async createType(input, userId = null) {
+      if (!assetTypeRepository) {
+        throw new AppError(
+          'El repositorio de tipos no está disponible.',
+          500,
+          'ASSET_TYPE_UNAVAILABLE'
+        );
+      }
+      requiredText(input.code, 'code');
+      requiredText(input.name, 'name');
+      const code = input.code.trim().toLowerCase();
+      const name = input.name.trim();
+      if (await assetTypeRepository.findByCode(code)) {
+        throw new AppError(
+          'Ya existe un tipo de activo con ese código.',
+          409,
+          'DUPLICATE_ASSET_TYPE'
+        );
+      }
+      return assetTypeRepository.create({ code, name, createdBy: userId });
+    },
+
+    async updateType(id, input) {
+      if (!assetTypeRepository) {
+        throw new AppError(
+          'El repositorio de tipos no está disponible.',
+          500,
+          'ASSET_TYPE_UNAVAILABLE'
+        );
+      }
+      requiredText(input.name, 'name');
+      const current = await assetTypeRepository.findById(id);
+      if (!current) {
+        throw new AppError('El tipo de activo no existe.', 404, 'ASSET_TYPE_NOT_FOUND');
+      }
+      return assetTypeRepository.update(id, { name: input.name.trim() });
+    },
+
+    async deleteType(id) {
+      if (!assetTypeRepository) {
+        throw new AppError(
+          'El repositorio de tipos no está disponible.',
+          500,
+          'ASSET_TYPE_UNAVAILABLE'
+        );
+      }
+      const current = await assetTypeRepository.findById(id);
+      if (!current) {
+        throw new AppError('El tipo de activo no existe.', 404, 'ASSET_TYPE_NOT_FOUND');
+      }
+      if ((await assetTypeRepository.countAssetsByType(current.code)) > 0) {
+        throw new AppError(
+          'No se puede eliminar un tipo que ya está asignado a un activo.',
+          409,
+          'ASSET_TYPE_IN_USE'
+        );
+      }
+      await assetTypeRepository.delete(id);
     }
   };
 }

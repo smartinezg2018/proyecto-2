@@ -97,6 +97,30 @@ export function getAssetHistory(assetId) {
   return apiRequest(`/api/v1/assets/${assetId}/history`);
 }
 
+export function getAssetTypes() {
+  return apiRequest('/api/v1/assets/types');
+}
+
+export function createAssetType(payload) {
+  return apiRequest('/api/v1/assets/types', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAssetType(typeId, payload) {
+  return apiRequest(`/api/v1/assets/types/${typeId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteAssetType(typeId) {
+  return apiRequest(`/api/v1/assets/types/${typeId}`, {
+    method: 'DELETE'
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

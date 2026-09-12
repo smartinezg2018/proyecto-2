@@ -6,8 +6,37 @@ function createRepositories() {
   const buildings = [{ id: 1, name: 'Torre Central' }];
   const assets = [];
   const history = [];
+  const types = [];
 
   return {
+    assetTypeRepository: {
+      async create(assetType) {
+        const created = { id: types.length + 1, ...assetType };
+        types.push(created);
+        return created;
+      },
+      async update(id, changes) {
+        const index = types.findIndex((type) => String(type.id) === String(id));
+        types[index] = { ...types[index], ...changes };
+        return types[index];
+      },
+      async delete(id) {
+        const index = types.findIndex((type) => String(type.id) === String(id));
+        types.splice(index, 1);
+      },
+      async findById(id) {
+        return types.find((type) => String(type.id) === String(id)) ?? null;
+      },
+      async findByCode(code) {
+        return types.find((type) => type.code === code) ?? null;
+      },
+      async findAll() {
+        return [...types];
+      },
+      async countAssetsByType(code) {
+        return assets.filter((asset) => asset.type === code).length;
+      }
+    },
     buildingRepository: {
       async findById(id) {
         return buildings.find((building) => String(building.id) === String(id)) ?? null;
@@ -142,6 +171,36 @@ test('cambia el estado del activo y conserva motivo y fecha', async () => {
   assert.equal(statusChange.newValue, 'en_mantenimiento');
   assert.equal(statusChange.reason, 'Falla en el tablero');
   assert.equal(statusChange.createdBy, 5);
+});
+
+test('exige un tipo de activo al registrarlo', async () => {
+  const { assetRepository, buildingRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository);
+  const { type, ...withoutType } = validAsset;
+
+  await assert.rejects(() => useCases.create(1, withoutType), {
+    statusCode: 400
+  });
+  assert.equal(type, 'electromecanico');
+});
+
+test('administra tipos de activo y valida la clasificación', async () => {
+  const { assetRepository, buildingRepository, assetTypeRepository } = createRepositories();
+  const useCases = createAssetUseCases(assetRepository, buildingRepository, assetTypeRepository);
+  const createdType = await useCases.createType({ code: 'climatizacion', name: 'Climatización' });
+
+  const types = await useCases.listTypes();
+  assert.equal(types.length, 1);
+  assert.equal(createdType.code, 'climatizacion');
+
+  const created = await useCases.create(1, { ...validAsset, type: 'climatizacion' });
+  assert.equal(created.type, 'climatizacion');
+
+  await assert.rejects(() => useCases.create(1, { ...validAsset, code: 'ACT-002', type: 'otro' }), {
+    statusCode: 400
+  });
+
+  await assert.rejects(() => useCases.deleteType(createdType.id), { statusCode: 409 });
 });
 
 test('consulta el historial del activo en orden cronológico', async () => {

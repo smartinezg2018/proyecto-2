@@ -3,10 +3,14 @@ import { Pencil, Plus, RefreshCcw, Save, X } from 'lucide-react';
 import {
   changeAssetStatus,
   createAsset,
+  createAssetType,
+  deleteAssetType,
   getAssetHistory,
+  getAssetTypes,
   getAssets,
   getBuildings,
-  updateAsset
+  updateAsset,
+  updateAssetType
 } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
 import { ActionButton } from '../../components/ActionButton.jsx';
@@ -109,6 +113,26 @@ export function ModuleInventario() {
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [assetTypes, setAssetTypes] = useState(ASSET_TYPE_OPTIONS);
+  const [typeForm, setTypeForm] = useState({ code: '', name: '' });
+  const [editingTypeId, setEditingTypeId] = useState('');
+  const [isTypesOpen, setIsTypesOpen] = useState(false);
+
+  async function loadTypes() {
+    try {
+      const response = await getAssetTypes();
+      const options = response.data.map((type) => ({
+        value: type.code,
+        label: type.name,
+        id: type.id
+      }));
+      if (options.length > 0) {
+        setAssetTypes(options);
+      }
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
 
   async function loadBuildings() {
     try {
@@ -146,6 +170,7 @@ export function ModuleInventario() {
 
   useEffect(() => {
     loadBuildings();
+    loadTypes();
   }, []);
 
   useEffect(() => {
@@ -191,6 +216,36 @@ export function ModuleInventario() {
     setIsStatusOpen(true);
     setIsEditOpen(false);
     setIsCreateOpen(false);
+  }
+
+  async function submitType(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+    try {
+      if (editingTypeId) {
+        await updateAssetType(editingTypeId, { name: typeForm.name });
+        setStatus({ type: 'success', message: 'Tipo de activo actualizado.' });
+      } else {
+        await createAssetType(typeForm);
+        setStatus({ type: 'success', message: 'Tipo de activo registrado.' });
+      }
+      setTypeForm({ code: '', name: '' });
+      setEditingTypeId('');
+      await loadTypes();
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function removeType(typeId) {
+    setStatus({ type: '', message: '' });
+    try {
+      await deleteAssetType(typeId);
+      setStatus({ type: 'success', message: 'Tipo de activo eliminado.' });
+      await loadTypes();
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
   }
 
   async function submitCreate(event) {
@@ -245,9 +300,20 @@ export function ModuleInventario() {
         title="Inventario y activos"
         subtitle="Registro, consulta, actualización e historial de los bienes de cada edificio"
         action={
-          <ActionButton onClick={openCreateForm} disabled={!buildingId}>
-            <Plus size={14} /> Registrar activo
-          </ActionButton>
+          <div className="flex gap-2">
+            <ActionButton
+              variant="secondary"
+              onClick={() => {
+                setIsTypesOpen((open) => !open);
+                setStatus({ type: '', message: '' });
+              }}
+            >
+              Clasificar activos
+            </ActionButton>
+            <ActionButton onClick={openCreateForm} disabled={!buildingId}>
+              <Plus size={14} /> Registrar activo
+            </ActionButton>
+          </div>
         }
       />
 
@@ -273,6 +339,80 @@ export function ModuleInventario() {
         >
           {status.message}
         </p>
+      )}
+
+      {isTypesOpen && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Tipos de activo</h3>
+            <button
+              onClick={() => setIsTypesOpen(false)}
+              className="rounded-md p-2 text-slate-400 hover:bg-slate-100"
+              title="Cerrar tipos"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <form onSubmit={submitType} className="mb-4 grid gap-3 sm:grid-cols-3">
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Código *</span>
+              <input
+                value={typeForm.code}
+                onChange={(event) => setTypeForm({ ...typeForm, code: event.target.value })}
+                required={!editingTypeId}
+                disabled={Boolean(editingTypeId)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50"
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Nombre *</span>
+              <input
+                value={typeForm.name}
+                onChange={(event) => setTypeForm({ ...typeForm, name: event.target.value })}
+                required
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              />
+            </label>
+            <div className="flex items-end">
+              <ActionButton type="submit">
+                <Save size={14} /> {editingTypeId ? 'Actualizar tipo' : 'Registrar tipo'}
+              </ActionButton>
+            </div>
+          </form>
+          <ul className="space-y-2">
+            {assetTypes.map((type) => (
+              <li
+                key={type.value}
+                className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
+              >
+                <span>
+                  <strong>{type.label}</strong> · {type.value}
+                </span>
+                {type.id && (
+                  <span className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setEditingTypeId(String(type.id));
+                        setTypeForm({ code: type.value, name: type.label });
+                      }}
+                      className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+                      title="Editar tipo"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => removeType(type.id)}
+                      className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+                      title="Eliminar tipo"
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
@@ -375,7 +515,7 @@ export function ModuleInventario() {
                 onChange={(event) => setCreateForm({ ...createForm, type: event.target.value })}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
               >
-                {ASSET_TYPE_OPTIONS.map((option) => (
+                {assetTypes.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -533,7 +673,7 @@ export function ModuleInventario() {
                 onChange={(event) => setEditForm({ ...editForm, type: event.target.value })}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
               >
-                {ASSET_TYPE_OPTIONS.map((option) => (
+                {assetTypes.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

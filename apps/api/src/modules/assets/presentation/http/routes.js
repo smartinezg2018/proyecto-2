@@ -3,10 +3,21 @@ import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
 import { createAssetUseCases } from '../../application/assetUseCases.js';
 import { AssetRepository } from '../../infrastructure/assetRepository.js';
-import { changeAssetStatusSchema, createAssetSchema, updateAssetSchema } from './assetSchemas.js';
+import { AssetTypeRepository } from '../../infrastructure/assetTypeRepository.js';
+import {
+  changeAssetStatusSchema,
+  createAssetSchema,
+  createAssetTypeSchema,
+  updateAssetSchema,
+  updateAssetTypeSchema
+} from './assetSchemas.js';
 
 export const assetsRoutes = Router();
-const assetUseCases = createAssetUseCases(new AssetRepository(), new BuildingRepository());
+const assetUseCases = createAssetUseCases(
+  new AssetRepository(),
+  new BuildingRepository(),
+  new AssetTypeRepository()
+);
 
 const asyncHandler = (handler) => (request, response, next) => {
   Promise.resolve(handler(request, response, next)).catch(next);
@@ -33,6 +44,43 @@ assetsRoutes.post(
       request.user?.id ?? null
     );
     response.status(201).json({ data: asset, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.get(
+  '/types',
+  asyncHandler(async (request, response) => {
+    const types = await assetUseCases.listTypes();
+    response.json({
+      data: types,
+      meta: { requestId: request.id, page: 1, pageSize: types.length }
+    });
+  })
+);
+
+assetsRoutes.post(
+  '/types',
+  validateBody(createAssetTypeSchema),
+  asyncHandler(async (request, response) => {
+    const assetType = await assetUseCases.createType(request.body, request.user?.id ?? null);
+    response.status(201).json({ data: assetType, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.put(
+  '/types/:typeId',
+  validateBody(updateAssetTypeSchema),
+  asyncHandler(async (request, response) => {
+    const assetType = await assetUseCases.updateType(request.params.typeId, request.body);
+    response.json({ data: assetType, meta: { requestId: request.id } });
+  })
+);
+
+assetsRoutes.delete(
+  '/types/:typeId',
+  asyncHandler(async (request, response) => {
+    await assetUseCases.deleteType(request.params.typeId);
+    response.json({ data: { id: Number(request.params.typeId) }, meta: { requestId: request.id } });
   })
 );
 
