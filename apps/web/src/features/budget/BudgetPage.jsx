@@ -7,13 +7,13 @@ import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 
 export function ModulePresupuesto() {
-  const [method, setMethod] = useState('Histórica');
+  const [method, setMethod] = useState('Histï¿½rica');
   const totalP = BUDGET_ITEMS.reduce((s, b) => s + b.projected, 0);
   const totalE = BUDGET_ITEMS.reduce((s, b) => s + b.executed, 0);
   const execPct = Math.round((totalE / totalP) * 100);
 
   const chartData = BUDGET_ITEMS.map((b) => ({
-    name: b.rubro.length > 20 ? b.rubro.substring(0, 20) + '…' : b.rubro,
+    name: b.rubro.length > 20 ? b.rubro.substring(0, 20) + 'ï¿½' : b.rubro,
     proyectado: b.projected / 1_000_000,
     ejecutado: b.executed / 1_000_000
   }));
@@ -22,10 +22,10 @@ export function ModulePresupuesto() {
     <div>
       <SectionHead
         title="Presupuesto Anual 2026"
-        subtitle="Control de ejecución presupuestal por categorías y rubros"
+        subtitle="Control de ejecuciï¿½n presupuestal por categorï¿½as y rubros"
         action={
           <Btn>
-            <Plus size={14} /> Registrar Ejecución
+            <Plus size={14} /> Registrar Ejecuciï¿½n
           </Btn>
         }
       />
@@ -56,8 +56,8 @@ export function ModulePresupuesto() {
 
       {/* Methodology selector */}
       <div className="flex items-center gap-3 mb-4">
-        <span className="text-sm text-slate-500 font-semibold">Metodología:</span>
-        {['Base 0', 'Mixta', 'Histórica'].map((m) => (
+        <span className="text-sm text-slate-500 font-semibold">Metodologï¿½a:</span>
+        {['Base 0', 'Mixta', 'Histï¿½rica'].map((m) => (
           <button
             key={m}
             onClick={() => setMethod(m)}
@@ -110,7 +110,7 @@ export function ModulePresupuesto() {
         <table className="w-full text-left">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              {['Rubro', 'Categoría', 'Proyectado', 'Ejecutado', 'Variación', 'Progreso'].map(
+              {['Rubro', 'Categorï¿½a', 'Proyectado', 'Ejecutado', 'Variaciï¿½n', 'Progreso'].map(
                 (h) => (
                   <th
                     key={h}
