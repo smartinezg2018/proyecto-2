@@ -52,3 +52,21 @@ export function createResponsible(person) {
     body: JSON.stringify(person)
   });
 }
+
+export function createUser(user) {
+  return apiRequest('/api/v1/administration/users', {
+    method: 'POST',
+    body: JSON.stringify(user)
+  });
+}
+
+export function createProfile(profile) {
+  return apiRequest('/api/v1/administration/profiles', {
+    method: 'POST',
+    body: JSON.stringify(profile)
+  });
+}
+
+export function getPermissions(signal) {
+  return apiRequest('/api/v1/administration/permissions', { signal });
+}

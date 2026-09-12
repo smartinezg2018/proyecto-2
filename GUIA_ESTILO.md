@@ -63,17 +63,17 @@ npm.cmd run lint
 
 ## 3. Estándares de nombramiento
 
-| Elemento | Convención | Ejemplo |
-| --- | --- | --- |
-| Variables (`let` / `var`) | `camelCase` | `let userCounter = 0` |
-| Constantes globales / invariantes | `UPPER_SNAKE_CASE` | `const MAX_RETRIES = 3` |
-| Otras `const` | `camelCase` | `const totalMora = 0` |
-| Funciones y métodos | `camelCase` (verbos descriptivos) | `function calculateTotal()` |
-| Clases y constructores | `PascalCase` | `class ShoppingCart` |
-| Propiedades de clase | `camelCase` | `this.userName` |
-| Componentes React (archivo) | `PascalCase.jsx` | `BuildingsPage.jsx` |
-| Módulos / utilidades (archivo) | `camelCase.js` o `kebab-case.js` | `buildingUseCases.js` |
-| Archivos de clase | `PascalCase.js` o `kebab-case.js` | `AppError.js` |
+| Elemento                          | Convención                        | Ejemplo                     |
+| --------------------------------- | --------------------------------- | --------------------------- |
+| Variables (`let` / `var`)         | `camelCase`                       | `let userCounter = 0`       |
+| Constantes globales / invariantes | `UPPER_SNAKE_CASE`                | `const MAX_RETRIES = 3`     |
+| Otras `const`                     | `camelCase`                       | `const totalMora = 0`       |
+| Funciones y métodos               | `camelCase` (verbos descriptivos) | `function calculateTotal()` |
+| Clases y constructores            | `PascalCase`                      | `class ShoppingCart`        |
+| Propiedades de clase              | `camelCase`                       | `this.userName`             |
+| Componentes React (archivo)       | `PascalCase.jsx`                  | `BuildingsPage.jsx`         |
+| Módulos / utilidades (archivo)    | `camelCase.js` o `kebab-case.js`  | `buildingUseCases.js`       |
+| Archivos de clase                 | `PascalCase.js` o `kebab-case.js` | `AppError.js`               |
 
 Estas reglas las aplica ESLint con `project/naming-conventions`, `camelcase`, `new-cap`, `react/jsx-pascal-case` y `check-file`.
 

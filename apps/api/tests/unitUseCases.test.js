@@ -81,7 +81,13 @@ test('registra un parqueadero como inmueble', async () => {
 test('rechaza inmuebles duplicados dentro del mismo edificio', async () => {
   const { unitRepository, buildingRepository } = createRepositories();
   const useCases = createUnitUseCases(unitRepository, buildingRepository);
-  const input = { number: '101', tower: 'A', kind: 'apartamento', coefficient: 1, status: 'ocupada' };
+  const input = {
+    number: '101',
+    tower: 'A',
+    kind: 'apartamento',
+    coefficient: 1,
+    status: 'ocupada'
+  };
 
   await useCases.create(1, input);
   await assert.rejects(() => useCases.create(1, input), {

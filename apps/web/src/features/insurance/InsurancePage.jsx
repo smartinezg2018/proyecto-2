@@ -20,27 +20,27 @@ export function ModuleSeguros() {
   return (
     <div>
       <SectionHead
-        title="Seguros y Pólizas"
-        subtitle="Gestión de pólizas de seguros y seguimiento a siniestralidad"
+        title="Seguros y Pï¿½lizas"
+        subtitle="Gestiï¿½n de pï¿½lizas de seguros y seguimiento a siniestralidad"
         action={
           <Btn>
-            <Plus size={14} /> Registrar Póliza
+            <Plus size={14} /> Registrar Pï¿½liza
           </Btn>
         }
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <MetricCard
-          label="Pólizas Activas"
+          label="Pï¿½lizas Activas"
           value="5"
           sub="4 aseguradoras distintas"
           icon={Shield}
           color="blue"
         />
         <MetricCard
-          label="Próximas a Vencer"
+          label="Prï¿½ximas a Vencer"
           value={`${expiring.length}`}
-          sub="Menos de 30 días"
+          sub="Menos de 30 dï¿½as"
           icon={AlertTriangle}
           color="red"
         />
@@ -58,7 +58,7 @@ export function ModuleSeguros() {
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={14} className="text-red-600" />
             <span className="text-sm font-bold text-red-800">
-              Vencimientos Urgentes — Acción Requerida
+              Vencimientos Urgentes ï¿½ Acciï¿½n Requerida
             </span>
           </div>
           <div className="space-y-2">
@@ -70,11 +70,11 @@ export function ModuleSeguros() {
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{p.coverage}</p>
                   <p className="text-xs text-slate-400">
-                    {p.insurer} · {p.id} · Vence: {p.end}
+                    {p.insurer} ï¿½ {p.id} ï¿½ Vence: {p.end}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-red-600">{p.daysLeft} días</span>
+                  <span className="text-sm font-bold text-red-600">{p.daysLeft} dï¿½as</span>
                   <button className="text-xs text-blue-600 font-semibold border border-blue-200 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors">
                     Renovar
                   </button>
@@ -88,7 +88,7 @@ export function ModuleSeguros() {
       {/* Tabs */}
       <div className="flex gap-0 mb-4 bg-slate-100 rounded-lg p-1 w-fit">
         {[
-          { key: 'polizas', label: 'Pólizas Registradas' },
+          { key: 'polizas', label: 'Pï¿½lizas Registradas' },
           { key: 'siniestros', label: 'Seguimiento Siniestralidad' }
         ].map((t) => (
           <button
@@ -107,7 +107,7 @@ export function ModuleSeguros() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 {[
-                  'Póliza',
+                  'Pï¿½liza',
                   'Aseguradora',
                   'Activo Cubierto',
                   'Cobertura',
@@ -170,8 +170,8 @@ export function ModuleSeguros() {
                 {[
                   'Radicado',
                   'Fecha',
-                  'Póliza',
-                  'Descripción',
+                  'Pï¿½liza',
+                  'Descripciï¿½n',
                   'Estado',
                   'Monto Aprobado',
                   'Monto Recibido'
@@ -193,7 +193,7 @@ export function ModuleSeguros() {
                 <td className="px-4 py-3 text-sm text-slate-500">2026-03-14</td>
                 <td className="px-4 py-3 text-sm text-slate-500">POL-2025-003</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  Daño eléctrico planta de emergencia
+                  Daï¿½o elï¿½ctrico planta de emergencia
                 </td>
                 <td className="px-4 py-3">
                   <Badge label="Activo" />
@@ -207,12 +207,12 @@ export function ModuleSeguros() {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-500">2026-06-08</td>
                 <td className="px-4 py-3 text-sm text-slate-500">POL-2025-001</td>
-                <td className="px-4 py-3 text-sm text-slate-700">Daño cubierta por granizo</td>
+                <td className="px-4 py-3 text-sm text-slate-700">Daï¿½o cubierta por granizo</td>
                 <td className="px-4 py-3">
                   <Badge label="En mora" />
                 </td>
                 <td className="px-4 py-3 text-sm font-semibold text-slate-700">$42.000.000</td>
-                <td className="px-4 py-3 text-sm text-slate-300">—</td>
+                <td className="px-4 py-3 text-sm text-slate-300">ï¿½</td>
               </tr>
             </tbody>
           </table>

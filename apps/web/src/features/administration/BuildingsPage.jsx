@@ -128,9 +128,7 @@ export function BuildingsPage() {
             {buildings.map((building) => (
               <tr key={building.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="px-4 py-3 text-sm font-semibold text-slate-800">{building.name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-blue-600">
-                  {building.nit}
-                </td>
+                <td className="px-4 py-3 font-mono text-xs text-blue-600">{building.nit}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">{building.address}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">
                   {building.phone || building.email || 'Sin datos'}

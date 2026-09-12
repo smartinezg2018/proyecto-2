@@ -8,6 +8,8 @@ import { ModulePresupuesto } from '../features/budget/BudgetPage.jsx';
 import { ModuleProyectos } from '../features/projects/ProjectsPage.jsx';
 import { BuildingsPage } from '../features/administration/BuildingsPage.jsx';
 import { UnitsPage } from '../features/administration/UnitsPage.jsx';
+import { UsersPage } from '../features/administration/UsersPage.jsx';
+import { ProfilesPage } from '../features/administration/ProfilesPage.jsx';
 import {
   Package,
   Wrench,
@@ -23,7 +25,9 @@ import {
   ChevronRight,
   Menu,
   Settings,
-  DoorOpen
+  DoorOpen,
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 
 // ---- Navigation config ----
@@ -36,7 +40,9 @@ const NAV = [
   { id: 'seguros', label: 'Seguros y Pólizas', icon: Shield },
   { id: 'facturacion', label: 'Facturación', icon: Receipt },
   { id: 'presupuesto', label: 'Presupuesto', icon: BarChart3 },
-  { id: 'proyectos', label: 'Proyectos', icon: FolderKanban }
+  { id: 'proyectos', label: 'Proyectos', icon: FolderKanban },
+  { id: 'usuarios', label: 'Usuarios', icon: Users },
+  { id: 'perfiles', label: 'Perfiles', icon: ShieldCheck }
 ];
 
 // ---- App Shell ----
@@ -64,6 +70,10 @@ export default function App() {
         return <ModulePresupuesto />;
       case 'proyectos':
         return <ModuleProyectos />;
+      case 'usuarios':
+        return <UsersPage />;
+      case 'perfiles':
+        return <ProfilesPage />;
     }
   };
 
