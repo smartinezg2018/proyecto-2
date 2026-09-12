@@ -13,6 +13,21 @@ async function apiRequest(url, options = {}) {
   return payload;
 }
 
+export function login(credentials) {
+  return apiRequest('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials)
+  });
+}
+
+export function logout() {
+  return apiRequest('/api/v1/auth/logout', { method: 'POST' });
+}
+
+export function getCurrentUser() {
+  return apiRequest('/api/v1/auth/me');
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

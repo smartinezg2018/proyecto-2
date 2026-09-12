@@ -4,7 +4,7 @@ import { createUser } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
 import { ActionButton } from '../../components/ActionButton.jsx';
 
-const emptyForm = { identification: '', name: '', email: '', status: 'active' };
+const emptyForm = { identification: '', name: '', email: '', password: '', status: 'active' };
 
 export function UsersPage() {
   const [form, setForm] = useState(emptyForm);
@@ -60,7 +60,8 @@ export function UsersPage() {
             {[
               ['identification', 'Identificación', 'text', 50],
               ['name', 'Nombre', 'text', 150],
-              ['email', 'Correo electrónico', 'email', 150]
+              ['email', 'Correo electrónico', 'email', 150],
+              ['password', 'Contraseña', 'password', 128]
             ].map(([name, label, type, maxLength]) => (
               <label key={name}>
                 <span className="mb-1 block text-xs font-bold text-slate-500">{label} *</span>

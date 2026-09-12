@@ -1,4 +1,6 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
+import { getCurrentUser, logout } from '../services/api.js';
+import { LoginPage } from '../features/auth/LoginPage.jsx';
 import { ModuleHome } from '../features/home/HomePage.jsx';
 import { ModuleInventario } from '../features/assets/AssetsPage.jsx';
 import { ModuleMantenimientos } from '../features/maintenance/MaintenancePage.jsx';
@@ -28,6 +30,7 @@ import {
   DoorOpen,
   Users,
   ShieldCheck
+  ,LogOut
 } from 'lucide-react';
 
 // ---- Navigation config ----
@@ -47,8 +50,23 @@ const NAV = [
 
 // ---- App Shell ----
 export default function App() {
+  const [session, setSession] = useState({ status: 'loading', user: null });
   const [active, setActive] = useState('home');
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then((response) => setSession({ status: 'authenticated', user: response.data.user }))
+      .catch(() => setSession({ status: 'unauthenticated', user: null }));
+  }, []);
+
+  async function handleLogout() {
+    await logout();
+    setSession({ status: 'unauthenticated', user: null });
+  }
+
+  if (session.status === 'loading') return null;
+  if (session.status === 'unauthenticated') return <LoginPage onLogin={(user) => setSession({ status: 'authenticated', user })} />;
 
   const renderModule = () => {
     switch (active) {
@@ -175,15 +193,15 @@ export default function App() {
             <div className="w-px h-6 bg-slate-200" />
 
             {/* User */}
-            <button className="flex items-center gap-2.5 hover:bg-slate-50 rounded-lg px-2 py-1 transition-colors">
+            <button onClick={handleLogout} title="Cerrar sesión" className="flex items-center gap-2.5 hover:bg-slate-50 rounded-lg px-2 py-1 transition-colors">
               <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                 AM
               </div>
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-bold text-slate-800 leading-tight">Ana Martínez</p>
+                <p className="text-sm font-bold text-slate-800 leading-tight">{session.user.name}</p>
                 <p className="text-xs text-slate-400 leading-tight">Administradora</p>
               </div>
-              <ChevronDown size={11} className="text-slate-400 ml-0.5" />
+              <LogOut size={14} className="text-slate-400 ml-0.5" />
             </button>
           </div>
         </header>
