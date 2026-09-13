@@ -28,6 +28,10 @@ export function getCurrentUser() {
   return apiRequest('/api/v1/auth/me');
 }
 
+export function getMyBuildings() {
+  return apiRequest('/api/v1/auth/buildings');
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }
@@ -113,4 +117,45 @@ export function createProfile(profile) {
 
 export function getPermissions(signal) {
   return apiRequest('/api/v1/administration/permissions', { signal });
+}
+
+export function listUsers() {
+  return apiRequest('/api/v1/administration/users');
+}
+
+export function listProfiles() {
+  return apiRequest('/api/v1/administration/profiles');
+}
+
+export function getUserProfiles(userId) {
+  return apiRequest(`/api/v1/administration/users/${userId}/profiles`);
+}
+
+export function assignUserProfiles(userId, profileIds) {
+  return apiRequest(`/api/v1/administration/users/${userId}/profiles`, {
+    method: 'PUT',
+    body: JSON.stringify({ profileIds })
+  });
+}
+
+export function getUserBuildings(userId) {
+  return apiRequest(`/api/v1/administration/users/${userId}/buildings`);
+}
+
+export function assignUserBuildings(userId, buildingIds) {
+  return apiRequest(`/api/v1/administration/users/${userId}/buildings`, {
+    method: 'PUT',
+    body: JSON.stringify({ buildingIds })
+  });
+}
+
+export function listAuditLogs(query = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value));
+    }
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return apiRequest(`/api/v1/administration/audit-logs${suffix}`);
 }

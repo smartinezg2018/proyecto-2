@@ -28,7 +28,7 @@ function normalizeBuildingInput(input) {
   };
 }
 
-export function createBuildingUseCases(repository) {
+export function createBuildingUseCases(repository, audit = null) {
   return {
     async create(input, userId = null) {
       validateBuildingInput(input);
@@ -38,7 +38,19 @@ export function createBuildingUseCases(repository) {
         throw new AppError('Ya existe un edificio con ese NIT.', 409, 'DUPLICATE_BUILDING');
       }
 
-      return repository.create({ ...building, createdBy: userId });
+      const created = await repository.create({ ...building, createdBy: userId });
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'create',
+          module: 'administration',
+          entity: 'building',
+          entityId: created.id,
+          buildingId: created.id,
+          metadata: { name: created.name, nit: created.nit }
+        });
+      }
+      return created;
     },
 
     async list() {
@@ -63,7 +75,19 @@ export function createBuildingUseCases(repository) {
         throw new AppError('Ya existe un edificio con ese NIT.', 409, 'DUPLICATE_BUILDING');
       }
 
-      return repository.update(id, { ...building, updatedBy: userId });
+      const updated = await repository.update(id, { ...building, updatedBy: userId });
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'update',
+          module: 'administration',
+          entity: 'building',
+          entityId: updated.id,
+          buildingId: updated.id,
+          metadata: { name: updated.name, nit: updated.nit }
+        });
+      }
+      return updated;
     }
   };
 }

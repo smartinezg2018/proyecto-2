@@ -71,4 +71,110 @@ export class UserRepository {
 
     return this.findById(result.insertId);
   }
+
+  async findAll() {
+    const [rows] = await this.pool.execute(
+      `SELECT id, identification, name, email, status,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM users
+       ORDER BY name ASC`
+    );
+    return rows;
+  }
+
+  async replaceProfiles(userId, profileIds, actorId = null) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [userRows] = await connection.execute(
+        'SELECT id FROM users WHERE id = ? FOR UPDATE',
+        [userId]
+      );
+      if (!userRows.length) {
+        throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
+      }
+
+      if (profileIds.length) {
+        const placeholders = profileIds.map(() => '?').join(', ');
+        const [profileRows] = await connection.execute(
+          `SELECT id FROM profiles WHERE id IN (${placeholders}) FOR SHARE`,
+          profileIds
+        );
+        if (profileRows.length !== profileIds.length) {
+          throw new AppError('Uno o más perfiles no existen.', 400, 'INVALID_PROFILES');
+        }
+      }
+
+      await connection.execute('DELETE FROM user_profiles WHERE user_id = ?', [userId]);
+      for (const profileId of profileIds) {
+        await connection.execute(
+          'INSERT INTO user_profiles (user_id, profile_id, created_by) VALUES (?, ?, ?)',
+          [userId, profileId, actorId]
+        );
+      }
+      await connection.commit();
+      return profileIds;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async findProfileIds(userId) {
+    const [rows] = await this.pool.execute(
+      'SELECT profile_id AS profileId FROM user_profiles WHERE user_id = ? ORDER BY profile_id ASC',
+      [userId]
+    );
+    return rows.map((row) => row.profileId);
+  }
+
+  async replaceBuildings(userId, buildingIds, actorId = null) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [userRows] = await connection.execute(
+        'SELECT id FROM users WHERE id = ? FOR UPDATE',
+        [userId]
+      );
+      if (!userRows.length) {
+        throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
+      }
+
+      if (buildingIds.length) {
+        const placeholders = buildingIds.map(() => '?').join(', ');
+        const [buildingRows] = await connection.execute(
+          `SELECT id FROM buildings WHERE id IN (${placeholders}) FOR SHARE`,
+          buildingIds
+        );
+        if (buildingRows.length !== buildingIds.length) {
+          throw new AppError('Uno o más edificios no existen.', 400, 'INVALID_BUILDINGS');
+        }
+      }
+
+      await connection.execute('DELETE FROM user_buildings WHERE user_id = ?', [userId]);
+      for (const buildingId of buildingIds) {
+        await connection.execute(
+          'INSERT INTO user_buildings (user_id, building_id, created_by) VALUES (?, ?, ?)',
+          [userId, buildingId, actorId]
+        );
+      }
+      await connection.commit();
+      return buildingIds;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async findBuildingIds(userId) {
+    const [rows] = await this.pool.execute(
+      'SELECT building_id AS buildingId FROM user_buildings WHERE user_id = ? ORDER BY building_id ASC',
+      [userId]
+    );
+    return rows.map((row) => row.buildingId);
+  }
 }

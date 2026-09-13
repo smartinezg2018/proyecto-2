@@ -24,7 +24,7 @@ function validateUserInput(input) {
   }
 }
 
-export function createUserUseCases(repository) {
+export function createUserUseCases(repository, audit = null) {
   return {
     async create(input, userId = null) {
       validateUserInput(input);
@@ -47,7 +47,88 @@ export function createUserUseCases(repository) {
         );
       }
 
-      return repository.create({ ...user, createdBy: userId });
+      const created = await repository.create({ ...user, createdBy: userId });
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'create',
+          module: 'administration',
+          entity: 'user',
+          entityId: created.id,
+          metadata: { email: created.email }
+        });
+      }
+      return created;
+    },
+
+    async list() {
+      return repository.findAll();
+    },
+
+    async assignProfiles(userId, input, actorId = null) {
+      const profileIds = normalizeIdList(input?.profileIds, 'profileIds');
+      await repository.replaceProfiles(userId, profileIds, actorId);
+      if (audit) {
+        await audit.record({
+          userId: actorId,
+          action: 'assign_profile',
+          module: 'administration',
+          entity: 'user',
+          entityId: userId,
+          metadata: { profileIds }
+        });
+      }
+      return { userId, profileIds };
+    },
+
+    async listProfiles(userId) {
+      const user = await repository.findById(userId);
+      if (!user) {
+        throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
+      }
+      return repository.findProfileIds(userId);
+    },
+
+    async assignBuildings(userId, input, actorId = null) {
+      const buildingIds = normalizeIdList(input?.buildingIds, 'buildingIds');
+      await repository.replaceBuildings(userId, buildingIds, actorId);
+      if (audit) {
+        await audit.record({
+          userId: actorId,
+          action: 'assign_building',
+          module: 'administration',
+          entity: 'user',
+          entityId: userId,
+          metadata: { buildingIds }
+        });
+      }
+      return { userId, buildingIds };
+    },
+
+    async listBuildings(userId) {
+      const user = await repository.findById(userId);
+      if (!user) {
+        throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
+      }
+      return repository.findBuildingIds(userId);
     }
   };
+}
+
+function normalizeIdList(value, fieldName) {
+  if (!Array.isArray(value)) {
+    throw new AppError(
+      `${fieldName} debe ser una lista de identificadores enteros positivos.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  if (value.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new AppError(
+      `${fieldName} debe ser una lista de identificadores enteros positivos.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  return [...new Set(value)];
 }

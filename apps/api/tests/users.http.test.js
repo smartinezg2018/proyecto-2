@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { app } from '../src/app.js';
 import { UserRepository } from '../src/modules/administration/infrastructure/userRepository.js';
+import { AuditRepository } from '../src/modules/administration/infrastructure/auditRepository.js';
+import { AuthorizationRepository } from '../src/modules/auth/infrastructure/authorizationRepository.js';
+import { sessionStore } from '../src/modules/auth/infrastructure/sessionStore.js';
 
 test('HTTP: registro 201, validación 400, duplicados 409 y errores 500', async (t) => {
   const users = [];
@@ -12,11 +15,27 @@ test('HTTP: registro 201, validación 400, duplicados 409 y errores 500', async 
   t.mock.method(UserRepository.prototype, 'findByIdentification', async (id) =>
     users.find((user) => user.identification === id)
   );
+  t.mock.method(UserRepository.prototype, 'findById', async () => ({
+    id: 99,
+    name: 'Admin',
+    email: 'admin@test.com',
+    status: 'active'
+  }));
+  t.mock.method(AuthorizationRepository.prototype, 'findEffectivePermissions', async () => [
+    'users.create'
+  ]);
+  t.mock.method(AuditRepository.prototype, 'record', async () => undefined);
   const create = t.mock.method(UserRepository.prototype, 'create', async (user) => {
     const created = { id: users.length + 1, ...user };
     users.push(created);
     return created;
   });
+  const sessionId = sessionStore.create(99);
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    Cookie: `building_management_session=${sessionId}`
+  };
+
   const server = app.listen(0, '127.0.0.1');
   try {
     await once(server, 'listening');
@@ -30,13 +49,21 @@ test('HTTP: registro 201, validación 400, duplicados 409 y errores 500', async 
     const post = (body) =>
       fetch(`${baseUrl}/api/v1/administration/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify(body)
       });
+
+    const unauthorized = await fetch(`${baseUrl}/api/v1/administration/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input)
+    });
+    assert.equal(unauthorized.status, 401);
+
     const success = await post(input);
     assert.equal(success.status, 201);
     const payload = await success.json();
-    assert.deepEqual(payload.data, { id: 1, ...input, createdBy: null });
+    assert.deepEqual(payload.data, { id: 1, ...input, createdBy: 99 });
     assert.ok(payload.meta.requestId);
     for (const [body, status, code] of [
       [{ ...input, name: '' }, 400, 'VALIDATION_ERROR'],
@@ -60,6 +87,7 @@ test('HTTP: registro 201, validación 400, duplicados 409 y errores 500', async 
     assert.equal((await health.json()).data.status, 'ok');
     assert.equal(users.length, 1);
   } finally {
+    sessionStore.delete(sessionId);
     await new Promise((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve()))
     );

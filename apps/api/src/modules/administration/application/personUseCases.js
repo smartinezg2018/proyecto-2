@@ -40,7 +40,7 @@ function normalizePersonInput(input) {
   };
 }
 
-export function createPersonUseCases(personRepository, unitRepository) {
+export function createPersonUseCases(personRepository, unitRepository, audit = null) {
   return {
     async registerResponsible(input, userId = null) {
       validatePersonInput(input);
@@ -54,6 +54,7 @@ export function createPersonUseCases(personRepository, unitRepository) {
       }
 
       let person = await personRepository.findByIdentification(personInput.identification);
+      const wasCreated = !person;
       if (!person) {
         person = await personRepository.create({ ...personInput, createdBy: userId });
       }
@@ -62,6 +63,22 @@ export function createPersonUseCases(personRepository, unitRepository) {
       const units = await Promise.all(
         personInput.unitIds.map((unitId) => unitRepository.findById(unitId))
       );
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: wasCreated ? 'create' : 'update',
+          module: 'administration',
+          entity: 'person',
+          entityId: person.id,
+          buildingId: units[0]?.buildingId ?? null,
+          metadata: {
+            name: person.name,
+            identification: person.identification,
+            unitIds: personInput.unitIds
+          }
+        });
+      }
 
       return { ...person, units };
     },

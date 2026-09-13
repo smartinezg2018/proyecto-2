@@ -386,3 +386,263 @@ export const formatCompactCurrency = (value) => {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   return `$${(value / 1000).toFixed(0)}K`;
 };
+
+/** Datos demo del panel general por NIT de edificio (módulos aún no implementados). */
+export const BUILDING_DASHBOARDS = {
+  '900111001': {
+    policies: POLICIES,
+    apartments: APARTMENTS,
+    billingChart: BILLING_CHART,
+    maintenanceInProgress: KANBAN.enProceso,
+    budgetExecutionPercent: 58,
+    activePolicies: 5,
+    policiesExpiringSoon: 2
+  },
+  '900111002': {
+    policies: [
+      {
+        id: 'POL-TC-001',
+        insurer: 'Sura',
+        asset: 'Edificio Completo',
+        coverage: 'Todo Riesgo PH',
+        value: 1800000000,
+        start: '2025-04-01',
+        end: '2026-09-20',
+        daysLeft: 7
+      },
+      {
+        id: 'POL-TC-002',
+        insurer: 'Bolívar',
+        asset: 'Ascensores',
+        coverage: 'Responsabilidad Civil',
+        value: 400000000,
+        start: '2025-01-15',
+        end: '2026-10-01',
+        daysLeft: 18
+      },
+      {
+        id: 'POL-TC-003',
+        insurer: 'Allianz',
+        asset: 'Áreas comunes',
+        coverage: 'RC Extracontractual',
+        value: 220000000,
+        start: '2025-06-01',
+        end: '2026-12-01',
+        daysLeft: 79
+      }
+    ],
+    apartments: [
+      {
+        unit: 'A-101',
+        owner: 'Julián Restrepo',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-08-01'
+      },
+      {
+        unit: 'A-102',
+        owner: 'Natalia Mejía',
+        status: 'En mora',
+        daysLate: 32,
+        balance: 720000,
+        lastPayment: '2026-07-01'
+      },
+      {
+        unit: 'B-201',
+        owner: 'Constructora Andes',
+        status: 'En mora',
+        daysLate: 75,
+        balance: 1890000,
+        lastPayment: '2026-05-20'
+      },
+      {
+        unit: 'B-202',
+        owner: 'Sofía Ardila',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-08-03'
+      },
+      {
+        unit: 'C-301',
+        owner: 'Héctor Pinzón',
+        status: 'En mora',
+        daysLate: 12,
+        balance: 380000,
+        lastPayment: '2026-07-20'
+      },
+      {
+        unit: 'C-302',
+        owner: 'Valentina Ortiz',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-07-29'
+      }
+    ],
+    billingChart: [
+      { mes: 'Feb', recaudo: 6100000, mora: 2100000 },
+      { mes: 'Mar', recaudo: 6400000, mora: 1900000 },
+      { mes: 'Abr', recaudo: 5900000, mora: 2500000 },
+      { mes: 'May', recaudo: 6700000, mora: 1800000 },
+      { mes: 'Jun', recaudo: 7000000, mora: 1600000 },
+      { mes: 'Jul', recaudo: 7200000, mora: 1400000 }
+    ],
+    maintenanceInProgress: [
+      {
+        id: 'M-TC-01',
+        title: 'Cambio de bombillas zonas comunes',
+        responsible: 'ElectroCentral',
+        type: 'Correctivo',
+        priority: 'Media'
+      },
+      {
+        id: 'M-TC-02',
+        title: 'Revisión de bombas de impulsión',
+        responsible: 'Hidráulica Plus',
+        type: 'Preventivo',
+        priority: 'Alta'
+      }
+    ],
+    budgetExecutionPercent: 41,
+    activePolicies: 3,
+    policiesExpiringSoon: 2
+  },
+  '900111003': {
+    policies: [
+      {
+        id: 'POL-LR-001',
+        insurer: 'Mapfre',
+        asset: 'Edificio Completo',
+        coverage: 'Todo Riesgo PH',
+        value: 1200000000,
+        start: '2025-09-01',
+        end: '2026-09-01',
+        daysLeft: 353
+      },
+      {
+        id: 'POL-LR-002',
+        insurer: 'Estado',
+        asset: 'Portón y CCTV',
+        coverage: 'Hurto y daño',
+        value: 90000000,
+        start: '2025-05-01',
+        end: '2026-08-28',
+        daysLeft: 15
+      }
+    ],
+    apartments: [
+      {
+        unit: '1A',
+        owner: 'Camila Rueda',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-08-02'
+      },
+      {
+        unit: '1B',
+        owner: 'Andrés Quintero',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-07-31'
+      },
+      {
+        unit: '2A',
+        owner: 'Familia Cárdenas',
+        status: 'En mora',
+        daysLate: 21,
+        balance: 510000,
+        lastPayment: '2026-07-10'
+      },
+      {
+        unit: '2B',
+        owner: 'Inmobiliaria Robles',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-08-01'
+      }
+    ],
+    billingChart: [
+      { mes: 'Feb', recaudo: 4200000, mora: 800000 },
+      { mes: 'Mar', recaudo: 4500000, mora: 600000 },
+      { mes: 'Abr', recaudo: 4300000, mora: 900000 },
+      { mes: 'May', recaudo: 4700000, mora: 500000 },
+      { mes: 'Jun', recaudo: 4600000, mora: 700000 },
+      { mes: 'Jul', recaudo: 4900000, mora: 400000 }
+    ],
+    maintenanceInProgress: [
+      {
+        id: 'M-LR-01',
+        title: 'Poda y jardinería perímetro',
+        responsible: 'Verde Urbano',
+        type: 'Preventivo',
+        priority: 'Baja'
+      }
+    ],
+    budgetExecutionPercent: 72,
+    activePolicies: 2,
+    policiesExpiringSoon: 1
+  }
+};
+
+export function getBuildingDashboard(building) {
+  if (!building) return null;
+  const byNit = BUILDING_DASHBOARDS[building.nit];
+  if (byNit) return byNit;
+
+  const seed = Number(String(building.id ?? 1)) || 1;
+  const moraBase = 350000 * (seed % 5);
+  return {
+    policies: [
+      {
+        id: `POL-${building.id}-001`,
+        insurer: 'Seguros Demo',
+        asset: 'Edificio completo',
+        coverage: 'Todo Riesgo PH',
+        value: 1000000000 + seed * 10000000,
+        start: '2025-01-01',
+        end: '2026-09-30',
+        daysLeft: 10 + (seed % 40)
+      }
+    ],
+    apartments: [
+      {
+        unit: '101',
+        owner: 'Propietario 1',
+        status: 'Al día',
+        daysLate: 0,
+        balance: 0,
+        lastPayment: '2026-08-01'
+      },
+      {
+        unit: '102',
+        owner: 'Propietario 2',
+        status: 'En mora',
+        daysLate: 20 + seed,
+        balance: moraBase + 200000,
+        lastPayment: '2026-06-15'
+      }
+    ],
+    billingChart: BILLING_CHART.map((row) => ({
+      ...row,
+      recaudo: Math.round(row.recaudo * (0.7 + (seed % 4) * 0.1)),
+      mora: Math.round(row.mora * (0.8 + (seed % 3) * 0.15))
+    })),
+    maintenanceInProgress: [
+      {
+        id: `M-${building.id}-01`,
+        title: 'Revisión general de instalaciones',
+        responsible: 'Proveedor asignado',
+        type: 'Preventivo',
+        priority: 'Media'
+      }
+    ],
+    budgetExecutionPercent: 35 + (seed % 50),
+    activePolicies: 1,
+    policiesExpiringSoon: 1
+  };
+}

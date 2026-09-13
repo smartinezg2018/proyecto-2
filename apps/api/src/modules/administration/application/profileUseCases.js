@@ -1,7 +1,11 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 
-export function createProfileUseCases(repository) {
+export function createProfileUseCases(repository, audit = null) {
   return {
+    async list() {
+      return repository.findAllProfiles ? repository.findAllProfiles() : [];
+    },
+
     async create(input, userId = null) {
       if (!input || typeof input.name !== 'string' || input.name.trim() === '') {
         throw new AppError('El campo name es obligatorio.', 400, 'VALIDATION_ERROR');
@@ -27,12 +31,23 @@ export function createProfileUseCases(repository) {
         );
       }
 
-      return repository.create({
+      const profile = await repository.create({
         name: input.name.trim(),
         description: input.description ?? null,
         permissionIds: [...new Set(permissionIds)],
         createdBy: userId
       });
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'create',
+          module: 'administration',
+          entity: 'profile',
+          entityId: profile.id,
+          metadata: { name: profile.name, permissionIds: profile.permissionIds }
+        });
+      }
+      return profile;
     },
 
     async listPermissions() {

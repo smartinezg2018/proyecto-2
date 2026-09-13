@@ -6,6 +6,16 @@ export class ProfileRepository {
     this.pool = pool;
   }
 
+  async findAllProfiles() {
+    const [rows] = await this.pool.execute(
+      `SELECT id, name, description,
+              created_at AS createdAt, updated_at AS updatedAt
+         FROM profiles
+         ORDER BY name ASC`
+    );
+    return rows;
+  }
+
   async findAllPermissions() {
     const [rows] = await this.pool.execute(
       'SELECT id, code, name FROM permissions ORDER BY id ASC'

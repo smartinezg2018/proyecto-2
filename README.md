@@ -5,6 +5,7 @@ Sistema web para centralizar la administración de activos, mantenimientos, segu
 ## Documentación
 
 - [Arquitectura del sistema](docs/ARCHITECTURE.md)
+- [Datos de prueba y credenciales por defecto](docs/DATOS_PRUEBA.md)
 - [Guía de estilo y calidad de código](GUIA_ESTILO.md)
 - [Historias de usuario](Historias%20de%20usuario.md)
 - [Backlog provisional](Backlog_provisional.md)
