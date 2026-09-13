@@ -106,7 +106,7 @@ function buildFieldHistory(previous, next, userId) {
     }));
 }
 
-export function createAssetUseCases(assetRepository, buildingRepository) {
+export function createAssetUseCases(assetRepository, buildingRepository, audit = null) {
   return {
     async create(buildingId, input, userId = null) {
       const building = await buildingRepository.findById(buildingId);
@@ -125,7 +125,7 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
         );
       }
 
-      return assetRepository.create({ ...asset, createdBy: userId }, [
+      const created = await assetRepository.create({ ...asset, createdBy: userId }, [
         {
           changeType: 'creacion',
           field: 'status',
@@ -135,6 +135,18 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
           createdBy: userId
         }
       ]);
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'create',
+          module: 'assets',
+          entity: 'asset',
+          entityId: created.id,
+          buildingId: Number(buildingId),
+          metadata: { code: created.code, name: created.name, status: created.status }
+        });
+      }
+      return created;
     },
 
     async listByBuilding(buildingId) {
@@ -161,7 +173,23 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
       const changes = normalizeUpdateInput(input);
       const historyEntries = buildFieldHistory(current, changes, userId);
 
-      return assetRepository.update(id, { ...changes, updatedBy: userId }, historyEntries);
+      const updated = await assetRepository.update(
+        id,
+        { ...changes, updatedBy: userId },
+        historyEntries
+      );
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'update',
+          module: 'assets',
+          entity: 'asset',
+          entityId: updated.id,
+          buildingId: updated.buildingId,
+          metadata: { code: updated.code, name: updated.name, fields: historyEntries.map((e) => e.field) }
+        });
+      }
+      return updated;
     },
 
     async changeStatus(id, input, userId = null) {
@@ -190,7 +218,7 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
         );
       }
 
-      return assetRepository.updateStatus(id, input.status, userId, [
+      const updated = await assetRepository.updateStatus(id, input.status, userId, [
         {
           changeType: 'cambio_estado',
           field: 'status',
@@ -200,6 +228,23 @@ export function createAssetUseCases(assetRepository, buildingRepository) {
           createdBy: userId
         }
       ]);
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'status_change',
+          module: 'assets',
+          entity: 'asset',
+          entityId: updated.id,
+          buildingId: updated.buildingId,
+          metadata: {
+            code: updated.code,
+            from: current.status,
+            to: input.status,
+            reason: input.reason.trim()
+          }
+        });
+      }
+      return updated;
     },
 
     async getHistory(id) {

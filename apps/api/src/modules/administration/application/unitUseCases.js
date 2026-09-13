@@ -47,7 +47,7 @@ function normalizeUnitInput(input, buildingId) {
   };
 }
 
-export function createUnitUseCases(unitRepository, buildingRepository) {
+export function createUnitUseCases(unitRepository, buildingRepository, audit = null) {
   return {
     async create(buildingId, input, userId = null) {
       const building = await buildingRepository.findById(buildingId);
@@ -68,7 +68,19 @@ export function createUnitUseCases(unitRepository, buildingRepository) {
         );
       }
 
-      return unitRepository.create({ ...unit, createdBy: userId });
+      const created = await unitRepository.create({ ...unit, createdBy: userId });
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'create',
+          module: 'administration',
+          entity: 'unit',
+          entityId: created.id,
+          buildingId: Number(buildingId),
+          metadata: { number: created.number, tower: created.tower, kind: created.kind }
+        });
+      }
+      return created;
     },
 
     async listByBuilding(buildingId) {

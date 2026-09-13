@@ -6,6 +6,7 @@
     "dev": "concurrently \"npm run dev --prefix apps/api\" \"npm run dev --prefix apps/web\"",
     "install:all": "npm install --prefix apps/api && npm install --prefix apps/web",
     "db:migrate": "npm run db:migrate --prefix apps/api",
+    "db:seed": "npm run db:seed --prefix apps/api",
     "test": "npm test --prefix apps/api",
     "lint": "eslint apps/api apps/web",
     "lint:fix": "eslint apps/api apps/web --fix",

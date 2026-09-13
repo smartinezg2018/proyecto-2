@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { app } from '../src/app.js';
 import { UserRepository } from '../src/modules/administration/infrastructure/userRepository.js';
+import { AuthorizationRepository } from '../src/modules/auth/infrastructure/authorizationRepository.js';
 import { hashPassword } from '../src/modules/auth/infrastructure/password.js';
 
 function cookieFrom(response) {
@@ -26,6 +27,9 @@ test('HTTP: login valida credenciales y estado, y logout revoca la sesión', asy
     return null;
   });
   t.mock.method(UserRepository.prototype, 'findById', async (id) => (id === 1 ? activeUser : null));
+  t.mock.method(AuthorizationRepository.prototype, 'findEffectivePermissions', async () => [
+    'buildings.list'
+  ]);
 
   const server = app.listen(0, '127.0.0.1');
   try {
@@ -43,11 +47,15 @@ test('HTTP: login valida credenciales y estado, y logout revoca la sesión', asy
     const sessionCookie = cookieFrom(success);
     assert.match(sessionCookie, /^building_management_session=/);
     assert.match(success.headers.get('set-cookie'), /HttpOnly/);
-    assert.equal((await success.json()).data.user.passwordHash, undefined);
+    const loginPayload = await success.json();
+    assert.equal(loginPayload.data.user.passwordHash, undefined);
+    assert.deepEqual(loginPayload.data.user.permissions, ['buildings.list']);
 
     const current = await fetch(`${baseUrl}/me`, { headers: { Cookie: sessionCookie } });
     assert.equal(current.status, 200);
-    assert.equal((await current.json()).data.user.email, activeUser.email);
+    const mePayload = await current.json();
+    assert.equal(mePayload.data.user.email, activeUser.email);
+    assert.deepEqual(mePayload.data.user.permissions, ['buildings.list']);
 
     for (const body of [
       { email: activeUser.email, password: 'incorrecta' },
