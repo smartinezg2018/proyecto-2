@@ -8,6 +8,8 @@
     "db:migrate": "npm run db:migrate --prefix apps/api",
     "db:seed": "npm run db:seed --prefix apps/api",
     "test": "npm test --prefix apps/api",
+    "test:functional:sprint1": "npm run test:functional:sprint1 --prefix apps/api",
+    "test:functional:fallos": "npm run test:functional:fallos --prefix apps/api",
     "lint": "eslint apps/api apps/web",
     "lint:fix": "eslint apps/api apps/web --fix",
     "format": "prettier --write .",
