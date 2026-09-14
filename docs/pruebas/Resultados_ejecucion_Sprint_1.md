@@ -3,7 +3,13 @@
 **Fecha:** 13 de septiembre de 2026  
 **Versión:** `4b3756ace2f03e8f5851fce5a27b34f36a9cfb5b`  
 **Entorno:** Node.js 24.21.0, MySQL 8.4 en Docker y base aislada `codex_functional_sprint1_20260913`  
-**Ejecución:** `node apps/api/scripts/functional-sprint1.mjs`
+**Comando actual:** `npm.cmd test` desde la raíz del proyecto.
+
+**Verificación del comando unificado (14 de septiembre de 2026):** 38 pruebas, 36 aprobadas y 2 fallidas. Los casos están en `apps/api/test/application.test.js`; se eliminaron los dos ejecutores separados.
+
+MySQL debe estar encendido (`docker compose up -d mysql`). El comando crea una base `codex_sprint1_<identificador>` diferente en cada ejecución, aplica migraciones y semillas, y elimina únicamente esa base al terminar, incluso cuando hay pruebas fallidas. Usa las credenciales locales de Docker; para otro servidor se pueden configurar `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER` y `TEST_DB_PASSWORD`, con permisos para crear y eliminar la base temporal.
+
+El comando y el pipeline seguirán terminando con código 1 mientras fallen CP-005-04 y CP-012-03. Las comprobaciones de la API no sustituyen la validación visual manual del frontend.
 
 ## Resultado
 
@@ -31,13 +37,13 @@ Se validaron creación, consulta, actualización, campos obligatorios, duplicado
 
 ## Comprobaciones técnicas adicionales
 
-| Comprobación                                  | Resultado                            |
-| --------------------------------------------- | ------------------------------------ |
-| Migraciones de base de datos                  | Aprobada: 13 archivos aplicados      |
-| Datos semilla                                 | Aprobada                             |
-| ESLint                                        | Aprobada, sin errores                |
-| Compilación del frontend                      | Aprobada: 2466 módulos transformados |
-| Pruebas incluidas originalmente en `npm test` | El proyecto reportó 0 pruebas        |
+| Comprobación                         | Resultado                             |
+| ------------------------------------ | ------------------------------------- |
+| Migraciones de base de datos         | Aprobada: 13 archivos aplicados       |
+| Datos semilla                        | Aprobada                              |
+| ESLint                               | Aprobada, sin errores                 |
+| Compilación del frontend             | Aprobada: 2466 módulos transformados  |
+| `npm.cmd test` (verificación actual) | 38 pruebas: 36 aprobadas y 2 fallidas |
 
 ## Casos que fallaron
 
