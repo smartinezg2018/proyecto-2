@@ -29,7 +29,9 @@ export function createAuthUseCases(repository, sessions) {
 
     currentUser(sessionId) {
       const userId = sessions.get(sessionId);
-      return userId ? repository.findById(userId).then((user) => (user ? sanitizeUser(user) : null)) : null;
+      return userId
+        ? repository.findById(userId).then((user) => (user ? sanitizeUser(user) : null))
+        : null;
     }
   };
 }

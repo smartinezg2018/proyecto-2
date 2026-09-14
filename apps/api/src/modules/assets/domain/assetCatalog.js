@@ -9,3 +9,9 @@ export const ASSET_TYPES = [
   'emergencias',
   'otro'
 ];
+
+export const SUPPLIER_ROLES = ['suministro', 'soporte'];
+
+export const ASSET_COST_TYPES = ['adquisicion', 'reparacion', 'mejora', 'mantenimiento'];
+
+export const OPERATING_COST_TYPES = ['reparacion', 'mejora', 'mantenimiento'];

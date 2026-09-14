@@ -46,10 +46,14 @@ export function UsersPage() {
   useEffect(() => {
     if (!canAssign) return;
     if (canAssignProfiles) {
-      listProfiles().then((r) => setProfiles(r.data)).catch(() => {});
+      listProfiles()
+        .then((r) => setProfiles(r.data))
+        .catch(() => {});
     }
     if (canAssignBuildings) {
-      getBuildings().then((r) => setBuildings(r.data)).catch(() => {});
+      getBuildings()
+        .then((r) => setBuildings(r.data))
+        .catch(() => {});
     }
   }, [canAssign, canAssignProfiles, canAssignBuildings]);
 
@@ -139,50 +143,50 @@ export function UsersPage() {
       )}
 
       {canCreate && (
-      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
-        <h3 className="mb-4 text-base font-bold text-slate-900">Registrar usuario</h3>
-        <form onSubmit={submitForm} aria-busy={isSaving}>
-          <fieldset disabled={isSaving} className="grid gap-4 sm:grid-cols-2 disabled:opacity-60">
-            {[
-              ['identification', 'Identificación', 'text', 50],
-              ['name', 'Nombre', 'text', 150],
-              ['email', 'Correo electrónico', 'email', 150],
-              ['password', 'Contraseña', 'password', 128]
-            ].map(([name, label, type, maxLength]) => (
-              <label key={name}>
-                <span className="mb-1 block text-xs font-bold text-slate-500">{label} *</span>
-                <input
-                  name={name}
-                  value={form[name]}
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-4 text-base font-bold text-slate-900">Registrar usuario</h3>
+          <form onSubmit={submitForm} aria-busy={isSaving}>
+            <fieldset disabled={isSaving} className="grid gap-4 sm:grid-cols-2 disabled:opacity-60">
+              {[
+                ['identification', 'Identificación', 'text', 50],
+                ['name', 'Nombre', 'text', 150],
+                ['email', 'Correo electrónico', 'email', 150],
+                ['password', 'Contraseña', 'password', 128]
+              ].map(([name, label, type, maxLength]) => (
+                <label key={name}>
+                  <span className="mb-1 block text-xs font-bold text-slate-500">{label} *</span>
+                  <input
+                    name={name}
+                    value={form[name]}
+                    onChange={updateField}
+                    required
+                    type={type}
+                    maxLength={maxLength}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+              ))}
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Estado *</span>
+                <select
+                  name="status"
+                  value={form.status}
                   onChange={updateField}
                   required
-                  type={type}
-                  maxLength={maxLength}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                />
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
               </label>
-            ))}
-            <label>
-              <span className="mb-1 block text-xs font-bold text-slate-500">Estado *</span>
-              <select
-                name="status"
-                value={form.status}
-                onChange={updateField}
-                required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-              >
-                <option value="active">Activo</option>
-                <option value="inactive">Inactivo</option>
-              </select>
-            </label>
-            <div className="sm:col-span-2">
-              <ActionButton type="submit">
-                <Save size={14} /> {isSaving ? 'Guardando...' : 'Registrar usuario'}
-              </ActionButton>
-            </div>
-          </fieldset>
-        </form>
-      </div>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> {isSaving ? 'Guardando...' : 'Registrar usuario'}
+                </ActionButton>
+              </div>
+            </fieldset>
+          </form>
+        </div>
       )}
 
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -214,92 +218,92 @@ export function UsersPage() {
       </div>
 
       {canAssign && (
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <h3 className="mb-4 text-base font-bold text-slate-900">Asignar perfiles y edificios</h3>
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-4 text-base font-bold text-slate-900">Asignar perfiles y edificios</h3>
 
-        <label className="mb-4 block">
-          <span className="mb-1 block text-xs font-bold text-slate-500">Usuario</span>
-          <select
-            value={selectedUserId}
-            onChange={(event) => setSelectedUserId(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="">Seleccione un usuario...</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name} · {user.email}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="mb-4 block">
+            <span className="mb-1 block text-xs font-bold text-slate-500">Usuario</span>
+            <select
+              value={selectedUserId}
+              onChange={(event) => setSelectedUserId(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+            >
+              <option value="">Seleccione un usuario...</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} · {user.email}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        {selectedUserId && (
-          <>
-            {assignStatus.message && (
-              <p
-                role={assignStatus.type === 'error' ? 'alert' : 'status'}
-                className={`mb-4 rounded-lg px-4 py-3 text-sm ${assignStatus.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
-              >
-                {assignStatus.message}
-              </p>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {canAssignProfiles && (
-              <div>
-                <p className="mb-2 text-xs font-bold text-slate-500">Perfiles</p>
-                <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
-                  {profiles.length === 0 && (
-                    <p className="text-xs text-slate-400">No hay perfiles registrados.</p>
-                  )}
-                  {profiles.map((profile) => (
-                    <label key={profile.id} className="flex items-center gap-2 py-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selectedProfileIds.includes(profile.id)}
-                        onChange={() =>
-                          setSelectedProfileIds(toggleId(selectedProfileIds, profile.id))
-                        }
-                      />
-                      <span>{profile.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+          {selectedUserId && (
+            <>
+              {assignStatus.message && (
+                <p
+                  role={assignStatus.type === 'error' ? 'alert' : 'status'}
+                  className={`mb-4 rounded-lg px-4 py-3 text-sm ${assignStatus.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+                >
+                  {assignStatus.message}
+                </p>
               )}
 
-              {canAssignBuildings && (
-              <div>
-                <p className="mb-2 text-xs font-bold text-slate-500">Edificios</p>
-                <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
-                  {buildings.length === 0 && (
-                    <p className="text-xs text-slate-400">No hay edificios registrados.</p>
-                  )}
-                  {buildings.map((building) => (
-                    <label key={building.id} className="flex items-center gap-2 py-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selectedBuildingIds.includes(building.id)}
-                        onChange={() =>
-                          setSelectedBuildingIds(toggleId(selectedBuildingIds, building.id))
-                        }
-                      />
-                      <span>{building.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              )}
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {canAssignProfiles && (
+                  <div>
+                    <p className="mb-2 text-xs font-bold text-slate-500">Perfiles</p>
+                    <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                      {profiles.length === 0 && (
+                        <p className="text-xs text-slate-400">No hay perfiles registrados.</p>
+                      )}
+                      {profiles.map((profile) => (
+                        <label key={profile.id} className="flex items-center gap-2 py-1 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedProfileIds.includes(profile.id)}
+                            onChange={() =>
+                              setSelectedProfileIds(toggleId(selectedProfileIds, profile.id))
+                            }
+                          />
+                          <span>{profile.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            <div className="mt-4">
-              <ActionButton type="button" onClick={saveAssignments}>
-                <Save size={14} /> Guardar asignaciones
-              </ActionButton>
-            </div>
-          </>
-        )}
-      </div>
+                {canAssignBuildings && (
+                  <div>
+                    <p className="mb-2 text-xs font-bold text-slate-500">Edificios</p>
+                    <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                      {buildings.length === 0 && (
+                        <p className="text-xs text-slate-400">No hay edificios registrados.</p>
+                      )}
+                      {buildings.map((building) => (
+                        <label key={building.id} className="flex items-center gap-2 py-1 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedBuildingIds.includes(building.id)}
+                            onChange={() =>
+                              setSelectedBuildingIds(toggleId(selectedBuildingIds, building.id))
+                            }
+                          />
+                          <span>{building.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <ActionButton type="button" onClick={saveAssignments}>
+                  <Save size={14} /> Guardar asignaciones
+                </ActionButton>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

@@ -118,11 +118,7 @@ export function ModuleHome({ activeBuilding }) {
         <MetricCard
           label="Activos Registrados"
           value={isLoading ? '…' : String(assets.length)}
-          sub={
-            isLoading
-              ? 'Cargando inventario…'
-              : `${assetsInMaintenance} en mantenimiento`
-          }
+          sub={isLoading ? 'Cargando inventario…' : `${assetsInMaintenance} en mantenimiento`}
           icon={Package}
           color="blue"
         />
@@ -270,7 +266,9 @@ export function ModuleHome({ activeBuilding }) {
           </span>
         </div>
         {dashboard.maintenanceInProgress.length === 0 ? (
-          <p className="text-sm text-slate-400">No hay mantenimientos en proceso para este edificio.</p>
+          <p className="text-sm text-slate-400">
+            No hay mantenimientos en proceso para este edificio.
+          </p>
         ) : (
           <div className="space-y-2">
             {dashboard.maintenanceInProgress.map((item) => (

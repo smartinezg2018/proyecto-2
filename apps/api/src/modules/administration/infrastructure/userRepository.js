@@ -86,10 +86,9 @@ export class UserRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [userRows] = await connection.execute(
-        'SELECT id FROM users WHERE id = ? FOR UPDATE',
-        [userId]
-      );
+      const [userRows] = await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [
+        userId
+      ]);
       if (!userRows.length) {
         throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
       }
@@ -134,10 +133,9 @@ export class UserRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [userRows] = await connection.execute(
-        'SELECT id FROM users WHERE id = ? FOR UPDATE',
-        [userId]
-      );
+      const [userRows] = await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [
+        userId
+      ]);
       if (!userRows.length) {
         throw new AppError('El usuario no existe.', 404, 'USER_NOT_FOUND');
       }

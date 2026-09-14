@@ -186,7 +186,11 @@ export function createAssetUseCases(assetRepository, buildingRepository, audit =
           entity: 'asset',
           entityId: updated.id,
           buildingId: updated.buildingId,
-          metadata: { code: updated.code, name: updated.name, fields: historyEntries.map((e) => e.field) }
+          metadata: {
+            code: updated.code,
+            name: updated.name,
+            fields: historyEntries.map((e) => e.field)
+          }
         });
       }
       return updated;

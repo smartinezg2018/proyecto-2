@@ -101,6 +101,67 @@ export function getAssetHistory(assetId) {
   return apiRequest(`/api/v1/assets/${assetId}/history`);
 }
 
+export function getSuppliers() {
+  return apiRequest('/api/v1/assets/suppliers');
+}
+
+export function createSupplier(supplier) {
+  return apiRequest('/api/v1/assets/suppliers', {
+    method: 'POST',
+    body: JSON.stringify(supplier)
+  });
+}
+
+export function getAssetSupplier(assetId) {
+  return apiRequest(`/api/v1/assets/${assetId}/supplier`);
+}
+
+export function assignAssetSupplier(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/supplier`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function registerAcquisitionCost(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/costs/acquisition`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function registerOperatingCost(assetId, payload) {
+  return apiRequest(`/api/v1/assets/${assetId}/costs`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getAssetCosts(assetId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.type) params.set('type', filters.type);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  const query = params.toString();
+  return apiRequest(`/api/v1/assets/${assetId}/costs${query ? `?${query}` : ''}`);
+}
+
+export function getAcquisitionCost(assetId) {
+  return getAssetCosts(assetId, { type: 'adquisicion' }).then((payload) => ({
+    data: payload.data[0] || null,
+    meta: payload.meta
+  }));
+}
+
+export function getAssetCostsSummary(assetId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.type) params.set('type', filters.type);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  const query = params.toString();
+  return apiRequest(`/api/v1/assets/${assetId}/costs/summary${query ? `?${query}` : ''}`);
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

@@ -58,7 +58,13 @@ const SEED_PROFILES = [
   {
     name: 'Auditor',
     description: 'Consulta auditoría y listados administrativos.',
-    permissionCodes: ['audit.read', 'users.list', 'profiles.list', 'buildings.list', 'buildings.read']
+    permissionCodes: [
+      'audit.read',
+      'users.list',
+      'profiles.list',
+      'buildings.list',
+      'buildings.read'
+    ]
   },
   {
     name: 'Operador',

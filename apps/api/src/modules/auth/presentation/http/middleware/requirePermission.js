@@ -5,10 +5,7 @@ export function requirePermission(code) {
 export function requireAnyPermission(...codes) {
   return function requirePermissionMiddleware(request, response, next) {
     const permissions = request.user?.permissions ?? [];
-    if (
-      permissions.includes('admin.all') ||
-      codes.some((code) => permissions.includes(code))
-    ) {
+    if (permissions.includes('admin.all') || codes.some((code) => permissions.includes(code))) {
       next();
       return;
     }

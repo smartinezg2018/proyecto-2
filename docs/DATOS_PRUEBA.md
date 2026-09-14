@@ -36,54 +36,54 @@ El script de seeds es idempotente: puedes ejecutarlo varias veces y actualizará
 
 ## Usuarios de prueba
 
-| Usuario | Correo | Contraseña | Perfil | Propósito |
-| --- | --- | --- | --- | --- |
-| Ana Martínez | `admin@example.com` | `Admin123!` | Administrador general | Probar todas las funcionalidades: usuarios, perfiles, asignaciones y auditoría |
-| Carlos Ruiz | `edificio@example.com` | `Edificio123!` | Administrador de edificio | Probar acceso limitado a edificios asignados |
-| Laura Gómez | `auditor@example.com` | `Auditor123!` | Auditor | Probar consulta de auditoría sin permisos de administración |
-| Pedro Sánchez | `operador@example.com` | `Operador123!` | Operador | Probar acceso mínimo de consulta a un solo edificio |
-| Usuario Inactivo | `inactivo@example.com` | `Inactivo123!` | Operador | Probar rechazo de login por usuario inactivo |
+| Usuario          | Correo                 | Contraseña     | Perfil                    | Propósito                                                                      |
+| ---------------- | ---------------------- | -------------- | ------------------------- | ------------------------------------------------------------------------------ |
+| Ana Martínez     | `admin@example.com`    | `Admin123!`    | Administrador general     | Probar todas las funcionalidades: usuarios, perfiles, asignaciones y auditoría |
+| Carlos Ruiz      | `edificio@example.com` | `Edificio123!` | Administrador de edificio | Probar acceso limitado a edificios asignados                                   |
+| Laura Gómez      | `auditor@example.com`  | `Auditor123!`  | Auditor                   | Probar consulta de auditoría sin permisos de administración                    |
+| Pedro Sánchez    | `operador@example.com` | `Operador123!` | Operador                  | Probar acceso mínimo de consulta a un solo edificio                            |
+| Usuario Inactivo | `inactivo@example.com` | `Inactivo123!` | Operador                  | Probar rechazo de login por usuario inactivo                                   |
 
 ## Edificios semilla
 
-| NIT | Nombre | Dirección |
-| --- | --- | --- |
-| `900111001` | Conjunto El Nogal | Calle 10 # 20-30, Bogotá |
-| `900111002` | Torre Central | Av. 68 # 45-12, Bogotá |
+| NIT         | Nombre                | Dirección                 |
+| ----------- | --------------------- | ------------------------- |
+| `900111001` | Conjunto El Nogal     | Calle 10 # 20-30, Bogotá  |
+| `900111002` | Torre Central         | Av. 68 # 45-12, Bogotá    |
 | `900111003` | Residencia Los Robles | Carrera 7 # 80-15, Bogotá |
 
 ## Asignación de edificios por usuario
 
-| Usuario | Edificios asignados |
-| --- | --- |
-| `admin@example.com` | El Nogal, Torre Central, Los Robles |
-| `edificio@example.com` | El Nogal, Torre Central |
-| `auditor@example.com` | Ninguno |
-| `operador@example.com` | El Nogal |
-| `inactivo@example.com` | El Nogal |
+| Usuario                | Edificios asignados                 |
+| ---------------------- | ----------------------------------- |
+| `admin@example.com`    | El Nogal, Torre Central, Los Robles |
+| `edificio@example.com` | El Nogal, Torre Central             |
+| `auditor@example.com`  | Ninguno                             |
+| `operador@example.com` | El Nogal                            |
+| `inactivo@example.com` | El Nogal                            |
 
 ## Perfiles y permisos
 
-| Perfil | Permisos |
-| --- | --- |
-| Administrador general | `admin.all` |
+| Perfil                    | Permisos                                                                                                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Administrador general     | `admin.all`                                                                                                                                                                                   |
 | Administrador de edificio | edificios (CRUD), inmuebles, responsables, activos, listados de usuarios/perfiles y módulos operativos (`maintenance.view`, `insurance.view`, `billing.view`, `budget.view`, `projects.view`) |
-| Auditor | `audit.read`, `users.list`, `profiles.list`, `buildings.list`, `buildings.read` |
-| Operador | `buildings.list`, `buildings.read`, `units.list`, `assets.list`, `maintenance.view` |
+| Auditor                   | `audit.read`, `users.list`, `profiles.list`, `buildings.list`, `buildings.read`                                                                                                               |
+| Operador                  | `buildings.list`, `buildings.read`, `units.list`, `assets.list`, `maintenance.view`                                                                                                           |
 
 ## Menú visible por perfil (SR-006.2)
 
-| Sección | Admin | Admin edificio | Auditor | Operador |
-| --- | --- | --- | --- | --- |
-| Panel General | sí | sí | sí | sí |
-| Edificios | sí | sí | sí | sí |
-| Inmuebles | sí | sí | no | sí |
-| Inventario | sí | sí | no | sí |
-| Mantenimientos | sí | sí | no | sí |
-| Seguros / Facturación / Presupuesto / Proyectos | sí | sí | no | no |
-| Usuarios | sí | sí (solo listar) | sí (solo listar) | no |
-| Perfiles | sí | sí (solo listar) | sí (solo listar) | no |
-| Auditoría | sí | no | sí | no |
+| Sección                                         | Admin | Admin edificio   | Auditor          | Operador |
+| ----------------------------------------------- | ----- | ---------------- | ---------------- | -------- |
+| Panel General                                   | sí    | sí               | sí               | sí       |
+| Edificios                                       | sí    | sí               | sí               | sí       |
+| Inmuebles                                       | sí    | sí               | no               | sí       |
+| Inventario                                      | sí    | sí               | no               | sí       |
+| Mantenimientos                                  | sí    | sí               | no               | sí       |
+| Seguros / Facturación / Presupuesto / Proyectos | sí    | sí               | no               | no       |
+| Usuarios                                        | sí    | sí (solo listar) | sí (solo listar) | no       |
+| Perfiles                                        | sí    | sí (solo listar) | sí (solo listar) | no       |
+| Auditoría                                       | sí    | no               | sí               | no       |
 
 Las APIs también validan el mismo permiso: sin él responden `403 FORBIDDEN`.
 
@@ -119,14 +119,14 @@ Las APIs también validan el mismo permiso: sin él responden `403 FORBIDDEN`.
 
 ## Endpoints útiles para pruebas manuales
 
-| Operación | Método | Ruta |
-| --- | --- | --- |
-| Login | `POST` | `/api/v1/auth/login` |
-| Usuario actual | `GET` | `/api/v1/auth/me` |
-| Listar usuarios | `GET` | `/api/v1/administration/users` |
-| Asignar perfiles | `PUT` | `/api/v1/administration/users/:userId/profiles` |
-| Asignar edificios | `PUT` | `/api/v1/administration/users/:userId/buildings` |
-| Consultar auditoría | `GET` | `/api/v1/administration/audit-logs` |
+| Operación           | Método | Ruta                                             |
+| ------------------- | ------ | ------------------------------------------------ |
+| Login               | `POST` | `/api/v1/auth/login`                             |
+| Usuario actual      | `GET`  | `/api/v1/auth/me`                                |
+| Listar usuarios     | `GET`  | `/api/v1/administration/users`                   |
+| Asignar perfiles    | `PUT`  | `/api/v1/administration/users/:userId/profiles`  |
+| Asignar edificios   | `PUT`  | `/api/v1/administration/users/:userId/buildings` |
+| Consultar auditoría | `GET`  | `/api/v1/administration/audit-logs`              |
 
 Ejemplo de login con curl (PowerShell):
 
