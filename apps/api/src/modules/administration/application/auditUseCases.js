@@ -56,8 +56,5 @@ function parseOptionalDate(value, fieldName) {
   if (Number.isNaN(parsed.getTime())) {
     throw new AppError(`${fieldName} debe ser una fecha válida.`, 400, 'VALIDATION_ERROR');
   }
-  return parsed
-    .toISOString()
-    .slice(0, 19)
-    .replace('T', ' ');
+  return parsed.toISOString().slice(0, 19).replace('T', ' ');
 }

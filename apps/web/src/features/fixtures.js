@@ -389,7 +389,7 @@ export const formatCompactCurrency = (value) => {
 
 /** Datos demo del panel general por NIT de edificio (módulos aún no implementados). */
 export const BUILDING_DASHBOARDS = {
-  '900111001': {
+  900111001: {
     policies: POLICIES,
     apartments: APARTMENTS,
     billingChart: BILLING_CHART,
@@ -398,7 +398,7 @@ export const BUILDING_DASHBOARDS = {
     activePolicies: 5,
     policiesExpiringSoon: 2
   },
-  '900111002': {
+  900111002: {
     policies: [
       {
         id: 'POL-TC-001',
@@ -509,7 +509,7 @@ export const BUILDING_DASHBOARDS = {
     activePolicies: 3,
     policiesExpiringSoon: 2
   },
-  '900111003': {
+  900111003: {
     policies: [
       {
         id: 'POL-LR-001',

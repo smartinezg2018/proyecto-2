@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
-import {
-  createProfile,
-  getPermissions,
-  listProfiles,
-  getCurrentUser
-} from '../../services/api.js';
+import { createProfile, getPermissions, listProfiles, getCurrentUser } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
 import { ActionButton } from '../../components/ActionButton.jsx';
 import { hasPermission } from '../../app/permissions.js';

@@ -3,10 +3,7 @@ import { UserRepository } from '../../../administration/infrastructure/userRepos
 import { createAuthUseCases } from '../../application/authUseCases.js';
 import { AuthorizationRepository } from '../../infrastructure/authorizationRepository.js';
 import { sessionMaxAge, sessionStore } from '../../infrastructure/sessionStore.js';
-import {
-  readSessionCookie,
-  serializeSessionCookie
-} from './cookie.js';
+import { readSessionCookie, serializeSessionCookie } from './cookie.js';
 import { requireAuth } from './middleware/requireAuth.js';
 
 export const authRoutes = Router();

@@ -25,8 +25,12 @@ export function AuditPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    listUsers().then((r) => setUsers(r.data)).catch(() => {});
-    getBuildings().then((r) => setBuildings(r.data)).catch(() => {});
+    listUsers()
+      .then((r) => setUsers(r.data))
+      .catch(() => {});
+    getBuildings()
+      .then((r) => setBuildings(r.data))
+      .catch(() => {});
     load(emptyFilters);
   }, []);
 

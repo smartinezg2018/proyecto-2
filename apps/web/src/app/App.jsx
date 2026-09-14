@@ -135,11 +135,7 @@ export default function App() {
 
   if (session.status === 'loading') return null;
   if (session.status === 'unauthenticated') {
-    return (
-      <LoginPage
-        onLogin={(user) => setSession({ status: 'authenticated', user })}
-      />
-    );
+    return <LoginPage onLogin={(user) => setSession({ status: 'authenticated', user })} />;
   }
 
   const activeBuilding = buildings.find((building) => building.id === activeBuildingId) ?? null;
@@ -362,7 +358,9 @@ export default function App() {
                 {userInitials || 'U'}
               </div>
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-bold text-slate-800 leading-tight">{session.user.name}</p>
+                <p className="text-sm font-bold text-slate-800 leading-tight">
+                  {session.user.name}
+                </p>
                 <p className="text-xs text-slate-400 leading-tight">{session.user.email}</p>
               </div>
               <LogOut size={14} className="text-slate-400 ml-0.5" />

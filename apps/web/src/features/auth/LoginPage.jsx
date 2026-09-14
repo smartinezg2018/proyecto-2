@@ -45,7 +45,9 @@ export function LoginPage({ onLogin }) {
         )}
         <form onSubmit={submitForm} aria-busy={isSubmitting} className="grid gap-4">
           <label>
-            <span className="mb-1 block text-xs font-bold text-slate-500">Correo electrónico *</span>
+            <span className="mb-1 block text-xs font-bold text-slate-500">
+              Correo electrónico *
+            </span>
             <input
               name="email"
               value={form.email}

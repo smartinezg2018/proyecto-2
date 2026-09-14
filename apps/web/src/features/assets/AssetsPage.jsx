@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Pencil, Plus, RefreshCcw, Save, X } from 'lucide-react';
 import {
+  assignAssetSupplier,
   changeAssetStatus,
   createAsset,
+  getAcquisitionCost,
+  getAssetCostsSummary,
   getAssetHistory,
+  getAssetSupplier,
   getAssets,
   getBuildings,
+  getSuppliers,
+  registerAcquisitionCost,
+  registerOperatingCost,
   updateAsset
 } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -29,11 +36,36 @@ const ASSET_TYPE_OPTIONS = [
   { value: 'otro', label: 'Otro' }
 ];
 
+const SUPPLIER_ROLE_OPTIONS = [
+  { value: 'suministro', label: 'Suministro' },
+  { value: 'soporte', label: 'Soporte' }
+];
+
+const COST_TYPE_OPTIONS = [
+  { value: '', label: 'Todos los tipos' },
+  { value: 'adquisicion', label: 'Adquisición' },
+  { value: 'reparacion', label: 'Reparación' },
+  { value: 'mejora', label: 'Mejora' },
+  { value: 'mantenimiento', label: 'Mantenimiento' }
+];
+
+const OPERATING_COST_OPTIONS = [
+  { value: 'reparacion', label: 'Reparación' },
+  { value: 'mejora', label: 'Mejora' },
+  { value: 'mantenimiento', label: 'Mantenimiento' }
+];
+
 const ASSET_STATUS_LABELS = Object.fromEntries(
   ASSET_STATUS_OPTIONS.map((option) => [option.value, option.label])
 );
 const ASSET_TYPE_LABELS = Object.fromEntries(
   ASSET_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
+const COST_TYPE_LABELS = Object.fromEntries(
+  COST_TYPE_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label])
+);
+const SUPPLIER_ROLE_LABELS = Object.fromEntries(
+  SUPPLIER_ROLE_OPTIONS.map((option) => [option.value, option.label])
 );
 
 const HISTORY_FIELD_LABELS = {
@@ -69,6 +101,37 @@ const emptyStatusForm = {
   reason: ''
 };
 
+const emptySupplierForm = {
+  mode: 'existing',
+  supplierId: '',
+  identification: '',
+  name: '',
+  phone: '',
+  email: '',
+  role: 'suministro'
+};
+
+const emptyAcquisitionForm = {
+  amount: '',
+  costDate: '',
+  documentRef: '',
+  notes: ''
+};
+
+const emptyOperatingForm = {
+  costType: 'reparacion',
+  amount: '',
+  costDate: '',
+  documentRef: '',
+  notes: ''
+};
+
+const emptyCostFilters = {
+  type: '',
+  from: '',
+  to: ''
+};
+
 function getChangeTypeLabel(changeType) {
   if (changeType === 'creacion') {
     return 'Registro';
@@ -95,15 +158,31 @@ function formatHistoryValue(field, value) {
   return value;
 }
 
+function formatCurrency(value) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 2
+  }).format(Number(value || 0));
+}
+
 export function ModuleInventario() {
   const [buildings, setBuildings] = useState([]);
   const [buildingId, setBuildingId] = useState('');
   const [assets, setAssets] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [history, setHistory] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [assetSupplier, setAssetSupplier] = useState(null);
+  const [acquisitionCost, setAcquisitionCost] = useState(null);
+  const [costSummary, setCostSummary] = useState(null);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [statusForm, setStatusForm] = useState(emptyStatusForm);
+  const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
+  const [acquisitionForm, setAcquisitionForm] = useState(emptyAcquisitionForm);
+  const [operatingForm, setOperatingForm] = useState(emptyOperatingForm);
+  const [costFilters, setCostFilters] = useState(emptyCostFilters);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
@@ -139,18 +218,70 @@ export function ModuleInventario() {
     }
   }
 
+  async function loadSuppliersCatalog() {
+    const response = await getSuppliers();
+    setSuppliers(response.data);
+  }
+
   async function loadHistory(assetId) {
     const response = await getAssetHistory(assetId);
     setHistory(response.data);
   }
 
+  async function loadAssetEconomics(assetId, filters = costFilters) {
+    const [supplierResponse, acquisitionResponse, summaryResponse] = await Promise.all([
+      getAssetSupplier(assetId),
+      getAcquisitionCost(assetId),
+      getAssetCostsSummary(assetId, {
+        type: filters.type || undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined
+      })
+    ]);
+
+    setAssetSupplier(supplierResponse.data);
+    setCostSummary(summaryResponse.data);
+    const acquisition = acquisitionResponse.data;
+    setAcquisitionCost(acquisition);
+    if (acquisition) {
+      setAcquisitionForm({
+        amount: String(acquisition.amount),
+        costDate: acquisition.costDate,
+        documentRef: acquisition.documentRef || '',
+        notes: acquisition.notes || ''
+      });
+    } else {
+      setAcquisitionForm(emptyAcquisitionForm);
+    }
+
+    if (supplierResponse.data) {
+      setSupplierForm({
+        mode: 'existing',
+        supplierId: String(supplierResponse.data.id),
+        identification: supplierResponse.data.identification,
+        name: supplierResponse.data.name,
+        phone: supplierResponse.data.phone || '',
+        email: supplierResponse.data.email || '',
+        role: supplierResponse.data.role || 'suministro'
+      });
+    } else {
+      setSupplierForm(emptySupplierForm);
+    }
+  }
+
   useEffect(() => {
     loadBuildings();
+    loadSuppliersCatalog().catch((error) => {
+      setStatus({ type: 'error', message: error.message });
+    });
   }, []);
 
   useEffect(() => {
     setSelectedAsset(null);
     setHistory([]);
+    setAssetSupplier(null);
+    setAcquisitionCost(null);
+    setCostSummary(null);
     loadAssets(buildingId);
   }, [buildingId]);
 
@@ -167,7 +298,7 @@ export function ModuleInventario() {
     setIsCreateOpen(false);
     setStatus({ type: '', message: '' });
     try {
-      await loadHistory(asset.id);
+      await Promise.all([loadHistory(asset.id), loadAssetEconomics(asset.id)]);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -239,11 +370,88 @@ export function ModuleInventario() {
     }
   }
 
+  async function submitSupplier(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    try {
+      const payload =
+        supplierForm.mode === 'existing'
+          ? { supplierId: Number(supplierForm.supplierId), role: supplierForm.role }
+          : {
+              identification: supplierForm.identification,
+              name: supplierForm.name,
+              phone: supplierForm.phone || null,
+              email: supplierForm.email || null,
+              role: supplierForm.role
+            };
+
+      const response = await assignAssetSupplier(selectedAsset.id, payload);
+      setAssetSupplier(response.data);
+      setStatus({ type: 'success', message: 'Proveedor del activo guardado.' });
+      await loadSuppliersCatalog();
+      await loadAssetEconomics(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitAcquisition(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    try {
+      await registerAcquisitionCost(selectedAsset.id, {
+        amount: Number(acquisitionForm.amount),
+        costDate: acquisitionForm.costDate,
+        documentRef: acquisitionForm.documentRef || null,
+        notes: acquisitionForm.notes || null
+      });
+      setStatus({ type: 'success', message: 'Costo de adquisición registrado.' });
+      await loadAssetEconomics(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitOperatingCost(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    try {
+      await registerOperatingCost(selectedAsset.id, {
+        costType: operatingForm.costType,
+        amount: Number(operatingForm.amount),
+        costDate: operatingForm.costDate,
+        documentRef: operatingForm.documentRef || null,
+        notes: operatingForm.notes || null
+      });
+      setStatus({ type: 'success', message: 'Costo de operación registrado.' });
+      setOperatingForm(emptyOperatingForm);
+      await loadAssetEconomics(selectedAsset.id);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function applyCostFilters(event) {
+    event.preventDefault();
+    if (!selectedAsset) {
+      return;
+    }
+
+    try {
+      await loadAssetEconomics(selectedAsset.id, costFilters);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
   return (
     <div>
       <SectionHeader
         title="Inventario y activos"
-        subtitle="Registro, consulta, actualización e historial de los bienes de cada edificio"
+        subtitle="Registro, consulta, proveedores, costos e historial de los bienes de cada edificio"
         action={
           <ActionButton onClick={openCreateForm} disabled={!buildingId}>
             <Plus size={14} /> Registrar activo
@@ -465,7 +673,17 @@ export function ModuleInventario() {
                 <strong>Ubicación:</strong> {selectedAsset.location || 'Sin ubicación'}
               </p>
               <p>
-                <strong>Adquisicion:</strong> {selectedAsset.acquisitionDate}
+                <strong>Adquisición:</strong> {selectedAsset.acquisitionDate}
+              </p>
+              <p>
+                <strong>Proveedor:</strong>{' '}
+                {assetSupplier
+                  ? `${assetSupplier.name} (${SUPPLIER_ROLE_LABELS[assetSupplier.role] || assetSupplier.role})`
+                  : 'Sin proveedor'}
+              </p>
+              <p>
+                <strong>Costo adquisición:</strong>{' '}
+                {acquisitionCost ? formatCurrency(acquisitionCost.amount) : 'Sin registrar'}
               </p>
               <p className="sm:col-span-2">
                 <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
@@ -498,6 +716,346 @@ export function ModuleInventario() {
                 ))}
               </ol>
             )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="mb-4 text-base font-bold text-slate-900">Proveedor del activo</h3>
+            <form onSubmit={submitSupplier} className="grid gap-4 sm:grid-cols-2">
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Origen *</span>
+                <select
+                  value={supplierForm.mode}
+                  onChange={(event) =>
+                    setSupplierForm({ ...supplierForm, mode: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="existing">Seleccionar existente</option>
+                  <option value="new">Registrar nuevo</option>
+                </select>
+              </label>
+              {supplierForm.mode === 'existing' ? (
+                <label className="sm:col-span-2">
+                  <span className="mb-1 block text-xs font-bold text-slate-500">Proveedor *</span>
+                  <select
+                    value={supplierForm.supplierId}
+                    onChange={(event) =>
+                      setSupplierForm({ ...supplierForm, supplierId: event.target.value })
+                    }
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="">Seleccione un proveedor</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name} · {supplier.identification}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <>
+                  <label>
+                    <span className="mb-1 block text-xs font-bold text-slate-500">
+                      Identificación *
+                    </span>
+                    <input
+                      value={supplierForm.identification}
+                      onChange={(event) =>
+                        setSupplierForm({ ...supplierForm, identification: event.target.value })
+                      }
+                      required
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Nombre *</span>
+                    <input
+                      value={supplierForm.name}
+                      onChange={(event) =>
+                        setSupplierForm({ ...supplierForm, name: event.target.value })
+                      }
+                      required
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Teléfono</span>
+                    <input
+                      value={supplierForm.phone}
+                      onChange={(event) =>
+                        setSupplierForm({ ...supplierForm, phone: event.target.value })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Correo</span>
+                    <input
+                      type="email"
+                      value={supplierForm.email}
+                      onChange={(event) =>
+                        setSupplierForm({ ...supplierForm, email: event.target.value })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                </>
+              )}
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Rol *</span>
+                <select
+                  value={supplierForm.role}
+                  onChange={(event) =>
+                    setSupplierForm({ ...supplierForm, role: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  {SUPPLIER_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar proveedor
+                </ActionButton>
+              </div>
+            </form>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="mb-4 text-base font-bold text-slate-900">Costo de adquisición</h3>
+            <form onSubmit={submitAcquisition} className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Valor *</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={acquisitionForm.amount}
+                  onChange={(event) =>
+                    setAcquisitionForm({ ...acquisitionForm, amount: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <input
+                  type="date"
+                  value={acquisitionForm.costDate}
+                  onChange={(event) =>
+                    setAcquisitionForm({ ...acquisitionForm, costDate: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Documento de compra
+                </span>
+                <input
+                  value={acquisitionForm.documentRef}
+                  onChange={(event) =>
+                    setAcquisitionForm({ ...acquisitionForm, documentRef: event.target.value })
+                  }
+                  placeholder="Número de factura o referencia"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Notas</span>
+                <textarea
+                  value={acquisitionForm.notes}
+                  onChange={(event) =>
+                    setAcquisitionForm({ ...acquisitionForm, notes: event.target.value })
+                  }
+                  rows={2}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar costo de adquisición
+                </ActionButton>
+              </div>
+            </form>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
+            <h3 className="mb-4 text-base font-bold text-slate-900">Costos del activo</h3>
+
+            <form
+              onSubmit={applyCostFilters}
+              className="mb-4 grid gap-3 sm:grid-cols-4 items-end"
+            >
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Tipo</span>
+                <select
+                  value={costFilters.type}
+                  onChange={(event) => setCostFilters({ ...costFilters, type: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  {COST_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value || 'all'} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Desde</span>
+                <input
+                  type="date"
+                  value={costFilters.from}
+                  onChange={(event) => setCostFilters({ ...costFilters, from: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Hasta</span>
+                <input
+                  type="date"
+                  value={costFilters.to}
+                  onChange={(event) => setCostFilters({ ...costFilters, to: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <ActionButton type="submit">Filtrar costos</ActionButton>
+            </form>
+
+            {costSummary && (
+              <div className="mb-4 grid gap-3 sm:grid-cols-3 text-sm">
+                <p className="rounded-lg bg-slate-50 px-3 py-2">
+                  <strong>Total:</strong> {formatCurrency(costSummary.total)}
+                </p>
+                <p className="rounded-lg bg-slate-50 px-3 py-2">
+                  <strong>Operación:</strong> {formatCurrency(costSummary.operatingTotal)}
+                </p>
+                <p className="rounded-lg bg-slate-50 px-3 py-2">
+                  <strong>Adquisición:</strong>{' '}
+                  {formatCurrency(costSummary.byType.adquisicion || 0)}
+                </p>
+              </div>
+            )}
+
+            <div className="mb-6 overflow-hidden rounded-lg border border-slate-100">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {['Fecha', 'Tipo', 'Valor', 'Documento', 'Notas'].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400"
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(costSummary?.items || []).map((cost) => (
+                    <tr key={cost.id} className="border-b border-slate-50">
+                      <td className="px-3 py-2">{cost.costDate}</td>
+                      <td className="px-3 py-2">
+                        {COST_TYPE_LABELS[cost.costType] || cost.costType}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">{formatCurrency(cost.amount)}</td>
+                      <td className="px-3 py-2 text-slate-500">
+                        {cost.documentRef || 'Sin documento'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{cost.notes || '—'}</td>
+                    </tr>
+                  ))}
+                  {(!costSummary || costSummary.items.length === 0) && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                        No hay costos registrados para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <h4 className="mb-3 text-sm font-bold text-slate-800">
+              Registrar costo de operación
+            </h4>
+            <form onSubmit={submitOperatingCost} className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>
+                <select
+                  value={operatingForm.costType}
+                  onChange={(event) =>
+                    setOperatingForm({ ...operatingForm, costType: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  {OPERATING_COST_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Valor *</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={operatingForm.amount}
+                  onChange={(event) =>
+                    setOperatingForm({ ...operatingForm, amount: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <input
+                  type="date"
+                  value={operatingForm.costDate}
+                  onChange={(event) =>
+                    setOperatingForm({ ...operatingForm, costDate: event.target.value })
+                  }
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Documento</span>
+                <input
+                  value={operatingForm.documentRef}
+                  onChange={(event) =>
+                    setOperatingForm({ ...operatingForm, documentRef: event.target.value })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Notas</span>
+                <textarea
+                  value={operatingForm.notes}
+                  onChange={(event) =>
+                    setOperatingForm({ ...operatingForm, notes: event.target.value })
+                  }
+                  rows={2}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <ActionButton type="submit">
+                  <Save size={14} /> Guardar costo de operación
+                </ActionButton>
+              </div>
+            </form>
           </div>
         </div>
       )}
