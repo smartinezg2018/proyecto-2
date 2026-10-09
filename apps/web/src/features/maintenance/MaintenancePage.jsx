@@ -33,7 +33,10 @@ function createEmptyForm() {
     assetId: '',
     maintenanceType: 'preventivo',
     maintenanceDate: todayString(),
-    description: ''
+    description: '',
+    failure: '',
+    cause: '',
+    actionsTaken: ''
   };
 }
 
@@ -109,11 +112,23 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     setIsSaving(true);
 
     try {
-      await registerMaintenance(form.assetId, {
+      const payload = {
         maintenanceType: form.maintenanceType,
-        maintenanceDate: form.maintenanceDate,
-        description: form.description
-      });
+        maintenanceDate: form.maintenanceDate
+      };
+
+      if (form.maintenanceType === 'correctivo') {
+        payload.failure = form.failure;
+        payload.cause = form.cause;
+        payload.actionsTaken = form.actionsTaken;
+        if (form.description.trim() !== '') {
+          payload.description = form.description;
+        }
+      } else {
+        payload.description = form.description;
+      }
+
+      await registerMaintenance(form.assetId, payload);
       setStatus({ type: 'success', message: 'Mantenimiento registrado correctamente.' });
       setIsFormOpen(false);
       await loadMaintenances(buildingId);
@@ -223,17 +238,73 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   className={inputClassName}
                 />
               </label>
-              <label className="sm:col-span-3">
-                <span className="mb-1 block text-xs font-bold text-slate-500">Descripción *</span>
-                <textarea
-                  name="description"
-                  value={form.description}
-                  onChange={updateField}
-                  required
-                  rows={3}
-                  className={inputClassName}
-                />
-              </label>
+              {form.maintenanceType === 'correctivo' ? (
+                <>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Falla *</span>
+                    <textarea
+                      name="failure"
+                      value={form.failure}
+                      onChange={updateField}
+                      required
+                      rows={2}
+                      placeholder="Describe la falla reportada"
+                      className={inputClassName}
+                    />
+                  </label>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1 block text-xs font-bold text-slate-500">Causa *</span>
+                    <textarea
+                      name="cause"
+                      value={form.cause}
+                      onChange={updateField}
+                      required
+                      rows={2}
+                      placeholder="Explica la causa identificada"
+                      className={inputClassName}
+                    />
+                  </label>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1 block text-xs font-bold text-slate-500">
+                      Acciones ejecutadas *
+                    </span>
+                    <textarea
+                      name="actionsTaken"
+                      value={form.actionsTaken}
+                      onChange={updateField}
+                      required
+                      rows={2}
+                      placeholder="Describe las reparaciones realizadas"
+                      className={inputClassName}
+                    />
+                  </label>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1 block text-xs font-bold text-slate-500">
+                      Notas adicionales
+                    </span>
+                    <textarea
+                      name="description"
+                      value={form.description}
+                      onChange={updateField}
+                      rows={2}
+                      placeholder="Opcional"
+                      className={inputClassName}
+                    />
+                  </label>
+                </>
+              ) : (
+                <label className="sm:col-span-3">
+                  <span className="mb-1 block text-xs font-bold text-slate-500">Descripción *</span>
+                  <textarea
+                    name="description"
+                    value={form.description}
+                    onChange={updateField}
+                    required
+                    rows={3}
+                    className={inputClassName}
+                  />
+                </label>
+              )}
               <div className="sm:col-span-3">
                 <ActionButton type="submit" disabled={isSaving}>
                   <Save size={14} /> Guardar mantenimiento
@@ -280,7 +351,31 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                     />
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-pre-line">
-                    {maintenance.description}
+                    {maintenance.maintenanceType === 'correctivo' &&
+                    (maintenance.failure || maintenance.cause || maintenance.actionsTaken) ? (
+                      <div className="space-y-1">
+                        {maintenance.failure && (
+                          <div>
+                            <span className="font-semibold text-slate-700">Falla:</span>{' '}
+                            {maintenance.failure}
+                          </div>
+                        )}
+                        {maintenance.cause && (
+                          <div>
+                            <span className="font-semibold text-slate-700">Causa:</span>{' '}
+                            {maintenance.cause}
+                          </div>
+                        )}
+                        {maintenance.actionsTaken && (
+                          <div>
+                            <span className="font-semibold text-slate-700">Acciones:</span>{' '}
+                            {maintenance.actionsTaken}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      maintenance.description
+                    )}
                   </td>
                 </tr>
               ))}

@@ -12,7 +12,7 @@ function todayString() {
   return `${year}-${month}-${day}`;
 }
 
-function validateRegisterInput(input) {
+function validateType(input) {
   if (!MAINTENANCE_TYPES.includes(input.maintenanceType)) {
     throw new AppError(
       'El tipo de mantenimiento debe ser preventivo o correctivo.',
@@ -20,7 +20,9 @@ function validateRegisterInput(input) {
       'VALIDATION_ERROR'
     );
   }
+}
 
+function validateDate(input) {
   const date = input.maintenanceDate;
   if (typeof date !== 'string' || !DATE_PATTERN.test(date) || Number.isNaN(Date.parse(date))) {
     throw new AppError(
@@ -33,9 +35,37 @@ function validateRegisterInput(input) {
   if (date > todayString()) {
     throw new AppError('La fecha del mantenimiento no puede ser futura.', 400, 'VALIDATION_ERROR');
   }
+}
 
+function validatePreventiveInput(input) {
   if (typeof input.description !== 'string' || input.description.trim() === '') {
     throw new AppError('La descripción del mantenimiento es obligatoria.', 400, 'VALIDATION_ERROR');
+  }
+}
+
+function validateCorrectiveInput(input) {
+  if (typeof input.failure !== 'string' || input.failure.trim() === '') {
+    throw new AppError(
+      'La falla del mantenimiento correctivo es obligatoria.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  if (typeof input.cause !== 'string' || input.cause.trim() === '') {
+    throw new AppError(
+      'La causa del mantenimiento correctivo es obligatoria.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  if (typeof input.actionsTaken !== 'string' || input.actionsTaken.trim() === '') {
+    throw new AppError(
+      'Las acciones ejecutadas del mantenimiento correctivo son obligatorias.',
+      400,
+      'VALIDATION_ERROR'
+    );
   }
 }
 
@@ -64,8 +94,31 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
         );
       }
 
-      validateRegisterInput(input);
-      const description = input.description.trim();
+      validateType(input);
+      validateDate(input);
+
+      const isCorrective = input.maintenanceType === 'correctivo';
+
+      let failure = null;
+      let cause = null;
+      let actionsTaken = null;
+      let description;
+
+      if (isCorrective) {
+        validateCorrectiveInput(input);
+        failure = input.failure.trim();
+        cause = input.cause.trim();
+        actionsTaken = input.actionsTaken.trim();
+
+        if (typeof input.description === 'string' && input.description.trim() !== '') {
+          description = input.description.trim();
+        } else {
+          description = `Falla: ${failure} | Causa: ${cause} | Acciones: ${actionsTaken}`;
+        }
+      } else {
+        validatePreventiveInput(input);
+        description = input.description.trim();
+      }
 
       const saved = await maintenanceRepository.create(
         {
@@ -74,6 +127,9 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           maintenanceType: input.maintenanceType,
           maintenanceDate: input.maintenanceDate,
           description,
+          failureDescription: failure,
+          cause,
+          actionsTaken,
           createdBy: userId
         },
         {
@@ -87,6 +143,19 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
       );
 
       if (audit) {
+        const metadata = {
+          assetId: asset.id,
+          assetCode: asset.code,
+          maintenanceType: saved.maintenanceType,
+          maintenanceDate: saved.maintenanceDate
+        };
+
+        if (isCorrective) {
+          metadata.failure = failure;
+          metadata.cause = cause;
+          metadata.actionsTaken = actionsTaken;
+        }
+
         await audit.record({
           userId,
           action: 'create',
@@ -94,12 +163,7 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           entity: 'maintenance',
           entityId: saved.id,
           buildingId: asset.buildingId,
-          metadata: {
-            assetId: asset.id,
-            assetCode: asset.code,
-            maintenanceType: saved.maintenanceType,
-            maintenanceDate: saved.maintenanceDate
-          }
+          metadata
         });
       }
 

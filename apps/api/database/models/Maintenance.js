@@ -27,7 +27,21 @@ export const Maintenance = sequelize.define(
     },
     description: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true
+    },
+    failureDescription: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'failure_description'
+    },
+    cause: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    actionsTaken: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'actions_taken'
     },
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
