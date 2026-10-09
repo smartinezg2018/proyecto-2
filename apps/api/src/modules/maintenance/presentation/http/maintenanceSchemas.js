@@ -1,8 +1,24 @@
 import { z } from 'zod';
 import { MAINTENANCE_STATUSES, MAINTENANCE_TYPES } from '../../domain/maintenanceCatalog.js';
 
+function costSchema(label) {
+  return z.preprocess(
+    (value) => (value === '' ? null : value),
+    z.coerce
+      .number({ error: `El ${label} debe ser numérico.` })
+      .nonnegative(`El ${label} no puede ser negativo.`)
+      .nullable()
+      .optional()
+  );
+}
+
+const estimatedCostSchema = costSchema('costo estimado');
+const actualCostSchema = costSchema('costo real');
+
 export const registerMaintenanceSchema = z
   .object({
+    estimatedCost: estimatedCostSchema,
+    actualCost: actualCostSchema,
     maintenanceType: z.enum(MAINTENANCE_TYPES, {
       error: 'El tipo de mantenimiento debe ser preventivo o correctivo.'
     }),
@@ -49,6 +65,15 @@ export const registerMaintenanceSchema = z
         });
       }
     }
+  });
+
+export const updateMaintenanceCostsSchema = z
+  .object({
+    estimatedCost: estimatedCostSchema,
+    actualCost: actualCostSchema
+  })
+  .refine((value) => value.estimatedCost !== undefined || value.actualCost !== undefined, {
+    message: 'Debe enviar el costo estimado o el costo real del mantenimiento.'
   });
 
 export const changeMaintenanceStatusSchema = z.object({

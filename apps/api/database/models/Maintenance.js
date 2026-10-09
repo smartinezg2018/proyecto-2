@@ -48,6 +48,16 @@ export const Maintenance = sequelize.define(
       allowNull: false,
       defaultValue: 'programado'
     },
+    estimatedCost: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: true,
+      field: 'estimated_cost'
+    },
+    actualCost: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: true,
+      field: 'actual_cost'
+    },
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
   },

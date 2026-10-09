@@ -7,6 +7,7 @@ import {
   getMaintenanceStatusHistory,
   getMyBuildings,
   registerMaintenance,
+  updateMaintenanceCosts,
   updateMaintenanceStatus
 } from '../../services/api.js';
 import { hasPermission } from '../../app/permissions.js';
@@ -41,6 +42,23 @@ function formatDateTime(value) {
   return date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+function formatCurrency(value) {
+  if (value === null || value === undefined) return 'Sin registrar';
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 2
+  }).format(Number(value));
+}
+
+function costInputValue(value) {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function costPayloadValue(value) {
+  return value.trim() === '' ? null : value.trim();
+}
+
 function todayString() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -56,7 +74,9 @@ function createEmptyForm() {
     description: '',
     failure: '',
     cause: '',
-    actionsTaken: ''
+    actionsTaken: '',
+    estimatedCost: '',
+    actualCost: ''
   };
 }
 
@@ -78,6 +98,8 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   const [nextStatus, setNextStatus] = useState('');
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [isStatusSaving, setIsStatusSaving] = useState(false);
+  const [costForm, setCostForm] = useState({ estimatedCost: '', actualCost: '' });
+  const [isCostSaving, setIsCostSaving] = useState(false);
 
   const canRegister = hasPermission(permissions, 'maintenance.create');
   const canUpdateStatus = hasPermission(permissions, 'maintenance.update');
@@ -145,7 +167,9 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     try {
       const payload = {
         maintenanceType: form.maintenanceType,
-        maintenanceDate: form.maintenanceDate
+        maintenanceDate: form.maintenanceDate,
+        estimatedCost: costPayloadValue(form.estimatedCost),
+        actualCost: costPayloadValue(form.actualCost)
       };
 
       if (form.maintenanceType === 'correctivo') {
@@ -173,6 +197,10 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   async function openStatus(maintenance) {
     setSelectedMaintenanceId(maintenance.id);
     setNextStatus(maintenance.nextStatuses?.[0] ?? '');
+    setCostForm({
+      estimatedCost: costInputValue(maintenance.estimatedCost),
+      actualCost: costInputValue(maintenance.actualCost)
+    });
     setStatusHistory([]);
     setStatus({ type: '', message: '' });
     setIsStatusLoading(true);
@@ -205,6 +233,31 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsStatusSaving(false);
+    }
+  }
+
+  async function submitCosts(event) {
+    event.preventDefault();
+    if (!selectedMaintenance) return;
+
+    setStatus({ type: '', message: '' });
+    setIsCostSaving(true);
+
+    try {
+      const response = await updateMaintenanceCosts(selectedMaintenance.id, {
+        estimatedCost: costPayloadValue(costForm.estimatedCost),
+        actualCost: costPayloadValue(costForm.actualCost)
+      });
+      setCostForm({
+        estimatedCost: costInputValue(response.data.estimatedCost),
+        actualCost: costInputValue(response.data.actualCost)
+      });
+      setStatus({ type: 'success', message: 'Costos del mantenimiento actualizados.' });
+      await loadMaintenances(buildingId);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsCostSaving(false);
     }
   }
 
@@ -379,6 +432,36 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   />
                 </label>
               )}
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Costo estimado (COP)
+                </span>
+                <input
+                  name="estimatedCost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.estimatedCost}
+                  onChange={updateField}
+                  placeholder="Opcional"
+                  className={inputClassName}
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Costo real (COP)
+                </span>
+                <input
+                  name="actualCost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.actualCost}
+                  onChange={updateField}
+                  placeholder="Opcional"
+                  className={inputClassName}
+                />
+              </label>
               <div className="sm:col-span-3">
                 <ActionButton type="submit" disabled={isSaving}>
                   <Save size={14} /> Guardar mantenimiento
@@ -393,7 +476,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Estado del mantenimiento</h3>
+              <h3 className="text-base font-bold text-slate-900">Detalle del mantenimiento</h3>
               <p className="mt-1 text-sm text-slate-500">
                 <span className="font-mono text-xs font-bold text-blue-600">
                   {selectedMaintenance.asset?.code}
@@ -450,6 +533,58 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           )}
 
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+            Costos de la intervención
+          </h4>
+          {canUpdateStatus ? (
+            <form onSubmit={submitCosts} className="mb-5 grid gap-4 sm:grid-cols-3">
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Costo estimado (COP)
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costForm.estimatedCost}
+                  onChange={(event) =>
+                    setCostForm({ ...costForm, estimatedCost: event.target.value })
+                  }
+                  placeholder="Sin registrar"
+                  className={inputClassName}
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Costo real (COP)
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costForm.actualCost}
+                  onChange={(event) => setCostForm({ ...costForm, actualCost: event.target.value })}
+                  placeholder="Sin registrar"
+                  className={inputClassName}
+                />
+              </label>
+              <div className="flex items-end">
+                <ActionButton type="submit" disabled={isCostSaving}>
+                  <Save size={14} /> Guardar costos
+                </ActionButton>
+              </div>
+            </form>
+          ) : (
+            <div className="mb-5 grid gap-3 text-sm sm:grid-cols-2">
+              <p className="rounded-lg bg-slate-50 px-3 py-2">
+                <strong>Estimado:</strong> {formatCurrency(selectedMaintenance.estimatedCost)}
+              </p>
+              <p className="rounded-lg bg-slate-50 px-3 py-2">
+                <strong>Real:</strong> {formatCurrency(selectedMaintenance.actualCost)}
+              </p>
+            </div>
+          )}
+
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
             Historial de cambios
           </h4>
           {isStatusLoading ? (
@@ -481,7 +616,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              {['Fecha', 'Activo', 'Tipo', 'Estado', 'Descripción'].map((heading) => (
+              {['Fecha', 'Activo', 'Tipo', 'Estado', 'Costos', 'Descripción'].map((heading) => (
                 <th
                   key={heading}
                   className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
@@ -529,8 +664,18 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                         onClick={() => openStatus(maintenance)}
                         className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                       >
-                        {canUpdateStatus ? 'Actualizar' : 'Historial'}
+                        {canUpdateStatus ? 'Estado y costos' : 'Ver detalle'}
                       </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                    <div>
+                      <span className="font-semibold text-slate-700">Est.:</span>{' '}
+                      {formatCurrency(maintenance.estimatedCost)}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-700">Real:</span>{' '}
+                      {formatCurrency(maintenance.actualCost)}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-pre-line">
@@ -564,7 +709,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
               ))}
             {!isLoading && maintenances.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                   {buildingId
                     ? 'No hay mantenimientos registrados en este edificio.'
                     : 'Selecciona un edificio para consultar sus mantenimientos.'}
@@ -573,7 +718,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
             )}
             {isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                   Cargando mantenimientos...
                 </td>
               </tr>

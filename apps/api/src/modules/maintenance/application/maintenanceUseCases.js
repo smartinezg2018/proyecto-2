@@ -17,6 +17,10 @@ const STATUS_LABELS = {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const HISTORY_REASON_MAX_LENGTH = 255;
+const COST_LABELS = { estimatedCost: 'costo estimado', actualCost: 'costo real' };
+const COST_FIELDS = Object.keys(COST_LABELS);
+// DECIMAL(15, 2) column limit.
+const MAX_COST = 9999999999999.99;
 
 function todayString() {
   const now = new Date();
@@ -81,6 +85,32 @@ function validateCorrectiveInput(input) {
       'VALIDATION_ERROR'
     );
   }
+}
+
+function normalizeCost(value, field) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const label = COST_LABELS[field];
+  const amount = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    throw new AppError(`El ${label} debe ser numérico.`, 400, 'VALIDATION_ERROR');
+  }
+
+  if (amount < 0) {
+    throw new AppError(`El ${label} no puede ser negativo.`, 400, 'VALIDATION_ERROR');
+  }
+
+  if (amount > MAX_COST) {
+    throw new AppError(`El ${label} excede el valor máximo permitido.`, 400, 'VALIDATION_ERROR');
+  }
+
+  if (Math.round(amount * 100) / 100 !== amount) {
+    throw new AppError(`El ${label} admite como máximo dos decimales.`, 400, 'VALIDATION_ERROR');
+  }
+
+  return amount;
 }
 
 function truncate(value, maxLength) {
@@ -156,6 +186,8 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
 
       validateType(input);
       validateDate(input);
+      const estimatedCost = normalizeCost(input.estimatedCost, 'estimatedCost');
+      const actualCost = normalizeCost(input.actualCost, 'actualCost');
 
       const isCorrective = input.maintenanceType === 'correctivo';
 
@@ -191,6 +223,8 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           cause,
           actionsTaken,
           status: INITIAL_STATUS,
+          estimatedCost,
+          actualCost,
           createdBy: userId
         },
         {
@@ -214,7 +248,9 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           assetId: asset.id,
           assetCode: asset.code,
           maintenanceType: saved.maintenanceType,
-          maintenanceDate: saved.maintenanceDate
+          maintenanceDate: saved.maintenanceDate,
+          estimatedCost,
+          actualCost
         };
 
         if (isCorrective) {
@@ -289,6 +325,47 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
             from: previousStatus,
             to: input.status,
             changedAt: changedAt.toISOString()
+          }
+        });
+      }
+
+      return present(updated);
+    },
+
+    async updateCosts(maintenanceId, input, userId = null) {
+      const providedFields = COST_FIELDS.filter((field) => input[field] !== undefined);
+      if (providedFields.length === 0) {
+        throw new AppError(
+          'Debe enviar el costo estimado o el costo real del mantenimiento.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      const current = await getMaintenance(maintenanceId);
+      const previous = {
+        estimatedCost: current.estimatedCost ?? null,
+        actualCost: current.actualCost ?? null
+      };
+      const next = { ...previous };
+      for (const field of providedFields) {
+        next[field] = normalizeCost(input[field], field);
+      }
+
+      const updated = await maintenanceRepository.updateCosts(maintenanceId, next, userId);
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'cost_update',
+          module: 'maintenance',
+          entity: 'maintenance',
+          entityId: updated.id,
+          buildingId: updated.buildingId,
+          metadata: {
+            assetId: updated.assetId,
+            before: previous,
+            after: next
           }
         });
       }
