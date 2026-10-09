@@ -162,6 +162,21 @@ export function getAssetCostsSummary(assetId, filters = {}) {
   return apiRequest(`/api/v1/assets/${assetId}/costs/summary${query ? `?${query}` : ''}`);
 }
 
+export function registerMaintenance(assetId, payload) {
+  return apiRequest(`/api/v1/maintenance/assets/${assetId}/maintenances`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getAssetMaintenances(assetId) {
+  return apiRequest(`/api/v1/maintenance/assets/${assetId}/maintenances`);
+}
+
+export function getBuildingMaintenances(buildingId) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/maintenances`);
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',
