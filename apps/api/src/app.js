@@ -6,6 +6,7 @@ import { requestId } from './shared/middleware/requestId.js';
 import { administrationRoutes } from './modules/administration/presentation/http/routes.js';
 import { assetsRoutes } from './modules/assets/presentation/http/routes.js';
 import { authRoutes } from './modules/auth/presentation/http/routes.js';
+import { maintenanceRoutes } from './modules/maintenance/presentation/http/routes.js';
 
 export const app = express();
 
@@ -20,4 +21,5 @@ app.get('/health', (request, response) => {
 app.use('/api/v1/administration', administrationRoutes);
 app.use('/api/v1/assets', assetsRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use(errorHandler);

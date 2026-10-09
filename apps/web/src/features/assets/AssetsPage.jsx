@@ -142,6 +142,9 @@ function getChangeTypeLabel(changeType) {
   if (changeType === 'cambio_estado') {
     return 'Cambio de estado';
   }
+  if (changeType === 'mantenimiento') {
+    return 'Mantenimiento';
+  }
   return changeType;
 }
 

@@ -1,104 +1,307 @@
-import { Plus, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Save, X } from 'lucide-react';
 
-import { KANBAN, formatCompactCurrency as fmtM } from '../fixtures.js';
-import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
-import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
-import { ActionButton as Btn } from '../../components/ActionButton.jsx';
+import {
+  getAssets,
+  getBuildingMaintenances,
+  getMyBuildings,
+  registerMaintenance
+} from '../../services/api.js';
+import { hasPermission } from '../../app/permissions.js';
+import { StatusBadge } from '../../components/StatusBadge.jsx';
+import { SectionHeader } from '../../components/SectionHeader.jsx';
+import { ActionButton } from '../../components/ActionButton.jsx';
 
-export function ModuleMantenimientos() {
-  const cols = [
-    { key: 'programado', label: 'Programado', dot: 'bg-blue-500', data: KANBAN.programado },
-    { key: 'enProceso', label: 'En Proceso', dot: 'bg-amber-500', data: KANBAN.enProceso },
-    { key: 'completado', label: 'Completado', dot: 'bg-emerald-500', data: KANBAN.completado }
-  ];
+const MAINTENANCE_TYPE_OPTIONS = [
+  { value: 'preventivo', label: 'Preventivo' },
+  { value: 'correctivo', label: 'Correctivo' }
+];
+
+const MAINTENANCE_TYPE_LABELS = Object.fromEntries(
+  MAINTENANCE_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
+
+function todayString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function createEmptyForm() {
+  return {
+    assetId: '',
+    maintenanceType: 'preventivo',
+    maintenanceDate: todayString(),
+    description: ''
+  };
+}
+
+const inputClassName =
+  'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500';
+
+export function ModuleMantenimientos({ permissions = [], activeBuildingId = null }) {
+  const [buildings, setBuildings] = useState([]);
+  const [buildingId, setBuildingId] = useState(activeBuildingId ? String(activeBuildingId) : '');
+  const [assets, setAssets] = useState([]);
+  const [maintenances, setMaintenances] = useState([]);
+  const [form, setForm] = useState(createEmptyForm);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [status, setStatus] = useState({ type: '', message: '' });
+
+  const canRegister = hasPermission(permissions, 'maintenance.create');
+  const registrableAssets = assets.filter((asset) => asset.status !== 'retirado');
+
+  useEffect(() => {
+    getMyBuildings()
+      .then((response) => {
+        const list = response.data ?? [];
+        setBuildings(list);
+        setBuildingId((current) => {
+          if (current && list.some((building) => String(building.id) === current)) return current;
+          return list[0] ? String(list[0].id) : '';
+        });
+      })
+      .catch((error) => setStatus({ type: 'error', message: error.message }));
+  }, []);
+
+  async function loadMaintenances(selectedBuildingId) {
+    const response = await getBuildingMaintenances(selectedBuildingId);
+    setMaintenances(response.data);
+  }
+
+  useEffect(() => {
+    setIsFormOpen(false);
+    if (!buildingId) {
+      setAssets([]);
+      setMaintenances([]);
+      return;
+    }
+
+    setIsLoading(true);
+    Promise.all([getAssets(buildingId), getBuildingMaintenances(buildingId)])
+      .then(([assetsResponse, maintenancesResponse]) => {
+        setAssets(assetsResponse.data);
+        setMaintenances(maintenancesResponse.data);
+      })
+      .catch((error) => setStatus({ type: 'error', message: error.message }))
+      .finally(() => setIsLoading(false));
+  }, [buildingId]);
+
+  function openForm() {
+    setForm({
+      ...createEmptyForm(),
+      assetId: registrableAssets[0] ? String(registrableAssets[0].id) : ''
+    });
+    setIsFormOpen(true);
+    setStatus({ type: '', message: '' });
+  }
+
+  function updateField(event) {
+    setForm({ ...form, [event.target.name]: event.target.value });
+  }
+
+  async function submitForm(event) {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+    setIsSaving(true);
+
+    try {
+      await registerMaintenance(form.assetId, {
+        maintenanceType: form.maintenanceType,
+        maintenanceDate: form.maintenanceDate,
+        description: form.description
+      });
+      setStatus({ type: 'success', message: 'Mantenimiento registrado correctamente.' });
+      setIsFormOpen(false);
+      await loadMaintenances(buildingId);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <div>
-      <SectionHead
+      <SectionHeader
         title="Mantenimientos"
-        subtitle="Tablero Kanban de mantenimientos preventivos y correctivos"
+        subtitle="Registro e historial de las intervenciones realizadas sobre los activos"
         action={
-          <div className="flex gap-2">
-            <Btn variant="secondary">
-              <Calendar size={13} /> Programar
-            </Btn>
-            <Btn>
-              <Plus size={13} /> Registrar
-            </Btn>
-          </div>
+          canRegister && (
+            <ActionButton onClick={openForm} disabled={!buildingId}>
+              <Plus size={14} /> Registrar mantenimiento
+            </ActionButton>
+          )
         }
       />
 
-      {/* Budget widget */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 mb-6">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-          Balance Presupuestal de Mantenimiento 2026
-        </p>
-        <div className="flex items-center gap-8">
-          <div>
-            <p className="text-xs text-slate-400">Asignado</p>
-            <p className="text-xl font-bold text-slate-800">{fmtM(180000000)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-400">Ejecutado</p>
-            <p className="text-xl font-bold text-blue-600">{fmtM(112000000)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-400">Disponible</p>
-            <p className="text-xl font-bold text-emerald-600">{fmtM(68000000)}</p>
-          </div>
-          <div className="flex-1 max-w-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-slate-500">Ejecuci�n presupuestal</span>
-              <span className="text-xs font-bold text-slate-700">62%</span>
-            </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full w-[62%] transition-all" />
-            </div>
-          </div>
-        </div>
-      </div>
+      <label className="mb-4 block max-w-sm">
+        <span className="mb-1 block text-xs font-bold text-slate-500">Edificio</span>
+        <select
+          value={buildingId}
+          onChange={(event) => setBuildingId(event.target.value)}
+          className={inputClassName}
+        >
+          {buildings.length === 0 && <option value="">No tienes edificios asignados</option>}
+          {buildings.map((building) => (
+            <option key={building.id} value={building.id}>
+              {building.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
-      {/* Kanban */}
-      <div className="grid grid-cols-3 gap-4">
-        {cols.map((col) => (
-          <div
-            key={col.key}
-            className="bg-slate-50 rounded-xl border border-slate-200 p-3 min-h-[400px]"
-          >
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${col.dot}`} />
-              <span className="text-sm font-bold text-slate-700">{col.label}</span>
-              <span className="ml-auto text-xs bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full font-semibold">
-                {col.data.length}
-              </span>
-            </div>
-            <div className="space-y-2.5">
-              {col.data.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-xl border border-slate-200 p-3.5 hover:shadow-sm transition-all cursor-pointer"
-                >
-                  <p className="text-sm font-semibold text-slate-800 leading-snug mb-2.5">
-                    {item.title}
-                  </p>
-                  <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
-                    <Badge label={item.type} />
-                    <Badge label={item.priority} />
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-slate-400 mb-1">
-                    <Calendar size={11} />
-                    <span style={{ fontFamily: "'DM Mono', monospace" }}>{item.date}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 truncate">{item.responsible}</p>
-                </div>
-              ))}
-            </div>
-            <button className="w-full mt-3 py-2 text-xs text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all border border-dashed border-slate-200 flex items-center justify-center gap-1">
-              <Plus size={12} /> Agregar
+      {status.message && (
+        <p
+          className={`mb-4 rounded-lg px-4 py-3 text-sm ${status.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+        >
+          {status.message}
+        </p>
+      )}
+
+      {isFormOpen && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Registrar mantenimiento</h3>
+            <button
+              onClick={() => setIsFormOpen(false)}
+              className="rounded-md p-2 text-slate-400 hover:bg-slate-100"
+              title="Cerrar formulario"
+            >
+              <X size={16} />
             </button>
           </div>
-        ))}
+          {registrableAssets.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              No hay activos disponibles para registrar mantenimientos en este edificio.
+            </p>
+          ) : (
+            <form onSubmit={submitForm} className="grid gap-4 sm:grid-cols-3">
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Activo *</span>
+                <select
+                  name="assetId"
+                  value={form.assetId}
+                  onChange={updateField}
+                  required
+                  className={inputClassName}
+                >
+                  {registrableAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.code} · {asset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>
+                <select
+                  name="maintenanceType"
+                  value={form.maintenanceType}
+                  onChange={updateField}
+                  className={inputClassName}
+                >
+                  {MAINTENANCE_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <input
+                  name="maintenanceDate"
+                  type="date"
+                  value={form.maintenanceDate}
+                  max={todayString()}
+                  onChange={updateField}
+                  required
+                  className={inputClassName}
+                />
+              </label>
+              <label className="sm:col-span-3">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Descripción *</span>
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={updateField}
+                  required
+                  rows={3}
+                  className={inputClassName}
+                />
+              </label>
+              <div className="sm:col-span-3">
+                <ActionButton type="submit" disabled={isSaving}>
+                  <Save size={14} /> Guardar mantenimiento
+                </ActionButton>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50">
+              {['Fecha', 'Activo', 'Tipo', 'Descripción'].map((heading) => (
+                <th
+                  key={heading}
+                  className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {!isLoading &&
+              maintenances.map((maintenance) => (
+                <tr key={maintenance.id} className="border-b border-slate-50 align-top">
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
+                    {maintenance.maintenanceDate}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className="font-mono text-xs font-bold text-blue-600">
+                      {maintenance.asset?.code}
+                    </span>{' '}
+                    <span className="font-semibold text-slate-800">{maintenance.asset?.name}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge
+                      label={
+                        MAINTENANCE_TYPE_LABELS[maintenance.maintenanceType] ||
+                        maintenance.maintenanceType
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600 whitespace-pre-line">
+                    {maintenance.description}
+                  </td>
+                </tr>
+              ))}
+            {!isLoading && maintenances.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400">
+                  {buildingId
+                    ? 'No hay mantenimientos registrados en este edificio.'
+                    : 'Selecciona un edificio para consultar sus mantenimientos.'}
+                </td>
+              </tr>
+            )}
+            {isLoading && (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400">
+                  Cargando mantenimientos...
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
