@@ -184,6 +184,13 @@ export function updateMaintenanceStatus(maintenanceId, status) {
   });
 }
 
+export function updateMaintenanceCosts(maintenanceId, costs) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/costs`, {
+    method: 'PATCH',
+    body: JSON.stringify(costs)
+  });
+}
+
 export function getMaintenanceStatusHistory(maintenanceId) {
   return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status-history`);
 }

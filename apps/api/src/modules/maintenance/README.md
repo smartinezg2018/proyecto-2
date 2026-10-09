@@ -13,6 +13,7 @@ Base: `/api/v1/maintenance`
 | GET    | `/buildings/:buildingId/maintenances`         | `maintenance.view`   | Lista los mantenimientos de los activos del edificio |
 | PATCH  | `/maintenances/:maintenanceId/status`         | `maintenance.update` | Actualiza el estado de un mantenimiento              |
 | GET    | `/maintenances/:maintenanceId/status-history` | `maintenance.view`   | Lista fecha y usuario de cada cambio de estado       |
+| PATCH  | `/maintenances/:maintenanceId/costs`          | `maintenance.update` | Registra o corrige el costo estimado y el real       |
 
 Cuerpo de registro preventivo:
 
@@ -61,3 +62,18 @@ Transiciones permitidas:
 - `finalizado` y `cancelado` no admiten mas cambios
 
 Cada cambio guarda `from_status`, `to_status`, `changed_by` y `changed_at`, y queda en la auditoria con la accion `status_change`.
+
+Costos del mantenimiento (HU-026):
+
+`estimatedCost` y `actualCost` son opcionales al registrar el mantenimiento y se pueden registrar o corregir despues:
+
+```json
+{
+  "estimatedCost": 1500000,
+  "actualCost": 1725000.5
+}
+```
+
+- Ambos valores deben ser numericos, no negativos, con maximo dos decimales (columnas `DECIMAL(15, 2)`).
+- En el `PATCH` se debe enviar al menos uno de los dos campos; el campo omitido conserva su valor y `null` lo borra.
+- Cada actualizacion queda en la auditoria con la accion `cost_update` y los valores anteriores (`before`) y nuevos (`after`).

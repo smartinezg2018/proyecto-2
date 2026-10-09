@@ -8,7 +8,11 @@ import { requireAuth } from '../../../auth/presentation/http/middleware/requireA
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
-import { changeMaintenanceStatusSchema, registerMaintenanceSchema } from './maintenanceSchemas.js';
+import {
+  changeMaintenanceStatusSchema,
+  registerMaintenanceSchema,
+  updateMaintenanceCostsSchema
+} from './maintenanceSchemas.js';
 
 export const maintenanceRoutes = Router();
 const assetRepository = new AssetRepository();
@@ -116,6 +120,22 @@ maintenanceRoutes.patch(
   validateBody(changeMaintenanceStatusSchema),
   asyncHandler(async (request, response) => {
     const maintenance = await maintenanceUseCases.changeStatus(
+      request.params.maintenanceId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: maintenance, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.patch(
+  '/maintenances/:maintenanceId/costs',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureMaintenanceBuildingAccess,
+  validateBody(updateMaintenanceCostsSchema),
+  asyncHandler(async (request, response) => {
+    const maintenance = await maintenanceUseCases.updateCosts(
       request.params.maintenanceId,
       request.body,
       request.user.id

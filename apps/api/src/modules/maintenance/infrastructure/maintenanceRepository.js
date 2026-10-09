@@ -35,6 +35,10 @@ function formatDateTime(value) {
   return date.toISOString();
 }
 
+function toAmount(value) {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 function mapMaintenance(maintenance) {
   if (!maintenance) {
     return null;
@@ -53,6 +57,8 @@ function mapMaintenance(maintenance) {
     cause: data.cause ?? null,
     actionsTaken: data.actionsTaken ?? null,
     status: data.status,
+    estimatedCost: toAmount(data.estimatedCost),
+    actualCost: toAmount(data.actualCost),
     asset: data.asset ? { id: data.asset.id, code: data.asset.code, name: data.asset.name } : null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
@@ -82,6 +88,8 @@ export class MaintenanceRepository {
           cause: maintenance.cause ?? null,
           actionsTaken: maintenance.actionsTaken ?? null,
           status: maintenance.status,
+          estimatedCost: maintenance.estimatedCost ?? null,
+          actualCost: maintenance.actualCost ?? null,
           createdBy: maintenance.createdBy,
           updatedBy: maintenance.createdBy
         },
@@ -132,6 +140,15 @@ export class MaintenanceRepository {
         { transaction }
       );
     });
+
+    return this.findById(id);
+  }
+
+  async updateCosts(id, costs, updatedBy) {
+    await Maintenance.update(
+      { estimatedCost: costs.estimatedCost, actualCost: costs.actualCost, updatedBy },
+      { where: { id } }
+    );
 
     return this.findById(id);
   }

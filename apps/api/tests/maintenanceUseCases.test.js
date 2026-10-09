@@ -59,6 +59,13 @@ function createRepositories() {
         });
         return { ...current };
       },
+      async updateCosts(id, costs, updatedBy) {
+        const current = maintenances.find((item) => String(item.id) === String(id));
+        current.estimatedCost = costs.estimatedCost;
+        current.actualCost = costs.actualCost;
+        current.updatedBy = updatedBy;
+        return { ...current };
+      },
       async findStatusHistory(maintenanceId) {
         return statusHistory.filter(
           (entry) => String(entry.maintenanceId) === String(maintenanceId)
@@ -427,6 +434,109 @@ test('rechaza actualizar el estado de un mantenimiento inexistente', async () =>
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.changeStatus(99, { status: 'en_ejecucion' }, 7), {
+    statusCode: 404,
+    code: 'MAINTENANCE_NOT_FOUND'
+  });
+});
+
+test('registra costo estimado y costo real al crear el mantenimiento', async () => {
+  const { useCases, auditEntries } = setup();
+
+  const saved = await useCases.register(
+    1,
+    { ...validInput, estimatedCost: 1500000, actualCost: '1725000.50' },
+    7
+  );
+
+  assert.equal(saved.estimatedCost, 1500000);
+  assert.equal(saved.actualCost, 1725000.5);
+  assert.equal(auditEntries[0].metadata.estimatedCost, 1500000);
+  assert.equal(auditEntries[0].metadata.actualCost, 1725000.5);
+});
+
+test('los costos son opcionales al registrar el mantenimiento', async () => {
+  const { useCases } = setup();
+
+  const saved = await useCases.register(1, { ...validInput, estimatedCost: '' }, 7);
+
+  assert.equal(saved.estimatedCost, null);
+  assert.equal(saved.actualCost, null);
+});
+
+test('rechaza registrar un mantenimiento con costo negativo', async () => {
+  const { useCases, maintenances } = setup();
+
+  await assert.rejects(() => useCases.register(1, { ...validInput, estimatedCost: -1 }), {
+    statusCode: 400,
+    message: 'El costo estimado no puede ser negativo.'
+  });
+  assert.equal(maintenances.length, 0);
+});
+
+test('rechaza costos no numéricos o con más de dos decimales', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.register(1, { ...validInput, actualCost: 'mil' }), {
+    statusCode: 400,
+    message: 'El costo real debe ser numérico.'
+  });
+  await assert.rejects(() => useCases.register(1, { ...validInput, actualCost: 10.123 }), {
+    statusCode: 400,
+    message: 'El costo real admite como máximo dos decimales.'
+  });
+});
+
+test('actualiza el costo real conservando el estimado y lo audita', async () => {
+  const { useCases, auditEntries } = setup();
+  const saved = await useCases.register(1, { ...validInput, estimatedCost: 800000 }, 7);
+
+  const updated = await useCases.updateCosts(saved.id, { actualCost: 920000 }, 7);
+
+  assert.equal(updated.estimatedCost, 800000);
+  assert.equal(updated.actualCost, 920000);
+  assert.equal(updated.updatedBy, 7);
+  const entry = auditEntries.at(-1);
+  assert.equal(entry.action, 'cost_update');
+  assert.equal(entry.entityId, saved.id);
+  assert.equal(entry.buildingId, 10);
+  assert.deepEqual(entry.metadata.before, { estimatedCost: 800000, actualCost: null });
+  assert.deepEqual(entry.metadata.after, { estimatedCost: 800000, actualCost: 920000 });
+});
+
+test('permite borrar un costo enviando null', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, { ...validInput, estimatedCost: 500 }, 7);
+
+  const updated = await useCases.updateCosts(saved.id, { estimatedCost: null }, 7);
+
+  assert.equal(updated.estimatedCost, null);
+});
+
+test('rechaza actualizar costos sin enviar valores', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  await assert.rejects(() => useCases.updateCosts(saved.id, {}, 7), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('rechaza actualizar con un costo negativo sin modificar el mantenimiento', async () => {
+  const { useCases, maintenances } = setup();
+  const saved = await useCases.register(1, { ...validInput, actualCost: 100 }, 7);
+
+  await assert.rejects(() => useCases.updateCosts(saved.id, { actualCost: -50 }, 7), {
+    statusCode: 400,
+    message: 'El costo real no puede ser negativo.'
+  });
+  assert.equal(maintenances[0].actualCost, 100);
+});
+
+test('rechaza actualizar costos de un mantenimiento inexistente', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.updateCosts(99, { actualCost: 10 }, 7), {
     statusCode: 404,
     code: 'MAINTENANCE_NOT_FOUND'
   });
