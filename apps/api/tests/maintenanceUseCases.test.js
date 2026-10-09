@@ -186,3 +186,84 @@ test('lista los mantenimientos de un edificio', async () => {
   assert.equal(list.length, 1);
   assert.equal(list[0].assetId, 3);
 });
+
+const correctiveInput = {
+  maintenanceType: 'correctivo',
+  maintenanceDate: '2026-02-10',
+  failure: '  Fuga de aceite en la bomba  ',
+  cause: '  Sello hidráulico desgastado  ',
+  actionsTaken: '  Reemplazo del sello y purga del circuito  '
+};
+
+test('registra un mantenimiento correctivo con falla, causa y acciones ejecutadas', async () => {
+  const { useCases, maintenances } = setup();
+
+  const saved = await useCases.register(1, correctiveInput, 7);
+
+  assert.equal(saved.assetId, 1);
+  assert.equal(saved.buildingId, 10);
+  assert.equal(saved.maintenanceType, 'correctivo');
+  assert.equal(saved.maintenanceDate, '2026-02-10');
+  assert.equal(saved.failureDescription, 'Fuga de aceite en la bomba');
+  assert.equal(saved.cause, 'Sello hidráulico desgastado');
+  assert.equal(saved.actionsTaken, 'Reemplazo del sello y purga del circuito');
+  assert.equal(saved.createdBy, 7);
+  assert.equal(maintenances.length, 1);
+});
+
+test('deriva la descripción del correctivo cuando no se envía', async () => {
+  const { useCases, maintenances } = setup();
+
+  await useCases.register(1, correctiveInput);
+
+  assert.equal(
+    maintenances[0].description,
+    'Falla: Fuga de aceite en la bomba | Causa: Sello hidráulico desgastado | Acciones: Reemplazo del sello y purga del circuito'
+  );
+});
+
+test('respeta la descripción enviada cuando se registra un correctivo', async () => {
+  const { useCases, maintenances } = setup();
+
+  await useCases.register(1, { ...correctiveInput, description: '  Resumen operativo  ' });
+
+  assert.equal(maintenances[0].description, 'Resumen operativo');
+});
+
+test('registra auditoría con detalles del correctivo', async () => {
+  const { useCases, auditEntries } = setup();
+
+  await useCases.register(1, correctiveInput, 7);
+
+  assert.equal(auditEntries.length, 1);
+  assert.equal(auditEntries[0].metadata.failure, 'Fuga de aceite en la bomba');
+  assert.equal(auditEntries[0].metadata.cause, 'Sello hidráulico desgastado');
+  assert.equal(auditEntries[0].metadata.actionsTaken, 'Reemplazo del sello y purga del circuito');
+});
+
+test('rechaza un correctivo sin falla', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.register(1, { ...correctiveInput, failure: '   ' }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('rechaza un correctivo sin causa', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.register(1, { ...correctiveInput, cause: undefined }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('rechaza un correctivo sin acciones ejecutadas', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(
+    () => useCases.register(1, { ...correctiveInput, actionsTaken: '' }),
+    { statusCode: 400, code: 'VALIDATION_ERROR' }
+  );
+});
