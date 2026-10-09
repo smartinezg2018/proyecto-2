@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAINTENANCE_TYPES } from '../../domain/maintenanceCatalog.js';
+import { MAINTENANCE_STATUSES, MAINTENANCE_TYPES } from '../../domain/maintenanceCatalog.js';
 
 export const registerMaintenanceSchema = z
   .object({
@@ -50,3 +50,10 @@ export const registerMaintenanceSchema = z
       }
     }
   });
+
+export const changeMaintenanceStatusSchema = z.object({
+  status: z.enum(MAINTENANCE_STATUSES, {
+    error:
+      'El estado del mantenimiento no es válido. Use programado, en_ejecucion, finalizado o cancelado.'
+  })
+});

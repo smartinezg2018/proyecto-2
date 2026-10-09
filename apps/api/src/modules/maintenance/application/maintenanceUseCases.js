@@ -1,5 +1,19 @@
 import { AppError } from '../../../shared/errors/AppError.js';
-import { MAINTENANCE_TYPES } from '../domain/maintenanceCatalog.js';
+import {
+  MAINTENANCE_STATUSES,
+  MAINTENANCE_STATUS_TRANSITIONS,
+  MAINTENANCE_TYPES
+} from '../domain/maintenanceCatalog.js';
+
+const INITIAL_STATUS = 'programado';
+
+const STATUS_LABELS = {
+  programado: 'programado',
+  // eslint-disable-next-line camelcase
+  en_ejecucion: 'en ejecución',
+  finalizado: 'finalizado',
+  cancelado: 'cancelado'
+};
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const HISTORY_REASON_MAX_LENGTH = 255;
@@ -73,6 +87,44 @@ function truncate(value, maxLength) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
+function present(maintenance) {
+  return {
+    ...maintenance,
+    nextStatuses: MAINTENANCE_STATUS_TRANSITIONS[maintenance.status] ?? []
+  };
+}
+
+function assertStatus(status) {
+  if (!MAINTENANCE_STATUSES.includes(status)) {
+    throw new AppError(
+      'El estado del mantenimiento no es válido. Use programado, en_ejecucion, finalizado o cancelado.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+}
+
+function assertTransition(fromStatus, toStatus) {
+  const allowed = MAINTENANCE_STATUS_TRANSITIONS[fromStatus] ?? [];
+  if (allowed.includes(toStatus)) {
+    return;
+  }
+
+  if (fromStatus === 'finalizado' || fromStatus === 'cancelado') {
+    throw new AppError(
+      `Un mantenimiento ${STATUS_LABELS[fromStatus]} no admite más cambios de estado.`,
+      409,
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
+  throw new AppError(
+    `No se puede cambiar el estado de ${STATUS_LABELS[fromStatus]} a ${STATUS_LABELS[toStatus]}.`,
+    409,
+    'INVALID_STATUS_TRANSITION'
+  );
+}
+
 export function createMaintenanceUseCases(maintenanceRepository, assetRepository, audit = null) {
   async function getAsset(assetId) {
     const asset = await assetRepository.findById(assetId);
@@ -80,6 +132,14 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
       throw new AppError('El activo no existe.', 404, 'ASSET_NOT_FOUND');
     }
     return asset;
+  }
+
+  async function getMaintenance(maintenanceId) {
+    const maintenance = await maintenanceRepository.findById(maintenanceId);
+    if (!maintenance) {
+      throw new AppError('El mantenimiento no existe.', 404, 'MAINTENANCE_NOT_FOUND');
+    }
+    return maintenance;
   }
 
   return {
@@ -130,6 +190,7 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           failureDescription: failure,
           cause,
           actionsTaken,
+          status: INITIAL_STATUS,
           createdBy: userId
         },
         {
@@ -139,6 +200,12 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           newValue: input.maintenanceType,
           reason: truncate(description, HISTORY_REASON_MAX_LENGTH),
           createdBy: userId
+        },
+        {
+          fromStatus: null,
+          toStatus: INITIAL_STATUS,
+          changedBy: userId,
+          changedAt: new Date()
         }
       );
 
@@ -167,16 +234,71 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
         });
       }
 
-      return saved;
+      return present(saved);
     },
 
     async listByAsset(assetId) {
       await getAsset(assetId);
-      return maintenanceRepository.findByAsset(assetId);
+      const maintenances = await maintenanceRepository.findByAsset(assetId);
+      return maintenances.map(present);
     },
 
     async listByBuilding(buildingId) {
-      return maintenanceRepository.findByBuilding(buildingId);
+      const maintenances = await maintenanceRepository.findByBuilding(buildingId);
+      return maintenances.map(present);
+    },
+
+    async changeStatus(maintenanceId, input, userId = null) {
+      assertStatus(input.status);
+
+      const current = await getMaintenance(maintenanceId);
+      const previousStatus = current.status;
+      if (previousStatus === input.status) {
+        throw new AppError(
+          'El mantenimiento ya se encuentra en ese estado.',
+          409,
+          'UNCHANGED_MAINTENANCE_STATUS'
+        );
+      }
+
+      assertTransition(previousStatus, input.status);
+
+      const changedAt = new Date();
+      const updated = await maintenanceRepository.updateStatus(
+        maintenanceId,
+        input.status,
+        userId,
+        {
+          fromStatus: previousStatus,
+          toStatus: input.status,
+          changedBy: userId,
+          changedAt
+        }
+      );
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'status_change',
+          module: 'maintenance',
+          entity: 'maintenance',
+          entityId: updated.id,
+          buildingId: updated.buildingId,
+          metadata: {
+            assetId: updated.assetId,
+            from: previousStatus,
+            to: input.status,
+            changedAt: changedAt.toISOString()
+          }
+        });
+      }
+
+      return present(updated);
+    },
+
+    async listStatusHistory(maintenanceId) {
+      await getMaintenance(maintenanceId);
+      return maintenanceRepository.findStatusHistory(maintenanceId);
     }
   };
 }

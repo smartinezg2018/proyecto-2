@@ -46,7 +46,11 @@ test('requirePermission responde 403 cuando falta el permiso', () => {
 
 test('ensureBuildingAccess rechaza acceso cuando no está asignado', async () => {
   const middleware = createEnsureBuildingAccess({
-    authorization: { async hasBuildingAccess() { return false; } }
+    authorization: {
+      async hasBuildingAccess() {
+        return false;
+      }
+    }
   });
   const response = makeResponse();
   await middleware(

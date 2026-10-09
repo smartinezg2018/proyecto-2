@@ -49,6 +49,7 @@ const SEED_PROFILES = [
       'users.list',
       'profiles.list',
       'maintenance.view',
+      'maintenance.update',
       'insurance.view',
       'billing.view',
       'budget.view',
