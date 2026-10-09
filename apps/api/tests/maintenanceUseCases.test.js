@@ -10,11 +10,13 @@ function createRepositories() {
   ];
   const maintenances = [];
   const history = [];
+  const statusHistory = [];
   const auditEntries = [];
 
   return {
     history,
     maintenances,
+    statusHistory,
     auditEntries,
     assetRepository: {
       async findById(id) {
@@ -22,17 +24,45 @@ function createRepositories() {
       }
     },
     maintenanceRepository: {
-      async create(maintenance, historyEntry) {
+      async create(maintenance, historyEntry, statusChange) {
         const created = { id: maintenances.length + 1, ...maintenance };
         maintenances.push(created);
         history.push({ ...historyEntry, assetId: maintenance.assetId });
+        if (statusChange) {
+          statusHistory.push({
+            id: statusHistory.length + 1,
+            maintenanceId: created.id,
+            changedByName: statusChange.changedBy === 7 ? 'Ana Martínez' : null,
+            ...statusChange
+          });
+        }
         return created;
+      },
+      async findById(id) {
+        return maintenances.find((item) => String(item.id) === String(id)) ?? null;
       },
       async findByAsset(assetId) {
         return maintenances.filter((item) => String(item.assetId) === String(assetId));
       },
       async findByBuilding(buildingId) {
         return maintenances.filter((item) => String(item.buildingId) === String(buildingId));
+      },
+      async updateStatus(id, status, updatedBy, statusChange) {
+        const current = maintenances.find((item) => String(item.id) === String(id));
+        current.status = status;
+        current.updatedBy = updatedBy;
+        statusHistory.push({
+          id: statusHistory.length + 1,
+          maintenanceId: current.id,
+          changedByName: statusChange.changedBy === 7 ? 'Ana Martínez' : null,
+          ...statusChange
+        });
+        return { ...current };
+      },
+      async findStatusHistory(maintenanceId) {
+        return statusHistory.filter(
+          (entry) => String(entry.maintenanceId) === String(maintenanceId)
+        );
       }
     },
     audit: {
@@ -262,8 +292,142 @@ test('rechaza un correctivo sin causa', async () => {
 test('rechaza un correctivo sin acciones ejecutadas', async () => {
   const { useCases } = setup();
 
-  await assert.rejects(
-    () => useCases.register(1, { ...correctiveInput, actionsTaken: '' }),
-    { statusCode: 400, code: 'VALIDATION_ERROR' }
-  );
+  await assert.rejects(() => useCases.register(1, { ...correctiveInput, actionsTaken: '' }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('un mantenimiento nuevo inicia en programado y registra usuario y fecha', async () => {
+  const { useCases, statusHistory } = setup();
+
+  const saved = await useCases.register(1, { ...validInput, status: 'finalizado' }, 7);
+
+  assert.equal(saved.status, 'programado');
+  assert.deepEqual(saved.nextStatuses, ['en_ejecucion', 'cancelado']);
+  assert.equal(statusHistory.length, 1);
+  assert.equal(statusHistory[0].maintenanceId, saved.id);
+  assert.equal(statusHistory[0].fromStatus, null);
+  assert.equal(statusHistory[0].toStatus, 'programado');
+  assert.equal(statusHistory[0].changedBy, 7);
+  assert.ok(statusHistory[0].changedAt instanceof Date);
+});
+
+test('pasa un mantenimiento de programado a en ejecución y guarda el cambio', async () => {
+  const { useCases, statusHistory, auditEntries } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  const updated = await useCases.changeStatus(saved.id, { status: 'en_ejecucion' }, 7);
+
+  assert.equal(updated.status, 'en_ejecucion');
+  assert.deepEqual(updated.nextStatuses, ['finalizado', 'cancelado']);
+  assert.equal(statusHistory.length, 2);
+  assert.equal(statusHistory[1].fromStatus, 'programado');
+  assert.equal(statusHistory[1].toStatus, 'en_ejecucion');
+  assert.equal(statusHistory[1].changedBy, 7);
+  assert.ok(statusHistory[1].changedAt instanceof Date);
+  assert.equal(auditEntries.at(-1).action, 'status_change');
+  assert.equal(auditEntries.at(-1).metadata.from, 'programado');
+  assert.equal(auditEntries.at(-1).metadata.to, 'en_ejecucion');
+  assert.equal(auditEntries.at(-1).userId, 7);
+});
+
+test('permite finalizar o cancelar un mantenimiento en ejecución', async () => {
+  const { useCases } = setup();
+  const first = await useCases.register(1, validInput, 7);
+  await useCases.changeStatus(first.id, { status: 'en_ejecucion' }, 7);
+  const finished = await useCases.changeStatus(first.id, { status: 'finalizado' }, 7);
+  assert.equal(finished.status, 'finalizado');
+  assert.deepEqual(finished.nextStatuses, []);
+
+  const second = await useCases.register(1, validInput, 7);
+  await useCases.changeStatus(second.id, { status: 'en_ejecucion' }, 7);
+  const cancelled = await useCases.changeStatus(second.id, { status: 'cancelado' }, 7);
+  assert.equal(cancelled.status, 'cancelado');
+});
+
+test('permite cancelar un mantenimiento programado', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  const updated = await useCases.changeStatus(saved.id, { status: 'cancelado' }, 7);
+
+  assert.equal(updated.status, 'cancelado');
+});
+
+test('lista el historial de estados con fecha y usuario en orden cronológico', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+  await useCases.changeStatus(saved.id, { status: 'en_ejecucion' }, 7);
+
+  const history = await useCases.listStatusHistory(saved.id);
+
+  assert.equal(history.length, 2);
+  assert.equal(history[0].toStatus, 'programado');
+  assert.equal(history[0].changedBy, 7);
+  assert.equal(history[0].changedByName, 'Ana Martínez');
+  assert.ok(history[0].changedAt instanceof Date);
+  assert.equal(history[1].fromStatus, 'programado');
+  assert.equal(history[1].toStatus, 'en_ejecucion');
+  assert.ok(history[0].changedAt.getTime() <= history[1].changedAt.getTime());
+});
+
+test('rechaza un estado de mantenimiento inválido', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  await assert.rejects(() => useCases.changeStatus(saved.id, { status: 'activo' }, 7), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('rechaza dejar el mantenimiento en el mismo estado', async () => {
+  const { useCases, statusHistory } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  await assert.rejects(() => useCases.changeStatus(saved.id, { status: 'programado' }, 7), {
+    statusCode: 409,
+    code: 'UNCHANGED_MAINTENANCE_STATUS'
+  });
+  assert.equal(statusHistory.length, 1);
+});
+
+test('rechaza saltar de programado a finalizado', async () => {
+  const { useCases } = setup();
+  const saved = await useCases.register(1, validInput, 7);
+
+  await assert.rejects(() => useCases.changeStatus(saved.id, { status: 'finalizado' }, 7), {
+    statusCode: 409,
+    code: 'INVALID_STATUS_TRANSITION'
+  });
+});
+
+test('rechaza cambiar un mantenimiento finalizado o cancelado', async () => {
+  const { useCases } = setup();
+  const finished = await useCases.register(1, validInput, 7);
+  await useCases.changeStatus(finished.id, { status: 'en_ejecucion' }, 7);
+  await useCases.changeStatus(finished.id, { status: 'finalizado' }, 7);
+
+  await assert.rejects(() => useCases.changeStatus(finished.id, { status: 'cancelado' }, 7), {
+    statusCode: 409,
+    code: 'INVALID_STATUS_TRANSITION'
+  });
+
+  const cancelled = await useCases.register(1, validInput, 7);
+  await useCases.changeStatus(cancelled.id, { status: 'cancelado' }, 7);
+
+  await assert.rejects(() => useCases.changeStatus(cancelled.id, { status: 'en_ejecucion' }, 7), {
+    statusCode: 409,
+    code: 'INVALID_STATUS_TRANSITION'
+  });
+});
+
+test('rechaza actualizar el estado de un mantenimiento inexistente', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.changeStatus(99, { status: 'en_ejecucion' }, 7), {
+    statusCode: 404,
+    code: 'MAINTENANCE_NOT_FOUND'
+  });
 });

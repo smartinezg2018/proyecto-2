@@ -893,10 +893,7 @@ export function ModuleInventario() {
           <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
             <h3 className="mb-4 text-base font-bold text-slate-900">Costos del activo</h3>
 
-            <form
-              onSubmit={applyCostFilters}
-              className="mb-4 grid gap-3 sm:grid-cols-4 items-end"
-            >
+            <form onSubmit={applyCostFilters} className="mb-4 grid gap-3 sm:grid-cols-4 items-end">
               <label>
                 <span className="mb-1 block text-xs font-bold text-slate-500">Tipo</span>
                 <select
@@ -986,9 +983,7 @@ export function ModuleInventario() {
               </table>
             </div>
 
-            <h4 className="mb-3 text-sm font-bold text-slate-800">
-              Registrar costo de operación
-            </h4>
+            <h4 className="mb-3 text-sm font-bold text-slate-800">Registrar costo de operación</h4>
             <form onSubmit={submitOperatingCost} className="grid gap-4 sm:grid-cols-2">
               <label>
                 <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>

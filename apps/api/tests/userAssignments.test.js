@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createUserUseCases } from '../src/modules/administration/application/userUseCases.js';
 
-function createRepository({ users = [{ id: 1 }], profiles = [10, 20], buildings = [100, 200] } = {}) {
+function createRepository({
+  users = [{ id: 1 }],
+  profiles = [10, 20],
+  buildings = [100, 200]
+} = {}) {
   const state = {
     profileAssignments: new Map(),
     buildingAssignments: new Map()
@@ -84,7 +88,13 @@ test('assignBuildings rechaza edificios inexistentes', async () => {
 
 test('assignProfiles valida el tipo de la lista', async () => {
   const useCases = createUserUseCases(createRepository(), null);
-  for (const input of [undefined, {}, { profileIds: 'x' }, { profileIds: [0] }, { profileIds: [-1] }]) {
+  for (const input of [
+    undefined,
+    {},
+    { profileIds: 'x' },
+    { profileIds: [0] },
+    { profileIds: [-1] }
+  ]) {
     await assert.rejects(() => useCases.assignProfiles(1, input, 7), {
       code: 'VALIDATION_ERROR'
     });

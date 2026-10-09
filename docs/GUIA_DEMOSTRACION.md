@@ -145,7 +145,7 @@ En el detalle, panel **Historial del activo**:
 1. Confirmar que aparecen los cambios de información y estado (SR-016.1).
 2. Recorrer los registros en orden cronológico con usuario y fecha (SR-016.2).
 
-### 5.6 Consultar detalle del activo — **HU-017** *(parcial)*
+### 5.6 Consultar detalle del activo — **HU-017** _(parcial)_
 
 Panel **Detalle del activo**:
 
@@ -217,27 +217,25 @@ curl.exe -b cookies.txt "http://localhost:5000/api/v1/assets/5/costs/summary?fro
 
 ## 8. Cobertura demostrada
 
-| HU  | Título                               | Cubierta en |
-| --- | ------------------------------------ | ----------- |
-| HU-001 | Registrar edificio                | 2.1 |
-| HU-002 | Consultar edificios (parcial)     | 2.2 |
-| HU-003 | Actualizar edificio               | 2.3 |
-| HU-004 | Crear perfiles de usuario         | 3.1 |
-| HU-005 | Registrar usuario administrativo  | 3.2 |
-| HU-006 | Asignar roles y permisos          | 3.3 |
-| HU-007 | Asignar edificios al usuario      | 3.4 |
-| HU-008 | Iniciar sesión                    | 1.1 |
-| HU-009 | Consultar auditoría               | 6.1 |
-| HU-010 | Registrar apartamento             | 4.1 |
-| HU-011 | Registrar responsable             | 4.2 |
-| HU-012 | Registrar activo                  | 5.1 |
-| HU-013 | Consultar activos                 | 5.2 |
-| HU-014 | Actualizar activo                 | 5.3 |
-| HU-015 | Cambiar estado del activo         | 5.4 |
-| HU-016 | Consultar historial del activo    | 5.5 |
-| HU-017 | Consultar detalle (parcial)       | 5.6 |
-| HU-018 | Registrar proveedor del activo    | 5.7 |
-| HU-019 | Registrar costo de adquisición    | 5.8 |
-| HU-020 | Consultar costos del activo       | 5.9 |
-
-
+| HU     | Título                           | Cubierta en |
+| ------ | -------------------------------- | ----------- |
+| HU-001 | Registrar edificio               | 2.1         |
+| HU-002 | Consultar edificios (parcial)    | 2.2         |
+| HU-003 | Actualizar edificio              | 2.3         |
+| HU-004 | Crear perfiles de usuario        | 3.1         |
+| HU-005 | Registrar usuario administrativo | 3.2         |
+| HU-006 | Asignar roles y permisos         | 3.3         |
+| HU-007 | Asignar edificios al usuario     | 3.4         |
+| HU-008 | Iniciar sesión                   | 1.1         |
+| HU-009 | Consultar auditoría              | 6.1         |
+| HU-010 | Registrar apartamento            | 4.1         |
+| HU-011 | Registrar responsable            | 4.2         |
+| HU-012 | Registrar activo                 | 5.1         |
+| HU-013 | Consultar activos                | 5.2         |
+| HU-014 | Actualizar activo                | 5.3         |
+| HU-015 | Cambiar estado del activo        | 5.4         |
+| HU-016 | Consultar historial del activo   | 5.5         |
+| HU-017 | Consultar detalle (parcial)      | 5.6         |
+| HU-018 | Registrar proveedor del activo   | 5.7         |
+| HU-019 | Registrar costo de adquisición   | 5.8         |
+| HU-020 | Consultar costos del activo      | 5.9         |

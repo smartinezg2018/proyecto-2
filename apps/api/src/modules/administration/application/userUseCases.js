@@ -4,6 +4,7 @@ import { hashPassword } from '../../auth/infrastructure/password.js';
 const requiredFields = ['identification', 'name', 'email'];
 const fieldLengths = { identification: 50, name: 150, email: 150 };
 const userStatuses = ['active', 'inactive'];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validateUserInput(input) {
   for (const field of requiredFields) {
@@ -17,6 +18,10 @@ function validateUserInput(input) {
         'VALIDATION_ERROR'
       );
     }
+  }
+
+  if (!EMAIL_PATTERN.test(input.email.trim())) {
+    throw new AppError('El campo email no tiene un formato válido.', 400, 'VALIDATION_ERROR');
   }
 
   if (!userStatuses.includes(input.status)) {

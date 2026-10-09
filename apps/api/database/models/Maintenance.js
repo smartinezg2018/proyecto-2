@@ -43,6 +43,11 @@ export const Maintenance = sequelize.define(
       allowNull: true,
       field: 'actions_taken'
     },
+    status: {
+      type: DataTypes.STRING(30),
+      allowNull: false,
+      defaultValue: 'programado'
+    },
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
   },

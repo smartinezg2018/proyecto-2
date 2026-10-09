@@ -6,10 +6,12 @@ import {
   OPERATING_COST_TYPES,
   SUPPLIER_ROLES
 } from '../../domain/assetCatalog.js';
+import { isCalendarDate } from '../../domain/calendarDate.js';
 
 const dateSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener el formato YYYY-MM-DD.');
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener el formato YYYY-MM-DD.')
+  .refine(isCalendarDate, 'La fecha no es una fecha válida del calendario.');
 
 const amountSchema = z.coerce
   .number({ error: 'El valor del costo debe ser numérico.' })

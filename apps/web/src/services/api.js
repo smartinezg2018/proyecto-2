@@ -177,6 +177,17 @@ export function getBuildingMaintenances(buildingId) {
   return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/maintenances`);
 }
 
+export function updateMaintenanceStatus(maintenanceId, status) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  });
+}
+
+export function getMaintenanceStatusHistory(maintenanceId) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status-history`);
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

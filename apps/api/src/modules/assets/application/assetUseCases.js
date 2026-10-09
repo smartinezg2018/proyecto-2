@@ -1,5 +1,6 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 import { ASSET_STATUSES, ASSET_TYPES } from '../domain/assetCatalog.js';
+import { isCalendarDate } from '../domain/calendarDate.js';
 
 export { ASSET_STATUSES, ASSET_TYPES };
 
@@ -21,6 +22,13 @@ function validateAcquisitionDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
     throw new AppError(
       'La fecha de adquisición debe tener el formato YYYY-MM-DD.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  if (!isCalendarDate(value)) {
+    throw new AppError(
+      'La fecha de adquisición no es una fecha válida del calendario.',
       400,
       'VALIDATION_ERROR'
     );

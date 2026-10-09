@@ -8,13 +8,14 @@ import { requireAuth } from '../../../auth/presentation/http/middleware/requireA
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
-import { registerMaintenanceSchema } from './maintenanceSchemas.js';
+import { changeMaintenanceStatusSchema, registerMaintenanceSchema } from './maintenanceSchemas.js';
 
 export const maintenanceRoutes = Router();
 const assetRepository = new AssetRepository();
+const maintenanceRepository = new MaintenanceRepository();
 
 const maintenanceUseCases = createMaintenanceUseCases(
-  new MaintenanceRepository(),
+  maintenanceRepository,
   assetRepository,
   new AuditRepository()
 );
@@ -22,6 +23,19 @@ const maintenanceUseCases = createMaintenanceUseCases(
 const asyncHandler = (handler) => (request, response, next) => {
   Promise.resolve(handler(request, response, next)).catch(next);
 };
+
+async function ensureMaintenanceBuildingAccess(request, response, next) {
+  try {
+    const maintenance = await maintenanceRepository.findById(request.params.maintenanceId);
+    if (!maintenance) {
+      throw new AppError('El mantenimiento no existe.', 404, 'MAINTENANCE_NOT_FOUND');
+    }
+    request.params.buildingId = String(maintenance.buildingId);
+    return ensureBuildingAccess(request, response, next);
+  } catch (error) {
+    next(error);
+  }
+}
 
 async function ensureAssetBuildingAccess(request, response, next) {
   try {
@@ -77,5 +91,35 @@ maintenanceRoutes.post(
       request.user.id
     );
     response.status(201).json({ data: maintenance, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.get(
+  '/maintenances/:maintenanceId/status-history',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureMaintenanceBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const history = await maintenanceUseCases.listStatusHistory(request.params.maintenanceId);
+    response.json({
+      data: history,
+      meta: { requestId: request.id, page: 1, pageSize: history.length }
+    });
+  })
+);
+
+maintenanceRoutes.patch(
+  '/maintenances/:maintenanceId/status',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureMaintenanceBuildingAccess,
+  validateBody(changeMaintenanceStatusSchema),
+  asyncHandler(async (request, response) => {
+    const maintenance = await maintenanceUseCases.changeStatus(
+      request.params.maintenanceId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: maintenance, meta: { requestId: request.id } });
   })
 );
