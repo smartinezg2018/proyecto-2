@@ -213,6 +213,17 @@ export function createMaintenanceQuote(maintenanceId, quote) {
   });
 }
 
+export function getInsuranceQuotes(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`);
+}
+
+export function createInsuranceQuote(buildingId, quote) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`, {
+    method: 'POST',
+    body: JSON.stringify(quote)
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',
