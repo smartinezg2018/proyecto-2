@@ -27,6 +27,7 @@ AssetCost.belongsTo(Asset, { foreignKey: 'assetId' });
 
 Asset.hasMany(Maintenance, { foreignKey: 'assetId', as: 'maintenances' });
 Maintenance.belongsTo(Asset, { foreignKey: 'assetId', as: 'asset' });
+Maintenance.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
 
 Maintenance.hasMany(MaintenanceStatusHistory, {
   foreignKey: 'maintenanceId',

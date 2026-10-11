@@ -82,3 +82,22 @@ export const changeMaintenanceStatusSchema = z.object({
       'El estado del mantenimiento no es válido. Use programado, en_ejecucion, finalizado o cancelado.'
   })
 });
+
+export const assignMaintenanceSupplierSchema = z
+  .object({
+    supplierId: z.coerce.number().int().positive().optional().nullable(),
+    identification: z.string().trim().optional().nullable(),
+    name: z.string().trim().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    email: z.union([z.email('El correo debe ser un email válido.'), z.literal('')]).optional().nullable(),
+    documentRef: z.string().trim().max(255).optional().nullable()
+  })
+  .superRefine((value, context) => {
+    if (value.supplierId) return;
+    if (!value.identification) {
+      context.addIssue({ code: 'custom', path: ['identification'], message: 'La identificación del proveedor es obligatoria.' });
+    }
+    if (!value.name) {
+      context.addIssue({ code: 'custom', path: ['name'], message: 'El nombre del proveedor es obligatorio.' });
+    }
+  });

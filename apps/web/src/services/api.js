@@ -191,6 +191,13 @@ export function updateMaintenanceCosts(maintenanceId, costs) {
   });
 }
 
+export function assignMaintenanceSupplier(maintenanceId, supplier) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/supplier`, {
+    method: 'PUT',
+    body: JSON.stringify(supplier)
+  });
+}
+
 export function getMaintenanceStatusHistory(maintenanceId) {
   return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status-history`);
 }

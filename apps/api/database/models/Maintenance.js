@@ -17,6 +17,16 @@ export const Maintenance = sequelize.define(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false
     },
+    supplierId: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+      field: 'supplier_id'
+    },
+    supplierDocumentRef: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: 'supplier_document_ref'
+    },
     maintenanceType: {
       type: DataTypes.STRING(30),
       allowNull: false

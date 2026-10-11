@@ -4,7 +4,8 @@ import {
   Asset,
   AssetHistory,
   Maintenance,
-  MaintenanceStatusHistory
+  MaintenanceStatusHistory,
+  Supplier
 } from '../../../../database/models/index.js';
 
 function formatDate(value) {
@@ -50,6 +51,8 @@ function mapMaintenance(maintenance) {
     id: data.id,
     assetId: data.assetId,
     buildingId: data.buildingId,
+    supplierId: data.supplierId,
+    supplierDocumentRef: data.supplierDocumentRef,
     maintenanceType: data.maintenanceType,
     maintenanceDate: formatDate(data.maintenanceDate),
     description: data.description,
@@ -60,6 +63,15 @@ function mapMaintenance(maintenance) {
     estimatedCost: toAmount(data.estimatedCost),
     actualCost: toAmount(data.actualCost),
     asset: data.asset ? { id: data.asset.id, code: data.asset.code, name: data.asset.name } : null,
+    supplier: data.supplier
+      ? {
+          id: data.supplier.id,
+          identification: data.supplier.identification,
+          name: data.supplier.name,
+          phone: data.supplier.phone,
+          email: data.supplier.email
+        }
+      : null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
@@ -68,6 +80,11 @@ function mapMaintenance(maintenance) {
 }
 
 const assetInclude = { model: Asset, as: 'asset', attributes: ['id', 'code', 'name'] };
+const supplierInclude = {
+  model: Supplier,
+  as: 'supplier',
+  attributes: ['id', 'identification', 'name', 'phone', 'email']
+};
 
 const chronologicalOrder = [
   ['maintenanceDate', 'DESC'],
@@ -81,6 +98,8 @@ export class MaintenanceRepository {
         {
           assetId: maintenance.assetId,
           buildingId: maintenance.buildingId,
+          supplierId: maintenance.supplierId ?? null,
+          supplierDocumentRef: maintenance.supplierDocumentRef ?? null,
           maintenanceType: maintenance.maintenanceType,
           maintenanceDate: maintenance.maintenanceDate,
           description: maintenance.description,
@@ -153,15 +172,24 @@ export class MaintenanceRepository {
     return this.findById(id);
   }
 
+  async updateSupplier(id, supplierId, documentRef, updatedBy) {
+    await Maintenance.update(
+      { supplierId, supplierDocumentRef: documentRef, updatedBy },
+      { where: { id } }
+    );
+
+    return this.findById(id);
+  }
+
   async findById(id) {
-    const maintenance = await Maintenance.findByPk(id, { include: [assetInclude] });
+    const maintenance = await Maintenance.findByPk(id, { include: [assetInclude, supplierInclude] });
     return mapMaintenance(maintenance);
   }
 
   async findByAsset(assetId) {
     const maintenances = await Maintenance.findAll({
       where: { assetId: Number(assetId) },
-      include: [assetInclude],
+      include: [assetInclude, supplierInclude],
       order: chronologicalOrder
     });
 
@@ -171,7 +199,7 @@ export class MaintenanceRepository {
   async findByBuilding(buildingId) {
     const maintenances = await Maintenance.findAll({
       where: { buildingId: Number(buildingId) },
-      include: [assetInclude],
+      include: [assetInclude, supplierInclude],
       order: chronologicalOrder
     });
 
