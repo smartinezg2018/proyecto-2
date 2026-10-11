@@ -202,6 +202,17 @@ export function getMaintenanceStatusHistory(maintenanceId) {
   return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status-history`);
 }
 
+export function getMaintenanceQuotes(maintenanceId) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/quotes`);
+}
+
+export function createMaintenanceQuote(maintenanceId, quote) {
+  return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/quotes`, {
+    method: 'POST',
+    body: JSON.stringify(quote)
+  });
+}
+
 export function createUser(user) {
   return apiRequest('/api/v1/administration/users', {
     method: 'POST',

@@ -4,7 +4,9 @@ import { AuditRepository } from '../../../administration/infrastructure/auditRep
 import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { createMaintenanceUseCases } from '../../application/maintenanceUseCases.js';
 import { createMaintenanceSupplierUseCases } from '../../application/maintenanceSupplierUseCases.js';
+import { createMaintenanceQuoteUseCases } from '../../application/maintenanceQuoteUseCases.js';
 import { MaintenanceRepository } from '../../infrastructure/maintenanceRepository.js';
+import { MaintenanceQuoteRepository } from '../../infrastructure/maintenanceQuoteRepository.js';
 import { SupplierRepository } from '../../../assets/infrastructure/supplierRepository.js';
 import { requireAuth } from '../../../auth/presentation/http/middleware/requireAuth.js';
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
@@ -14,13 +16,15 @@ import {
   changeMaintenanceStatusSchema,
   registerMaintenanceSchema,
   updateMaintenanceCostsSchema,
-  assignMaintenanceSupplierSchema
+  assignMaintenanceSupplierSchema,
+  createMaintenanceQuoteSchema
 } from './maintenanceSchemas.js';
 
 export const maintenanceRoutes = Router();
 const assetRepository = new AssetRepository();
 const maintenanceRepository = new MaintenanceRepository();
 const supplierRepository = new SupplierRepository();
+const quoteRepository = new MaintenanceQuoteRepository();
 
 const maintenanceUseCases = createMaintenanceUseCases(
   maintenanceRepository,
@@ -31,6 +35,11 @@ const maintenanceSupplierUseCases = createMaintenanceSupplierUseCases(
   maintenanceRepository,
   supplierRepository,
   new AuditRepository()
+);
+const maintenanceQuoteUseCases = createMaintenanceQuoteUseCases(
+  quoteRepository,
+  maintenanceRepository,
+  supplierRepository
 );
 
 const asyncHandler = (handler) => (request, response, next) => {
@@ -177,5 +186,32 @@ maintenanceRoutes.put(
       request.user.id
     );
     response.json({ data: supplier, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.get(
+  '/maintenances/:maintenanceId/quotes',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureMaintenanceBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const quotes = await maintenanceQuoteUseCases.list(request.params.maintenanceId);
+    response.json({ data: quotes, meta: { requestId: request.id, page: 1, pageSize: quotes.length } });
+  })
+);
+
+maintenanceRoutes.post(
+  '/maintenances/:maintenanceId/quotes',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureMaintenanceBuildingAccess,
+  validateBody(createMaintenanceQuoteSchema),
+  asyncHandler(async (request, response) => {
+    const quote = await maintenanceQuoteUseCases.create(
+      request.params.maintenanceId,
+      request.body,
+      request.user.id
+    );
+    response.status(201).json({ data: quote, meta: { requestId: request.id } });
   })
 );
