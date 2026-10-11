@@ -5,6 +5,8 @@ import {
   getAssets,
   getBuildingMaintenances,
   getMaintenanceStatusHistory,
+  getMaintenanceQuotes,
+  createMaintenanceQuote,
   getMyBuildings,
   getSuppliers,
   registerMaintenance,
@@ -112,6 +114,9 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     documentRef: ''
   });
   const [isSupplierSaving, setIsSupplierSaving] = useState(false);
+  const [quotes, setQuotes] = useState([]);
+  const [quoteForm, setQuoteForm] = useState({ supplierId: '', amount: '', validUntil: '', documentRef: '', scope: '', conditions: '' });
+  const [isQuoteSaving, setIsQuoteSaving] = useState(false);
 
   const canRegister = hasPermission(permissions, 'maintenance.create');
   const canUpdateStatus = hasPermission(permissions, 'maintenance.update');
@@ -141,6 +146,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     setIsFormOpen(false);
     setSelectedMaintenanceId(null);
     setStatusHistory([]);
+    setQuotes([]);
     setNextStatus('');
     if (!buildingId) {
       setAssets([]);
@@ -228,10 +234,29 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     try {
       const response = await getMaintenanceStatusHistory(maintenance.id);
       setStatusHistory(response.data ?? []);
+      const quotesResponse = await getMaintenanceQuotes(maintenance.id);
+      setQuotes(quotesResponse.data ?? []);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsStatusLoading(false);
+    }
+  }
+
+  async function submitQuote(event) {
+    event.preventDefault();
+    if (!selectedMaintenance) return;
+    setIsQuoteSaving(true);
+    try {
+      await createMaintenanceQuote(selectedMaintenance.id, { ...quoteForm, amount: quoteForm.amount.trim() });
+      setQuoteForm({ supplierId: '', amount: '', validUntil: '', documentRef: '', scope: '', conditions: '' });
+      const response = await getMaintenanceQuotes(selectedMaintenance.id);
+      setQuotes(response.data ?? []);
+      setStatus({ type: 'success', message: 'Cotización registrada correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsQuoteSaving(false);
     }
   }
 
@@ -581,6 +606,26 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
             <p className="mb-5 text-sm text-slate-500">
               Este mantenimiento no admite más cambios de estado.
             </p>
+          )}
+
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+            Comparativo de cotizaciones
+          </h4>
+          {canUpdateStatus && (
+            <form onSubmit={submitQuote} className="mb-4 grid gap-3 sm:grid-cols-3">
+              <input required placeholder="ID proveedor *" value={quoteForm.supplierId} onChange={(event) => setQuoteForm({ ...quoteForm, supplierId: event.target.value })} className={inputClassName} />
+              <input required type="number" min="0" step="0.01" placeholder="Valor *" value={quoteForm.amount} onChange={(event) => setQuoteForm({ ...quoteForm, amount: event.target.value })} className={inputClassName} />
+              <input required type="date" value={quoteForm.validUntil} onChange={(event) => setQuoteForm({ ...quoteForm, validUntil: event.target.value })} className={inputClassName} />
+              <input required placeholder="Alcance *" value={quoteForm.scope} onChange={(event) => setQuoteForm({ ...quoteForm, scope: event.target.value })} className="sm:col-span-2" />
+              <input required placeholder="Condiciones *" value={quoteForm.conditions} onChange={(event) => setQuoteForm({ ...quoteForm, conditions: event.target.value })} className={inputClassName} />
+              <input placeholder="Documento" value={quoteForm.documentRef} onChange={(event) => setQuoteForm({ ...quoteForm, documentRef: event.target.value })} className={inputClassName} />
+              <div className="flex items-end"><ActionButton type="submit" disabled={isQuoteSaving}><Save size={14} /> Guardar cotización</ActionButton></div>
+            </form>
+          )}
+          {quotes.length === 0 ? <p className="mb-5 text-sm text-slate-400">No hay cotizaciones registradas.</p> : (
+            <div className="mb-5 overflow-x-auto">
+              <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-100 text-xs text-slate-400"><th className="px-2 py-2">Proveedor</th><th className="px-2 py-2">Valor</th><th className="px-2 py-2">Vigencia</th><th className="px-2 py-2">Alcance</th><th className="px-2 py-2">Condiciones</th></tr></thead><tbody>{quotes.map((quote) => <tr key={quote.id} className="border-b border-slate-50"><td className="px-2 py-2">{quote.supplier?.name || quote.supplierId}</td><td className="px-2 py-2 font-semibold">{formatCurrency(quote.amount)}</td><td className="px-2 py-2">{quote.validUntil}</td><td className="px-2 py-2">{quote.scope}</td><td className="px-2 py-2">{quote.conditions}</td></tr>)}</tbody></table>
+            </div>
           )}
 
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">

@@ -101,3 +101,12 @@ export const assignMaintenanceSupplierSchema = z
       context.addIssue({ code: 'custom', path: ['name'], message: 'El nombre del proveedor es obligatorio.' });
     }
   });
+
+export const createMaintenanceQuoteSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  amount: z.coerce.number().nonnegative(),
+  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La vigencia debe tener el formato YYYY-MM-DD.'),
+  documentRef: z.string().trim().max(255).optional().nullable(),
+  scope: z.string().trim().min(1, 'El alcance es obligatorio.'),
+  conditions: z.string().trim().min(1, 'Las condiciones son obligatorias.')
+});
