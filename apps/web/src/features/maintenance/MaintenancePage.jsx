@@ -6,7 +6,9 @@ import {
   getBuildingMaintenances,
   getMaintenanceStatusHistory,
   getMyBuildings,
+  getSuppliers,
   registerMaintenance,
+  assignMaintenanceSupplier,
   updateMaintenanceCosts,
   updateMaintenanceStatus
 } from '../../services/api.js';
@@ -100,6 +102,16 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [costForm, setCostForm] = useState({ estimatedCost: '', actualCost: '' });
   const [isCostSaving, setIsCostSaving] = useState(false);
+  const [suppliers, setSuppliers] = useState([]);
+  const [supplierForm, setSupplierForm] = useState({
+    supplierId: '',
+    identification: '',
+    name: '',
+    phone: '',
+    email: '',
+    documentRef: ''
+  });
+  const [isSupplierSaving, setIsSupplierSaving] = useState(false);
 
   const canRegister = hasPermission(permissions, 'maintenance.create');
   const canUpdateStatus = hasPermission(permissions, 'maintenance.update');
@@ -201,6 +213,14 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
       estimatedCost: costInputValue(maintenance.estimatedCost),
       actualCost: costInputValue(maintenance.actualCost)
     });
+    setSupplierForm({
+      supplierId: maintenance.supplier?.id ? String(maintenance.supplier.id) : '',
+      identification: maintenance.supplier?.identification ?? '',
+      name: maintenance.supplier?.name ?? '',
+      phone: maintenance.supplier?.phone ?? '',
+      email: maintenance.supplier?.email ?? '',
+      documentRef: maintenance.supplierDocumentRef ?? ''
+    });
     setStatusHistory([]);
     setStatus({ type: '', message: '' });
     setIsStatusLoading(true);
@@ -212,6 +232,37 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsStatusLoading(false);
+    }
+  }
+
+  async function loadSuppliers() {
+    try {
+      const response = await getSuppliers();
+      setSuppliers(response.data ?? []);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }
+
+  async function submitSupplier(event) {
+    event.preventDefault();
+    if (!selectedMaintenance) return;
+    setIsSupplierSaving(true);
+    setStatus({ type: '', message: '' });
+
+    try {
+      const payload = supplierForm.supplierId
+        ? { supplierId: supplierForm.supplierId, documentRef: supplierForm.documentRef }
+        : supplierForm;
+      await assignMaintenanceSupplier(selectedMaintenance.id, payload);
+      setStatus({ type: 'success', message: 'Proveedor del mantenimiento actualizado.' });
+      await loadMaintenances(buildingId);
+      const updated = maintenances.find((item) => item.id === selectedMaintenance.id);
+      if (updated) openStatus(updated);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSupplierSaving(false);
     }
   }
 
@@ -529,6 +580,44 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           {canUpdateStatus && nextStatusOptions.length === 0 && (
             <p className="mb-5 text-sm text-slate-500">
               Este mantenimiento no admite más cambios de estado.
+            </p>
+          )}
+
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+            Proveedor responsable
+          </h4>
+          {canUpdateStatus ? (
+            <form onSubmit={submitSupplier} className="mb-5 grid gap-4 sm:grid-cols-3">
+              <label className="sm:col-span-3">
+                <span className="mb-1 block text-xs font-bold text-slate-500">Proveedor existente</span>
+                <select
+                  value={supplierForm.supplierId}
+                  onFocus={loadSuppliers}
+                  onChange={(event) => setSupplierForm({ ...supplierForm, supplierId: event.target.value })}
+                  className={inputClassName}
+                >
+                  <option value="">Registrar proveedor nuevo</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                  ))}
+                </select>
+              </label>
+              {!supplierForm.supplierId && (
+                <>
+                  <input required placeholder="Identificación *" value={supplierForm.identification} onChange={(event) => setSupplierForm({ ...supplierForm, identification: event.target.value })} className={inputClassName} />
+                  <input required placeholder="Nombre *" value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} className={inputClassName} />
+                  <input placeholder="Teléfono" value={supplierForm.phone} onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })} className={inputClassName} />
+                  <input type="email" placeholder="Correo" value={supplierForm.email} onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })} className={inputClassName} />
+                </>
+              )}
+              <input placeholder="Documento relacionado" value={supplierForm.documentRef} onChange={(event) => setSupplierForm({ ...supplierForm, documentRef: event.target.value })} className={inputClassName} />
+              <div className="flex items-end">
+                <ActionButton type="submit" disabled={isSupplierSaving}><Save size={14} /> Guardar proveedor</ActionButton>
+              </div>
+            </form>
+          ) : (
+            <p className="mb-5 text-sm text-slate-500">
+              {selectedMaintenance.supplier?.name || 'Sin proveedor registrado'}
             </p>
           )}
 

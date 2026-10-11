@@ -3,7 +3,9 @@ import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { AuditRepository } from '../../../administration/infrastructure/auditRepository.js';
 import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { createMaintenanceUseCases } from '../../application/maintenanceUseCases.js';
+import { createMaintenanceSupplierUseCases } from '../../application/maintenanceSupplierUseCases.js';
 import { MaintenanceRepository } from '../../infrastructure/maintenanceRepository.js';
+import { SupplierRepository } from '../../../assets/infrastructure/supplierRepository.js';
 import { requireAuth } from '../../../auth/presentation/http/middleware/requireAuth.js';
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
@@ -11,16 +13,23 @@ import { AppError } from '../../../../shared/errors/AppError.js';
 import {
   changeMaintenanceStatusSchema,
   registerMaintenanceSchema,
-  updateMaintenanceCostsSchema
+  updateMaintenanceCostsSchema,
+  assignMaintenanceSupplierSchema
 } from './maintenanceSchemas.js';
 
 export const maintenanceRoutes = Router();
 const assetRepository = new AssetRepository();
 const maintenanceRepository = new MaintenanceRepository();
+const supplierRepository = new SupplierRepository();
 
 const maintenanceUseCases = createMaintenanceUseCases(
   maintenanceRepository,
   assetRepository,
+  new AuditRepository()
+);
+const maintenanceSupplierUseCases = createMaintenanceSupplierUseCases(
+  maintenanceRepository,
+  supplierRepository,
   new AuditRepository()
 );
 
@@ -141,5 +150,32 @@ maintenanceRoutes.patch(
       request.user.id
     );
     response.json({ data: maintenance, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.get(
+  '/maintenances/:maintenanceId/supplier',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureMaintenanceBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const supplier = await maintenanceSupplierUseCases.get(request.params.maintenanceId);
+    response.json({ data: supplier, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.put(
+  '/maintenances/:maintenanceId/supplier',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureMaintenanceBuildingAccess,
+  validateBody(assignMaintenanceSupplierSchema),
+  asyncHandler(async (request, response) => {
+    const supplier = await maintenanceSupplierUseCases.assign(
+      request.params.maintenanceId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: supplier, meta: { requestId: request.id } });
   })
 );
