@@ -5,6 +5,7 @@ import { AssetSupplier } from './AssetSupplier.js';
 import { Maintenance } from './Maintenance.js';
 import { MaintenanceStatusHistory } from './MaintenanceStatusHistory.js';
 import { MaintenanceQuote } from './MaintenanceQuote.js';
+import { InsuranceQuote } from './InsuranceQuote.js';
 import { Person } from './Person.js';
 import { Supplier } from './Supplier.js';
 import { Unit } from './Unit.js';
@@ -48,6 +49,7 @@ export {
   Maintenance,
   MaintenanceStatusHistory,
   MaintenanceQuote,
+  InsuranceQuote,
   Person,
   Supplier,
   Unit,
