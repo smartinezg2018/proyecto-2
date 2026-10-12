@@ -1,3 +1,5 @@
+export { MAINTENANCE_FREQUENCIES } from './maintenanceSchedule.js';
+
 export const MAINTENANCE_TYPES = ['preventivo', 'correctivo'];
 
 export const MAINTENANCE_STATUSES = ['programado', 'en_ejecucion', 'finalizado', 'cancelado'];

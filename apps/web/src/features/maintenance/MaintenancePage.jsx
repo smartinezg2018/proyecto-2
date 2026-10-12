@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Plus, Save, X } from 'lucide-react';
+import { Bell, Plus, Save, X } from 'lucide-react';
 
 import {
   getAssets,
   getBuildingMaintenances,
+  getMaintenanceAlertSettings,
+  getMaintenanceAlerts,
   getMaintenanceStatusHistory,
-  getMaintenanceQuotes,
-  createMaintenanceQuote,
   getMyBuildings,
   getSuppliers,
   registerMaintenance,
   assignMaintenanceSupplier,
+  attendMaintenanceAlert,
+  saveMaintenanceAlertSettings,
   updateMaintenanceCosts,
   updateMaintenanceStatus
 } from '../../services/api.js';
@@ -39,11 +41,45 @@ const MAINTENANCE_STATUS_LABELS = Object.fromEntries(
   MAINTENANCE_STATUS_OPTIONS.map((option) => [option.value, option.label])
 );
 
+const FREQUENCY_OPTIONS = [
+  { value: '', label: 'Sin programar (registro puntual)' },
+  { value: 'unica', label: 'Única vez' },
+  { value: 'semanal', label: 'Semanal' },
+  { value: 'quincenal', label: 'Quincenal' },
+  { value: 'mensual', label: 'Mensual' },
+  { value: 'trimestral', label: 'Trimestral' },
+  { value: 'semestral', label: 'Semestral' },
+  { value: 'anual', label: 'Anual' }
+];
+
+const FREQUENCY_LABELS = Object.fromEntries(
+  FREQUENCY_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label])
+);
+
+function formatDateDisplay(value) {
+  if (!value) return '—';
+  const text = String(value);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
 function formatDateTime(value) {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+  return `${formatDateDisplay(value)} ${date.toLocaleTimeString('es-CO', {
+    hour: 'numeric',
+    minute: '2-digit'
+  })}`;
 }
 
 function formatCurrency(value) {
@@ -74,13 +110,13 @@ function createEmptyForm() {
   return {
     assetId: '',
     maintenanceType: 'preventivo',
-    maintenanceDate: todayString(),
+    maintenanceDate: '',
     description: '',
     failure: '',
     cause: '',
     actionsTaken: '',
-    estimatedCost: '',
-    actualCost: ''
+    frequency: '',
+    responsible: ''
   };
 }
 
@@ -102,34 +138,31 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   const [nextStatus, setNextStatus] = useState('');
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [isStatusSaving, setIsStatusSaving] = useState(false);
-  const [costForm, setCostForm] = useState({ estimatedCost: '', actualCost: '' });
+  const [costForm, setCostForm] = useState({ amount: '' });
   const [isCostSaving, setIsCostSaving] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierForm, setSupplierForm] = useState({
     supplierId: '',
-    identification: '',
     name: '',
     phone: '',
     email: '',
     documentRef: ''
   });
   const [isSupplierSaving, setIsSupplierSaving] = useState(false);
-  const [quotes, setQuotes] = useState([]);
-  const [quoteForm, setQuoteForm] = useState({
-    supplierId: '',
-    amount: '',
-    validUntil: '',
-    documentRef: '',
-    scope: '',
-    conditions: ''
-  });
-  const [isQuoteSaving, setIsQuoteSaving] = useState(false);
+  const [assetFilter, setAssetFilter] = useState('');
+  const [alertDays, setAlertDays] = useState('7');
+  const [alerts, setAlerts] = useState([]);
+  const [isAlertSaving, setIsAlertSaving] = useState(false);
 
   const canRegister = hasPermission(permissions, 'maintenance.create');
   const canUpdateStatus = hasPermission(permissions, 'maintenance.update');
   const selectedMaintenance =
     maintenances.find((maintenance) => maintenance.id === selectedMaintenanceId) ?? null;
   const registrableAssets = assets.filter((asset) => asset.status !== 'retirado');
+  const visibleMaintenances = assetFilter
+    ? maintenances.filter((maintenance) => String(maintenance.assetId) === assetFilter)
+    : maintenances;
+  const pendingAlerts = alerts.filter((alert) => alert.status === 'pendiente');
 
   useEffect(() => {
     getMyBuildings()
@@ -153,19 +186,27 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     setIsFormOpen(false);
     setSelectedMaintenanceId(null);
     setStatusHistory([]);
-    setQuotes([]);
     setNextStatus('');
     if (!buildingId) {
       setAssets([]);
       setMaintenances([]);
+      setAlerts([]);
       return;
     }
 
     setIsLoading(true);
-    Promise.all([getAssets(buildingId), getBuildingMaintenances(buildingId)])
-      .then(([assetsResponse, maintenancesResponse]) => {
+    setAssetFilter('');
+    Promise.all([
+      getAssets(buildingId),
+      getBuildingMaintenances(buildingId),
+      getMaintenanceAlertSettings(buildingId),
+      getMaintenanceAlerts(buildingId)
+    ])
+      .then(([assetsResponse, maintenancesResponse, settingsResponse, alertsResponse]) => {
         setAssets(assetsResponse.data);
         setMaintenances(maintenancesResponse.data);
+        setAlertDays(String(settingsResponse.data?.alertDays ?? 7));
+        setAlerts(alertsResponse.data ?? []);
       })
       .catch((error) => setStatus({ type: 'error', message: error.message }))
       .finally(() => setIsLoading(false));
@@ -181,7 +222,25 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   }
 
   function updateField(event) {
-    setForm({ ...form, [event.target.name]: event.target.value });
+    const { name, value } = event.target;
+    if (name === 'maintenanceType' && value === 'correctivo') {
+      setForm({
+        ...form,
+        maintenanceType: value,
+        frequency: '',
+        responsible: ''
+      });
+      return;
+    }
+    if (name === 'maintenanceType' && value === 'preventivo') {
+      setForm({
+        ...form,
+        maintenanceType: value,
+        maintenanceDate: ''
+      });
+      return;
+    }
+    setForm({ ...form, [name]: value });
   }
 
   async function submitForm(event) {
@@ -192,9 +251,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     try {
       const payload = {
         maintenanceType: form.maintenanceType,
-        maintenanceDate: form.maintenanceDate,
-        estimatedCost: costPayloadValue(form.estimatedCost),
-        actualCost: costPayloadValue(form.actualCost)
+        maintenanceDate: form.maintenanceDate
       };
 
       if (form.maintenanceType === 'correctivo') {
@@ -206,12 +263,23 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         }
       } else {
         payload.description = form.description;
+        if (form.frequency) {
+          payload.frequency = form.frequency;
+          payload.responsible = form.responsible;
+        }
       }
 
       await registerMaintenance(form.assetId, payload);
-      setStatus({ type: 'success', message: 'Mantenimiento registrado correctamente.' });
+      setStatus({
+        type: 'success',
+        message: form.frequency
+          ? 'Mantenimiento preventivo programado correctamente.'
+          : 'Mantenimiento registrado correctamente.'
+      });
       setIsFormOpen(false);
       await loadMaintenances(buildingId);
+      const alertsResponse = await getMaintenanceAlerts(buildingId);
+      setAlerts(alertsResponse.data ?? []);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
@@ -223,12 +291,10 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     setSelectedMaintenanceId(maintenance.id);
     setNextStatus(maintenance.nextStatuses?.[0] ?? '');
     setCostForm({
-      estimatedCost: costInputValue(maintenance.estimatedCost),
-      actualCost: costInputValue(maintenance.actualCost)
+      amount: costInputValue(maintenance.actualCost ?? maintenance.estimatedCost)
     });
     setSupplierForm({
       supplierId: maintenance.supplier?.id ? String(maintenance.supplier.id) : '',
-      identification: maintenance.supplier?.identification ?? '',
       name: maintenance.supplier?.name ?? '',
       phone: maintenance.supplier?.phone ?? '',
       email: maintenance.supplier?.email ?? '',
@@ -237,43 +303,15 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     setStatusHistory([]);
     setStatus({ type: '', message: '' });
     setIsStatusLoading(true);
+    loadSuppliers();
 
     try {
       const response = await getMaintenanceStatusHistory(maintenance.id);
       setStatusHistory(response.data ?? []);
-      const quotesResponse = await getMaintenanceQuotes(maintenance.id);
-      setQuotes(quotesResponse.data ?? []);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsStatusLoading(false);
-    }
-  }
-
-  async function submitQuote(event) {
-    event.preventDefault();
-    if (!selectedMaintenance) return;
-    setIsQuoteSaving(true);
-    try {
-      await createMaintenanceQuote(selectedMaintenance.id, {
-        ...quoteForm,
-        amount: quoteForm.amount.trim()
-      });
-      setQuoteForm({
-        supplierId: '',
-        amount: '',
-        validUntil: '',
-        documentRef: '',
-        scope: '',
-        conditions: ''
-      });
-      const response = await getMaintenanceQuotes(selectedMaintenance.id);
-      setQuotes(response.data ?? []);
-      setStatus({ type: 'success', message: 'Cotización registrada correctamente.' });
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message });
-    } finally {
-      setIsQuoteSaving(false);
     }
   }
 
@@ -295,7 +333,12 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     try {
       const payload = supplierForm.supplierId
         ? { supplierId: supplierForm.supplierId, documentRef: supplierForm.documentRef }
-        : supplierForm;
+        : {
+            name: supplierForm.name,
+            phone: supplierForm.phone,
+            email: supplierForm.email,
+            documentRef: supplierForm.documentRef
+          };
       await assignMaintenanceSupplier(selectedMaintenance.id, payload);
       setStatus({ type: 'success', message: 'Proveedor del mantenimiento actualizado.' });
       await loadMaintenances(buildingId);
@@ -338,19 +381,45 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
 
     try {
       const response = await updateMaintenanceCosts(selectedMaintenance.id, {
-        estimatedCost: costPayloadValue(costForm.estimatedCost),
-        actualCost: costPayloadValue(costForm.actualCost)
+        actualCost: costPayloadValue(costForm.amount)
       });
       setCostForm({
-        estimatedCost: costInputValue(response.data.estimatedCost),
-        actualCost: costInputValue(response.data.actualCost)
+        amount: costInputValue(response.data.actualCost ?? response.data.estimatedCost)
       });
-      setStatus({ type: 'success', message: 'Costos del mantenimiento actualizados.' });
+      setStatus({ type: 'success', message: 'Costo del mantenimiento actualizado.' });
       await loadMaintenances(buildingId);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsCostSaving(false);
+    }
+  }
+
+  async function saveAlertDays(event) {
+    event.preventDefault();
+    setIsAlertSaving(true);
+    setStatus({ type: '', message: '' });
+    try {
+      await saveMaintenanceAlertSettings(buildingId, Number(alertDays));
+      const alertsResponse = await getMaintenanceAlerts(buildingId);
+      setAlerts(alertsResponse.data ?? []);
+      setStatus({ type: 'success', message: 'Anticipación de alertas guardada.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsAlertSaving(false);
+    }
+  }
+
+  async function attendAlert(alertId) {
+    setStatus({ type: '', message: '' });
+    try {
+      await attendMaintenanceAlert(alertId);
+      const alertsResponse = await getMaintenanceAlerts(buildingId);
+      setAlerts(alertsResponse.data ?? []);
+      setStatus({ type: 'success', message: 'Alerta marcada como atendida.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
     }
   }
 
@@ -363,7 +432,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     <div>
       <SectionHeader
         title="Mantenimientos"
-        subtitle="Registro e historial de las intervenciones realizadas sobre los activos"
+        subtitle="Programación preventiva, historial por activo y alertas de próximas intervenciones"
         action={
           canRegister && (
             <ActionButton onClick={openForm} disabled={!buildingId}>
@@ -373,21 +442,40 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         }
       />
 
-      <label className="mb-4 block max-w-sm">
-        <span className="mb-1 block text-xs font-bold text-slate-500">Edificio</span>
-        <select
-          value={buildingId}
-          onChange={(event) => setBuildingId(event.target.value)}
-          className={inputClassName}
-        >
-          {buildings.length === 0 && <option value="">No tienes edificios asignados</option>}
-          {buildings.map((building) => (
-            <option key={building.id} value={building.id}>
-              {building.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 max-w-3xl">
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Edificio</span>
+          <select
+            value={buildingId}
+            onChange={(event) => setBuildingId(event.target.value)}
+            className={inputClassName}
+          >
+            {buildings.length === 0 && <option value="">No tienes edificios asignados</option>}
+            {buildings.map((building) => (
+              <option key={building.id} value={building.id}>
+                {building.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="mb-1 block text-xs font-bold text-slate-500">
+            Historial por activo
+          </span>
+          <select
+            value={assetFilter}
+            onChange={(event) => setAssetFilter(event.target.value)}
+            className={inputClassName}
+          >
+            <option value="">Todos los activos</option>
+            {assets.map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {asset.code} · {asset.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {status.message && (
         <p
@@ -395,6 +483,93 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         >
           {status.message}
         </p>
+      )}
+
+      {buildingId && (
+        <form
+          onSubmit={saveAlertDays}
+          className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
+        >
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">
+              Días de anticipación (0 a 365)
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="365"
+              step="1"
+              value={alertDays}
+              onChange={(event) => setAlertDays(event.target.value)}
+              disabled={!canUpdateStatus || isAlertSaving}
+              className={inputClassName}
+            />
+          </label>
+          {canUpdateStatus && (
+            <ActionButton type="submit" disabled={isAlertSaving}>
+              <Save size={14} /> Guardar anticipación
+            </ActionButton>
+          )}
+          <p className="text-sm text-slate-500">
+            Se genera una alerta persistente por cada mantenimiento próximo, preventivo o
+            correctivo, sin duplicar la misma fecha.
+          </p>
+        </form>
+      )}
+
+      {pendingAlerts.length > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <Bell size={16} /> Mantenimientos próximos
+          </h3>
+          <ul className="space-y-2 text-sm text-amber-950">
+            {pendingAlerts.map((alert) => (
+              <li
+                key={alert.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/70 px-3 py-2"
+              >
+                <span>
+                  <span className="font-mono text-xs font-bold text-blue-600">
+                    {alert.asset?.code}
+                  </span>{' '}
+                  {alert.asset?.name}
+                  {alert.maintenanceType
+                    ? ` · ${MAINTENANCE_TYPE_LABELS[alert.maintenanceType] || alert.maintenanceType}`
+                    : ''}{' '}
+                  · ejecución {formatDateDisplay(alert.targetDate)}
+                  {alert.responsible ? ` · ${alert.responsible}` : ''}
+                  {alert.frequency ? ` · ${FREQUENCY_LABELS[alert.frequency] || alert.frequency}` : ''}
+                  {alert.failure ? ` · ${alert.failure}` : ''}
+                </span>
+                <span className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const maintenance = maintenances.find(
+                        (item) => String(item.id) === String(alert.maintenanceId)
+                      );
+                      if (maintenance) {
+                        openStatus(maintenance);
+                      }
+                    }}
+                    className="inline-flex items-center rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Ver detalle
+                  </button>
+                  {canUpdateStatus && (
+                    <button
+                      type="button"
+                      onClick={() => attendAlert(alert.id)}
+                      className="text-xs font-semibold text-amber-800 hover:text-amber-950"
+                    >
+                      Marcar atendida
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {isFormOpen && (
@@ -446,18 +621,69 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   ))}
                 </select>
               </label>
+              {form.maintenanceType === 'preventivo' && (
+                <label>
+                  <span className="mb-1 block text-xs font-bold text-slate-500">Frecuencia</span>
+                  <select
+                    name="frequency"
+                    value={form.frequency}
+                    onChange={updateField}
+                    className={inputClassName}
+                  >
+                    {FREQUENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
-                <span className="mb-1 block text-xs font-bold text-slate-500">Fecha *</span>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Fecha de registro
+                </span>
+                <input
+                  type="date"
+                  value={todayString()}
+                  readOnly
+                  className={`${inputClassName} bg-slate-50 text-slate-500`}
+                />
+                <span className="mt-1 block text-xs text-slate-400">
+                  Se guarda hoy. No genera la alerta.
+                </span>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Fecha de ejecución *
+                </span>
                 <input
                   name="maintenanceDate"
                   type="date"
                   value={form.maintenanceDate}
-                  max={todayString()}
                   onChange={updateField}
                   required
                   className={inputClassName}
                 />
+                <span className="mt-1 block text-xs text-slate-400">
+                  Día en que se debe hacer. Puedes elegir una fecha futura. La alerta usa esta
+                  fecha.
+                </span>
               </label>
+              {form.maintenanceType === 'preventivo' && form.frequency && (
+                <label>
+                  <span className="mb-1 block text-xs font-bold text-slate-500">
+                    Responsable o empresa *
+                  </span>
+                  <input
+                    name="responsible"
+                    value={form.responsible}
+                    onChange={updateField}
+                    required
+                    placeholder="Persona o empresa a cargo"
+                    className={inputClassName}
+                  />
+                </label>
+              )}
               {form.maintenanceType === 'correctivo' ? (
                 <>
                   <label className="sm:col-span-3">
@@ -514,7 +740,9 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 </>
               ) : (
                 <label className="sm:col-span-3">
-                  <span className="mb-1 block text-xs font-bold text-slate-500">Descripción *</span>
+                  <span className="mb-1 block text-xs font-bold text-slate-500">
+                    Descripción *
+                  </span>
                   <textarea
                     name="description"
                     value={form.description}
@@ -525,36 +753,6 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   />
                 </label>
               )}
-              <label>
-                <span className="mb-1 block text-xs font-bold text-slate-500">
-                  Costo estimado (COP)
-                </span>
-                <input
-                  name="estimatedCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.estimatedCost}
-                  onChange={updateField}
-                  placeholder="Opcional"
-                  className={inputClassName}
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-xs font-bold text-slate-500">
-                  Costo real (COP)
-                </span>
-                <input
-                  name="actualCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.actualCost}
-                  onChange={updateField}
-                  placeholder="Opcional"
-                  className={inputClassName}
-                />
-              </label>
               <div className="sm:col-span-3">
                 <ActionButton type="submit" disabled={isSaving}>
                   <Save size={14} /> Guardar mantenimiento
@@ -574,7 +772,8 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 <span className="font-mono text-xs font-bold text-blue-600">
                   {selectedMaintenance.asset?.code}
                 </span>{' '}
-                {selectedMaintenance.asset?.name} · {selectedMaintenance.maintenanceDate}
+                {selectedMaintenance.asset?.name} · ejecución{' '}
+                {formatDateDisplay(selectedMaintenance.maintenanceDate)}
               </p>
             </div>
             <button
@@ -593,6 +792,32 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 MAINTENANCE_STATUS_LABELS[selectedMaintenance.status] || selectedMaintenance.status
               }
             />
+          </div>
+
+          <div className="mb-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <p className="rounded-lg bg-slate-50 px-3 py-2">
+              <strong>Fecha de registro:</strong> {formatDateTime(selectedMaintenance.createdAt)}
+            </p>
+            <p className="rounded-lg bg-slate-50 px-3 py-2">
+              <strong>Fecha de ejecución:</strong>{' '}
+              {formatDateDisplay(selectedMaintenance.maintenanceDate)}
+            </p>
+            <p className="rounded-lg bg-slate-50 px-3 py-2">
+              <strong>Frecuencia:</strong>{' '}
+              {FREQUENCY_LABELS[selectedMaintenance.frequency] ||
+                selectedMaintenance.frequency ||
+                'Sin programar'}
+            </p>
+            <p className="rounded-lg bg-slate-50 px-3 py-2">
+              <strong>Responsable o empresa:</strong>{' '}
+              {selectedMaintenance.responsible || 'Sin asignar'}
+            </p>
+            {selectedMaintenance.nextExecutionDate && (
+              <p className="rounded-lg bg-slate-50 px-3 py-2">
+                <strong>Próxima ejecución:</strong>{' '}
+                {formatDateDisplay(selectedMaintenance.nextExecutionDate)}
+              </p>
+            )}
           </div>
 
           {canUpdateStatus && nextStatusOptions.length > 0 && (
@@ -625,101 +850,27 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
             </p>
           )}
 
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            Comparativo de cotizaciones
-          </h4>
-          {canUpdateStatus && (
-            <form onSubmit={submitQuote} className="mb-4 grid gap-3 sm:grid-cols-3">
-              <input
-                required
-                placeholder="ID proveedor *"
-                value={quoteForm.supplierId}
-                onChange={(event) => setQuoteForm({ ...quoteForm, supplierId: event.target.value })}
-                className={inputClassName}
-              />
-              <input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Valor *"
-                value={quoteForm.amount}
-                onChange={(event) => setQuoteForm({ ...quoteForm, amount: event.target.value })}
-                className={inputClassName}
-              />
-              <input
-                required
-                type="date"
-                value={quoteForm.validUntil}
-                onChange={(event) => setQuoteForm({ ...quoteForm, validUntil: event.target.value })}
-                className={inputClassName}
-              />
-              <input
-                required
-                placeholder="Alcance *"
-                value={quoteForm.scope}
-                onChange={(event) => setQuoteForm({ ...quoteForm, scope: event.target.value })}
-                className="sm:col-span-2"
-              />
-              <input
-                required
-                placeholder="Condiciones *"
-                value={quoteForm.conditions}
-                onChange={(event) => setQuoteForm({ ...quoteForm, conditions: event.target.value })}
-                className={inputClassName}
-              />
-              <input
-                placeholder="Documento"
-                value={quoteForm.documentRef}
-                onChange={(event) =>
-                  setQuoteForm({ ...quoteForm, documentRef: event.target.value })
-                }
-                className={inputClassName}
-              />
-              <div className="flex items-end">
-                <ActionButton type="submit" disabled={isQuoteSaving}>
-                  <Save size={14} /> Guardar cotización
-                </ActionButton>
-              </div>
-            </form>
-          )}
-          {quotes.length === 0 ? (
-            <p className="mb-5 text-sm text-slate-400">No hay cotizaciones registradas.</p>
-          ) : (
-            <div className="mb-5 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-slate-400">
-                    <th className="px-2 py-2">Proveedor</th>
-                    <th className="px-2 py-2">Valor</th>
-                    <th className="px-2 py-2">Vigencia</th>
-                    <th className="px-2 py-2">Alcance</th>
-                    <th className="px-2 py-2">Condiciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quotes.map((quote) => (
-                    <tr key={quote.id} className="border-b border-slate-50">
-                      <td className="px-2 py-2">{quote.supplier?.name || quote.supplierId}</td>
-                      <td className="px-2 py-2 font-semibold">{formatCurrency(quote.amount)}</td>
-                      <td className="px-2 py-2">{quote.validUntil}</td>
-                      <td className="px-2 py-2">{quote.scope}</td>
-                      <td className="px-2 py-2">{quote.conditions}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <p className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            Cada dato se guarda con su propio botón: proveedor, evidencia y costo a pagar.
+          </p>
 
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            Proveedor responsable
-          </h4>
-          {canUpdateStatus ? (
+          <h4 className="mb-1 text-sm font-bold text-blue-800">Proveedor</h4>
+          <p className="mb-3 text-sm text-slate-600">
+            Puedes registrar todos los proveedores que quieras: quedan guardados en la lista. En
+            cada mantenimiento solo eliges cuál va a hacer el trabajo, o registras uno nuevo si
+            todavía no existe.
+          </p>
+          <p className="mb-3 text-sm font-semibold text-slate-800">
+            {selectedMaintenance.supplier?.name
+              ? `Asignado a este mantenimiento: ${selectedMaintenance.supplier.name}`
+              : 'Este mantenimiento todavía no tiene proveedor asignado.'}
+            {selectedMaintenance.supplier?.email ? ` · ${selectedMaintenance.supplier.email}` : ''}
+          </p>
+          {canUpdateStatus && (
             <form onSubmit={submitSupplier} className="mb-5 grid gap-4 sm:grid-cols-3">
               <label className="sm:col-span-3">
                 <span className="mb-1 block text-xs font-bold text-slate-500">
-                  Proveedor existente
+                  ¿Ya está en la lista o es nuevo?
                 </span>
                 <select
                   value={supplierForm.supplierId}
@@ -729,7 +880,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   }
                   className={inputClassName}
                 >
-                  <option value="">Registrar proveedor nuevo</option>
+                  <option value="">Registrar uno nuevo</option>
                   {suppliers.map((supplier) => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name}
@@ -739,15 +890,6 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
               </label>
               {!supplierForm.supplierId && (
                 <>
-                  <input
-                    required
-                    placeholder="Identificación *"
-                    value={supplierForm.identification}
-                    onChange={(event) =>
-                      setSupplierForm({ ...supplierForm, identification: event.target.value })
-                    }
-                    className={inputClassName}
-                  />
                   <input
                     required
                     placeholder="Nombre *"
@@ -777,7 +919,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 </>
               )}
               <input
-                placeholder="Documento relacionado"
+                placeholder="Evidencia o documento (opcional)"
                 value={supplierForm.documentRef}
                 onChange={(event) =>
                   setSupplierForm({ ...supplierForm, documentRef: event.target.value })
@@ -790,67 +932,36 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 </ActionButton>
               </div>
             </form>
-          ) : (
-            <p className="mb-5 text-sm text-slate-500">
-              {selectedMaintenance.supplier?.name || 'Sin proveedor registrado'}
-            </p>
           )}
 
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            Costos de la intervención
-          </h4>
+          <h4 className="mb-2 text-sm font-bold text-orange-700">Costo a pagar</h4>
           {canUpdateStatus ? (
             <form onSubmit={submitCosts} className="mb-5 grid gap-4 sm:grid-cols-3">
               <label>
-                <span className="mb-1 block text-xs font-bold text-slate-500">
-                  Costo estimado (COP)
-                </span>
+                <span className="mb-1 block text-xs font-bold text-slate-500">Costo (COP)</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={costForm.estimatedCost}
-                  onChange={(event) =>
-                    setCostForm({ ...costForm, estimatedCost: event.target.value })
-                  }
-                  placeholder="Sin registrar"
-                  className={inputClassName}
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-xs font-bold text-slate-500">
-                  Costo real (COP)
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={costForm.actualCost}
-                  onChange={(event) => setCostForm({ ...costForm, actualCost: event.target.value })}
-                  placeholder="Sin registrar"
+                  value={costForm.amount}
+                  onChange={(event) => setCostForm({ amount: event.target.value })}
+                  placeholder="Valor a pagar"
                   className={inputClassName}
                 />
               </label>
               <div className="flex items-end">
                 <ActionButton type="submit" disabled={isCostSaving}>
-                  <Save size={14} /> Guardar costos
+                  <Save size={14} /> Guardar costo
                 </ActionButton>
               </div>
             </form>
           ) : (
-            <div className="mb-5 grid gap-3 text-sm sm:grid-cols-2">
-              <p className="rounded-lg bg-slate-50 px-3 py-2">
-                <strong>Estimado:</strong> {formatCurrency(selectedMaintenance.estimatedCost)}
-              </p>
-              <p className="rounded-lg bg-slate-50 px-3 py-2">
-                <strong>Real:</strong> {formatCurrency(selectedMaintenance.actualCost)}
-              </p>
-            </div>
+            <p className="mb-5 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              {formatCurrency(selectedMaintenance.actualCost ?? selectedMaintenance.estimatedCost)}
+            </p>
           )}
 
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            Historial de cambios
-          </h4>
+          <h4 className="mb-2 text-sm font-bold text-slate-800">Historial de cambios</h4>
           {isStatusLoading ? (
             <p className="text-sm text-slate-400">Cargando historial...</p>
           ) : statusHistory.length === 0 ? (
@@ -879,11 +990,12 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              {['Fecha', 'Activo', 'Tipo', 'Estado', 'Costos', 'Descripción'].map((heading) => (
+            <tr className="bg-blue-600">
+              {['Fecha de ejecución', 'Activo', 'Tipo', 'Programación', 'Estado', 'Costo', 'Descripción'].map(
+                (heading) => (
                 <th
                   key={heading}
-                  className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
+                  className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-white"
                 >
                   {heading}
                 </th>
@@ -892,13 +1004,13 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           </thead>
           <tbody>
             {!isLoading &&
-              maintenances.map((maintenance) => (
+              visibleMaintenances.map((maintenance) => (
                 <tr
                   key={maintenance.id}
                   className={`border-b border-slate-50 align-top ${selectedMaintenanceId === maintenance.id ? 'bg-blue-50' : ''}`}
                 >
                   <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
-                    {maintenance.maintenanceDate}
+                    {formatDateDisplay(maintenance.maintenanceDate)}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <span className="font-mono text-xs font-bold text-blue-600">
@@ -914,6 +1026,17 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                       }
                     />
                   </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    <div>
+                      {FREQUENCY_LABELS[maintenance.frequency] ||
+                        maintenance.frequency ||
+                        'Puntual'}
+                    </div>
+                    {maintenance.responsible && <div>{maintenance.responsible}</div>}
+                    {maintenance.nextExecutionDate && (
+                      <div>Próxima: {formatDateDisplay(maintenance.nextExecutionDate)}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-start gap-2">
                       <StatusBadge
@@ -926,21 +1049,14 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                       <button
                         type="button"
                         onClick={() => openStatus(maintenance)}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                        className="inline-flex items-center rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                       >
-                        {canUpdateStatus ? 'Estado y costos' : 'Ver detalle'}
+                        Ver detalle
                       </button>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                    <div>
-                      <span className="font-semibold text-slate-700">Est.:</span>{' '}
-                      {formatCurrency(maintenance.estimatedCost)}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-slate-700">Real:</span>{' '}
-                      {formatCurrency(maintenance.actualCost)}
-                    </div>
+                    {formatCurrency(maintenance.actualCost ?? maintenance.estimatedCost)}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-pre-line">
                     {maintenance.maintenanceType === 'correctivo' &&
@@ -971,18 +1087,20 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                   </td>
                 </tr>
               ))}
-            {!isLoading && maintenances.length === 0 && (
+            {!isLoading && visibleMaintenances.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                   {buildingId
-                    ? 'No hay mantenimientos registrados en este edificio.'
+                    ? assetFilter
+                      ? 'Este activo no tiene mantenimientos registrados.'
+                      : 'No hay mantenimientos registrados en este edificio.'
                     : 'Selecciona un edificio para consultar sus mantenimientos.'}
                 </td>
               </tr>
             )}
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                   Cargando mantenimientos...
                 </td>
               </tr>

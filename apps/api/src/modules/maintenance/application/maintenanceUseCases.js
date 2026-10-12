@@ -4,6 +4,10 @@ import {
   MAINTENANCE_STATUS_TRANSITIONS,
   MAINTENANCE_TYPES
 } from '../domain/maintenanceCatalog.js';
+import {
+  MAINTENANCE_FREQUENCIES,
+  resolveNextExecutionDate
+} from '../domain/maintenanceSchedule.js';
 
 const INITIAL_STATUS = 'programado';
 
@@ -22,14 +26,6 @@ const COST_FIELDS = Object.keys(COST_LABELS);
 // DECIMAL(15, 2) column limit.
 const MAX_COST = 9999999999999.99;
 
-function todayString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function validateType(input) {
   if (!MAINTENANCE_TYPES.includes(input.maintenanceType)) {
     throw new AppError(
@@ -40,19 +36,58 @@ function validateType(input) {
   }
 }
 
-function validateDate(input) {
-  const date = input.maintenanceDate;
+function validateDateString(date, fieldLabel) {
   if (typeof date !== 'string' || !DATE_PATTERN.test(date) || Number.isNaN(Date.parse(date))) {
     throw new AppError(
-      'La fecha del mantenimiento debe tener el formato YYYY-MM-DD.',
+      `${fieldLabel} debe tener el formato YYYY-MM-DD.`,
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+}
+
+function validateDate(input) {
+  validateDateString(input.maintenanceDate, 'La fecha del mantenimiento');
+}
+
+function validateSchedule(input) {
+  if (!input.frequency) {
+    return { frequency: null, responsible: null, nextExecutionDate: null };
+  }
+
+  if (input.maintenanceType !== 'preventivo') {
+    throw new AppError(
+      'Solo los mantenimientos preventivos se pueden programar con frecuencia.',
       400,
       'VALIDATION_ERROR'
     );
   }
 
-  if (date > todayString()) {
-    throw new AppError('La fecha del mantenimiento no puede ser futura.', 400, 'VALIDATION_ERROR');
+  if (!MAINTENANCE_FREQUENCIES.includes(input.frequency)) {
+    throw new AppError('La frecuencia del mantenimiento preventivo no es válida.', 400, 'VALIDATION_ERROR');
   }
+
+  if (typeof input.responsible !== 'string' || input.responsible.trim() === '') {
+    throw new AppError(
+      'El responsable del mantenimiento preventivo es obligatorio.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  if (input.nextExecutionDate) {
+    validateDateString(input.nextExecutionDate, 'La próxima fecha de ejecución');
+  }
+
+  return {
+    frequency: input.frequency,
+    responsible: input.responsible.trim(),
+    nextExecutionDate: resolveNextExecutionDate(
+      input.maintenanceDate,
+      input.frequency,
+      input.nextExecutionDate || null
+    )
+  };
 }
 
 function validatePreventiveInput(input) {
@@ -186,6 +221,7 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
 
       validateType(input);
       validateDate(input);
+      const schedule = validateSchedule(input);
       const estimatedCost = normalizeCost(input.estimatedCost, 'estimatedCost');
       const actualCost = normalizeCost(input.actualCost, 'actualCost');
 
@@ -218,6 +254,9 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           buildingId: asset.buildingId,
           maintenanceType: input.maintenanceType,
           maintenanceDate: input.maintenanceDate,
+          frequency: schedule.frequency,
+          responsible: schedule.responsible,
+          nextExecutionDate: schedule.nextExecutionDate,
           description,
           failureDescription: failure,
           cause,
@@ -249,6 +288,9 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
           assetCode: asset.code,
           maintenanceType: saved.maintenanceType,
           maintenanceDate: saved.maintenanceDate,
+          frequency: saved.frequency,
+          responsible: saved.responsible,
+          nextExecutionDate: saved.nextExecutionDate,
           estimatedCost,
           actualCost
         };
@@ -271,6 +313,10 @@ export function createMaintenanceUseCases(maintenanceRepository, assetRepository
       }
 
       return present(saved);
+    },
+
+    async getById(maintenanceId) {
+      return present(await getMaintenance(maintenanceId));
     },
 
     async listByAsset(assetId) {

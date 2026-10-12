@@ -42,7 +42,16 @@ function createRepositories() {
         return maintenances.find((item) => String(item.id) === String(id)) ?? null;
       },
       async findByAsset(assetId) {
-        return maintenances.filter((item) => String(item.assetId) === String(assetId));
+        return maintenances
+          .filter((item) => String(item.assetId) === String(assetId))
+          .sort((left, right) => String(right.maintenanceDate).localeCompare(left.maintenanceDate));
+      },
+      async findOpenForAlertsByBuilding(buildingId) {
+        return maintenances.filter(
+          (item) =>
+            String(item.buildingId) === String(buildingId) &&
+            ['programado', 'en_ejecucion'].includes(item.status)
+        );
       },
       async findByBuilding(buildingId) {
         return maintenances.filter((item) => String(item.buildingId) === String(buildingId));
@@ -181,16 +190,30 @@ test('rechaza una fecha con formato inválido', async () => {
   );
 });
 
-test('rechaza una fecha futura', async () => {
+test('permite programar un preventivo en una fecha futura', async () => {
   const { useCases } = setup();
   const future = new Date();
   future.setFullYear(future.getFullYear() + 1);
   const futureDate = future.toISOString().slice(0, 10);
 
-  await assert.rejects(() => useCases.register(1, { ...validInput, maintenanceDate: futureDate }), {
-    statusCode: 400,
-    message: 'La fecha del mantenimiento no puede ser futura.'
+  const saved = await useCases.register(1, { ...validInput, maintenanceDate: futureDate });
+  assert.equal(saved.maintenanceDate, futureDate);
+});
+
+test('permite programar un correctivo en una fecha futura', async () => {
+  const { useCases } = setup();
+  const future = new Date();
+  future.setFullYear(future.getFullYear() + 1);
+  const futureDate = future.toISOString().slice(0, 10);
+
+  const saved = await useCases.register(1, {
+    maintenanceType: 'correctivo',
+    maintenanceDate: futureDate,
+    failure: 'Fuga',
+    cause: 'Sello',
+    actionsTaken: 'Cambio'
   });
+  assert.equal(saved.maintenanceDate, futureDate);
 });
 
 test('rechaza una descripción vacía', async () => {
@@ -540,4 +563,75 @@ test('rechaza actualizar costos de un mantenimiento inexistente', async () => {
     statusCode: 404,
     code: 'MAINTENANCE_NOT_FOUND'
   });
+});
+
+test('programa un preventivo con frecuencia, responsable y próxima fecha calculada', async () => {
+  const { useCases } = setup();
+  const future = new Date();
+  future.setFullYear(future.getFullYear() + 1);
+  const futureDate = future.toISOString().slice(0, 10);
+
+  const saved = await useCases.register(
+    1,
+    {
+      ...validInput,
+      maintenanceDate: futureDate,
+      frequency: 'mensual',
+      responsible: '  Ana Martínez  '
+    },
+    7
+  );
+
+  assert.equal(saved.frequency, 'mensual');
+  assert.equal(saved.responsible, 'Ana Martínez');
+  assert.notEqual(saved.nextExecutionDate, futureDate);
+  assert.match(saved.nextExecutionDate, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('permite registrar la próxima fecha de ejecución en lugar de calcularla', async () => {
+  const { useCases } = setup();
+
+  const saved = await useCases.register(1, {
+    ...validInput,
+    frequency: 'semanal',
+    responsible: 'Carlos Ruiz',
+    nextExecutionDate: '2026-02-01'
+  });
+
+  assert.equal(saved.nextExecutionDate, '2026-02-01');
+});
+
+test('lista el historial de un activo en orden cronológico', async () => {
+  const { useCases } = setup();
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-01-10' });
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-03-10' });
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-02-10' });
+
+  const history = await useCases.listByAsset(1);
+
+  assert.deepEqual(
+    history.map((item) => item.maintenanceDate),
+    ['2026-03-10', '2026-02-10', '2026-01-10']
+  );
+});
+
+test('rechaza programar un correctivo con frecuencia', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(
+    () =>
+      useCases.register(1, {
+        maintenanceType: 'correctivo',
+        maintenanceDate: '2026-01-15',
+        failure: 'Fuga',
+        cause: 'Sello',
+        actionsTaken: 'Cambio',
+        frequency: 'mensual',
+        responsible: 'Ana'
+      }),
+    {
+      statusCode: 400,
+      message: 'Solo los mantenimientos preventivos se pueden programar con frecuencia.'
+    }
+  );
 });

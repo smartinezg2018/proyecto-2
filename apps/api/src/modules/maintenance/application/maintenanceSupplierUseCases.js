@@ -6,11 +6,23 @@ function requiredText(value, fieldName) {
   }
 }
 
+function resolveIdentification(input) {
+  if (typeof input.identification === 'string' && input.identification.trim() !== '') {
+    return input.identification.trim();
+  }
+  if (typeof input.phone === 'string' && input.phone.trim() !== '') {
+    return input.phone.trim().slice(0, 50);
+  }
+  if (typeof input.email === 'string' && input.email.trim() !== '') {
+    return input.email.trim().slice(0, 50);
+  }
+  return `PROV-${Date.now()}`.slice(0, 50);
+}
+
 function normalizeSupplier(input) {
-  requiredText(input.identification, 'identification');
   requiredText(input.name, 'name');
   return {
-    identification: input.identification.trim(),
+    identification: resolveIdentification(input),
     name: input.name.trim(),
     phone: input.phone?.trim() || null,
     email: input.email?.trim() || null

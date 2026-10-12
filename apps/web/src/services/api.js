@@ -180,6 +180,27 @@ export function getBuildingMaintenances(buildingId) {
   return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/maintenances`);
 }
 
+export function getMaintenanceAlertSettings(buildingId) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alert-settings`);
+}
+
+export function saveMaintenanceAlertSettings(buildingId, alertDays) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alert-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ alertDays })
+  });
+}
+
+export function getMaintenanceAlerts(buildingId) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alerts`);
+}
+
+export function attendMaintenanceAlert(alertId) {
+  return apiRequest(`/api/v1/maintenance/alerts/${alertId}/attend`, {
+    method: 'PATCH'
+  });
+}
+
 export function updateMaintenanceStatus(maintenanceId, status) {
   return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status`, {
     method: 'PATCH',

@@ -55,6 +55,20 @@ test('registra un proveedor nuevo con contacto y documento del mantenimiento', a
   assert.equal(auditEntries[0].entity, 'maintenance_supplier');
 });
 
+test('registra un proveedor solo con nombre, teléfono y correo', async () => {
+  const { useCases, suppliers } = setup();
+  const supplier = await useCases.assign(1, {
+    name: 'Soluciones Verticales',
+    phone: '3105177599',
+    email: 'contacto@verticales.test'
+  });
+
+  assert.equal(supplier.name, 'Soluciones Verticales');
+  assert.equal(supplier.phone, '3105177599');
+  assert.equal(supplier.email, 'contacto@verticales.test');
+  assert.equal(suppliers[0].identification, '3105177599');
+});
+
 test('selecciona un proveedor existente', async () => {
   const { useCases, suppliers, maintenances } = setup();
   suppliers.push({ id: 4, identification: '800111222', name: 'Proveedor existente' });
