@@ -114,6 +114,7 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   let unit2;
   let asset1;
   let asset2;
+  let claim1;
 
   admin = await login('admin@example.com', 'Admin123!');
   operator = await login('operador@example.com', 'Operador123!');
@@ -633,8 +634,11 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       policyId: policy.id,
       claimDate: '2020-01-01',
       description: 'Daño eléctrico de prueba',
-      status: 'reportada',
+      status: 'indemnizada',
+      result: 'Indemnización aprobada',
       claimedAmount: 250000,
+      indemnityAmount: 200000,
+      resolvedAt: '2020-02-01',
       documentRefs: ['acta-prueba.pdf'],
       assetIds: [asset1.id]
     };
@@ -646,14 +650,13 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       }),
       400
     );
-    expectStatus(
-      await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
-        method: 'POST',
-        cookie: admin.cookie,
-        body: claimBody
-      }),
-      201
-    );
+    const created = await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+      method: 'POST',
+      cookie: admin.cookie,
+      body: claimBody
+    });
+    expectStatus(created, 201);
+    claim1 = created.payload.data;
     const claims = await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
       cookie: admin.cookie
     });
@@ -685,6 +688,25 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       { headers: { Cookie: admin.cookie } }
     );
     assert.equal(wrongBuilding.status, 404);
+  });
+
+  await check('CP-039-01', 'Consultar historial por edificio, póliza o activo', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/claims`;
+    const filtered = await request(`${path}?policyId=${claim1.policyId}&assetId=${asset1.id}`, {
+      cookie: admin.cookie
+    });
+    expectStatus(filtered, 200);
+    assert.ok(filtered.payload.data.some((claim) => claim.id === claim1.id));
+    const claim = filtered.payload.data.find((item) => item.id === claim1.id);
+    assert.equal(claim.result, 'Indemnización aprobada');
+    assert.equal(claim.indemnityAmount, 200000);
+    assert.equal(claim.resolvedAt, '2020-02-01');
+    assert.ok(claim.documentRefs.includes('acta-prueba.pdf'));
+
+    const otherAsset = await request(`${path}?assetId=${asset2.id}`, { cookie: admin.cookie });
+    expectStatus(otherAsset, 200);
+    assert.equal(otherAsset.payload.data.length, 0);
+    expectStatus(await request(path, { cookie: operator.cookie }), 403);
   });
 
   await check('CP-012-02', 'Rechazar activo sin datos obligatorios', async () => {

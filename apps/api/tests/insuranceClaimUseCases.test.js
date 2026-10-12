@@ -15,8 +15,10 @@ const validInput = {
 
 function setup({ policyBuilding = 1, assetBuildings = [1, 1] } = {}) {
   let saved;
+  let receivedFilters;
   const claimRepository = {
-    async findByBuilding(id) {
+    async findByBuilding(id, filters) {
+      receivedFilters = filters;
       return [{ id: 1, buildingId: Number(id) }];
     },
     async create(input) {
@@ -43,6 +45,9 @@ function setup({ policyBuilding = 1, assetBuildings = [1, 1] } = {}) {
   return {
     get saved() {
       return saved;
+    },
+    get receivedFilters() {
+      return receivedFilters;
     },
     useCases: createInsuranceClaimUseCases(
       claimRepository,
@@ -92,6 +97,41 @@ test('HU-038: valida campos, estado, valor, fecha y activos', () => {
 });
 
 test('HU-038: lista por edificio y rechaza edificio inexistente', async () => {
-  assert.equal((await setup().useCases.list(1))[0].buildingId, 1);
+  const context = setup();
+  assert.equal((await context.useCases.list(1, { policyId: 10, assetId: 20 }))[0].buildingId, 1);
+  assert.deepEqual(context.receivedFilters, { policyId: 10, assetId: 20 });
   await assert.rejects(() => setup().useCases.list(2), { code: 'BUILDING_NOT_FOUND' });
+});
+
+test('historial de reclamaciones: acepta resultado, indemnización y fecha de resolución', async () => {
+  const context = setup();
+  const input = {
+    ...validInput,
+    status: 'indemnizada',
+    result: '  Indemnización aprobada  ',
+    indemnityAmount: 200000,
+    resolvedAt: '2026-10-11'
+  };
+  const parsed = createInsuranceClaimSchema.parse(input);
+  const claim = await context.useCases.create(1, parsed, 7);
+  assert.equal(claim.result, 'Indemnización aprobada');
+  assert.equal(claim.indemnityAmount, 200000);
+  assert.equal(claim.resolvedAt, '2026-10-11');
+});
+
+test('historial de reclamaciones: rechaza fechas de resolución inválidas', async () => {
+  assert.equal(
+    createInsuranceClaimSchema.safeParse({ ...validInput, resolvedAt: '2020-01-01' }).success,
+    false
+  );
+  await assert.rejects(
+    () =>
+      setup().useCases.create(1, {
+        ...validInput,
+        result: null,
+        indemnityAmount: null,
+        resolvedAt: '2026-10-12'
+      }),
+    { code: 'VALIDATION_ERROR' }
+  );
 });
