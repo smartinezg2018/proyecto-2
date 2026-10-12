@@ -3,11 +3,14 @@ import { validateBody } from '../../../../shared/middleware/validateBody.js';
 import { AuditRepository } from '../../../administration/infrastructure/auditRepository.js';
 import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { createMaintenanceUseCases } from '../../application/maintenanceUseCases.js';
+import { createMaintenanceAlertUseCases } from '../../application/maintenanceAlertUseCases.js';
 import { createMaintenanceSupplierUseCases } from '../../application/maintenanceSupplierUseCases.js';
 import { createMaintenanceQuoteUseCases } from '../../application/maintenanceQuoteUseCases.js';
 import { MaintenanceRepository } from '../../infrastructure/maintenanceRepository.js';
+import { MaintenanceAlertRepository } from '../../infrastructure/maintenanceAlertRepository.js';
 import { MaintenanceQuoteRepository } from '../../infrastructure/maintenanceQuoteRepository.js';
 import { SupplierRepository } from '../../../assets/infrastructure/supplierRepository.js';
+import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
 import { requireAuth } from '../../../auth/presentation/http/middleware/requireAuth.js';
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
@@ -17,14 +20,17 @@ import {
   registerMaintenanceSchema,
   updateMaintenanceCostsSchema,
   assignMaintenanceSupplierSchema,
-  createMaintenanceQuoteSchema
+  createMaintenanceQuoteSchema,
+  maintenanceAlertSettingsSchema
 } from './maintenanceSchemas.js';
 
 export const maintenanceRoutes = Router();
 const assetRepository = new AssetRepository();
 const maintenanceRepository = new MaintenanceRepository();
+const alertRepository = new MaintenanceAlertRepository();
 const supplierRepository = new SupplierRepository();
 const quoteRepository = new MaintenanceQuoteRepository();
+const buildingRepository = new BuildingRepository();
 
 const maintenanceUseCases = createMaintenanceUseCases(
   maintenanceRepository,
@@ -41,10 +47,28 @@ const maintenanceQuoteUseCases = createMaintenanceQuoteUseCases(
   maintenanceRepository,
   supplierRepository
 );
+const maintenanceAlertUseCases = createMaintenanceAlertUseCases(
+  alertRepository,
+  maintenanceRepository,
+  buildingRepository
+);
 
 const asyncHandler = (handler) => (request, response, next) => {
   Promise.resolve(handler(request, response, next)).catch(next);
 };
+
+async function ensureAlertBuildingAccess(request, response, next) {
+  try {
+    const alert = await alertRepository.findById(request.params.alertId);
+    if (!alert) {
+      throw new AppError('La alerta de mantenimiento no existe.', 404, 'ALERT_NOT_FOUND');
+    }
+    request.params.buildingId = String(alert.buildingId);
+    return ensureBuildingAccess(request, response, next);
+  } catch (error) {
+    next(error);
+  }
+}
 
 async function ensureMaintenanceBuildingAccess(request, response, next) {
   try {
@@ -71,6 +95,72 @@ async function ensureAssetBuildingAccess(request, response, next) {
     next(error);
   }
 }
+
+maintenanceRoutes.get(
+  '/buildings/:buildingId/alert-settings',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const settings = await maintenanceAlertUseCases.getSettings(request.params.buildingId);
+    response.json({ data: settings, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.put(
+  '/buildings/:buildingId/alert-settings',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureBuildingAccess,
+  validateBody(maintenanceAlertSettingsSchema),
+  asyncHandler(async (request, response) => {
+    const settings = await maintenanceAlertUseCases.saveSettings(
+      request.params.buildingId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: settings, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.get(
+  '/buildings/:buildingId/alerts',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const alerts = await maintenanceAlertUseCases.list(request.params.buildingId);
+    response.json({
+      data: alerts,
+      meta: { requestId: request.id, page: 1, pageSize: alerts.length }
+    });
+  })
+);
+
+maintenanceRoutes.patch(
+  '/alerts/:alertId/attend',
+  requireAuth,
+  requirePermission('maintenance.update'),
+  ensureAlertBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const alert = await maintenanceAlertUseCases.markAttended(
+      request.params.alertId,
+      request.user.id
+    );
+    response.json({ data: alert, meta: { requestId: request.id } });
+  })
+);
+
+maintenanceRoutes.get(
+  '/maintenances/:maintenanceId',
+  requireAuth,
+  requirePermission('maintenance.view'),
+  ensureMaintenanceBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const maintenance = await maintenanceUseCases.getById(request.params.maintenanceId);
+    response.json({ data: maintenance, meta: { requestId: request.id } });
+  })
+);
 
 maintenanceRoutes.get(
   '/buildings/:buildingId/maintenances',

@@ -35,6 +35,18 @@ export const Maintenance = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false
     },
+    frequency: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    responsible: {
+      type: DataTypes.STRING(150),
+      allowNull: true
+    },
+    nextExecutionDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true

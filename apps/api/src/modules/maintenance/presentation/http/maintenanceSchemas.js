@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAINTENANCE_STATUSES, MAINTENANCE_TYPES } from '../../domain/maintenanceCatalog.js';
+import { MAINTENANCE_FREQUENCIES } from '../../domain/maintenanceSchedule.js';
 
 function costSchema(label) {
   return z.preprocess(
@@ -25,6 +26,20 @@ export const registerMaintenanceSchema = z
     maintenanceDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha del mantenimiento debe tener el formato YYYY-MM-DD.'),
+    frequency: z.preprocess(
+      (value) => (value === '' || value === null ? undefined : value),
+      z
+        .enum(MAINTENANCE_FREQUENCIES, {
+          error: 'La frecuencia del mantenimiento preventivo no es válida.'
+        })
+        .optional()
+    ),
+    responsible: z.string().trim().optional(),
+    nextExecutionDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'La próxima fecha de ejecución debe tener el formato YYYY-MM-DD.')
+      .optional()
+      .nullable(),
     description: z.string().trim().optional(),
     failure: z.string().trim().optional(),
     cause: z.string().trim().optional(),
@@ -39,7 +54,22 @@ export const registerMaintenanceSchema = z
           message: 'La descripción del mantenimiento es obligatoria.'
         });
       }
+      if (value.frequency && (!value.responsible || value.responsible === '')) {
+        context.addIssue({
+          code: 'custom',
+          path: ['responsible'],
+          message: 'El responsable del mantenimiento preventivo es obligatorio.'
+        });
+      }
       return;
+    }
+
+    if (value.frequency) {
+      context.addIssue({
+        code: 'custom',
+        path: ['frequency'],
+        message: 'Solo los mantenimientos preventivos se pueden programar con frecuencia.'
+      });
     }
 
     if (value.maintenanceType === 'correctivo') {
@@ -76,6 +106,10 @@ export const updateMaintenanceCostsSchema = z
     message: 'Debe enviar el costo estimado o el costo real del mantenimiento.'
   });
 
+export const maintenanceAlertSettingsSchema = z.object({
+  alertDays: z.number().int().min(0).max(365)
+});
+
 export const changeMaintenanceStatusSchema = z.object({
   status: z.enum(MAINTENANCE_STATUSES, {
     error:
@@ -97,13 +131,6 @@ export const assignMaintenanceSupplierSchema = z
   })
   .superRefine((value, context) => {
     if (value.supplierId) return;
-    if (!value.identification) {
-      context.addIssue({
-        code: 'custom',
-        path: ['identification'],
-        message: 'La identificación del proveedor es obligatoria.'
-      });
-    }
     if (!value.name) {
       context.addIssue({
         code: 'custom',
