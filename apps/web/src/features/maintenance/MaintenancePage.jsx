@@ -115,7 +115,14 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
   });
   const [isSupplierSaving, setIsSupplierSaving] = useState(false);
   const [quotes, setQuotes] = useState([]);
-  const [quoteForm, setQuoteForm] = useState({ supplierId: '', amount: '', validUntil: '', documentRef: '', scope: '', conditions: '' });
+  const [quoteForm, setQuoteForm] = useState({
+    supplierId: '',
+    amount: '',
+    validUntil: '',
+    documentRef: '',
+    scope: '',
+    conditions: ''
+  });
   const [isQuoteSaving, setIsQuoteSaving] = useState(false);
 
   const canRegister = hasPermission(permissions, 'maintenance.create');
@@ -248,8 +255,18 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
     if (!selectedMaintenance) return;
     setIsQuoteSaving(true);
     try {
-      await createMaintenanceQuote(selectedMaintenance.id, { ...quoteForm, amount: quoteForm.amount.trim() });
-      setQuoteForm({ supplierId: '', amount: '', validUntil: '', documentRef: '', scope: '', conditions: '' });
+      await createMaintenanceQuote(selectedMaintenance.id, {
+        ...quoteForm,
+        amount: quoteForm.amount.trim()
+      });
+      setQuoteForm({
+        supplierId: '',
+        amount: '',
+        validUntil: '',
+        documentRef: '',
+        scope: '',
+        conditions: ''
+      });
       const response = await getMaintenanceQuotes(selectedMaintenance.id);
       setQuotes(response.data ?? []);
       setStatus({ type: 'success', message: 'Cotización registrada correctamente.' });
@@ -613,18 +630,85 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           </h4>
           {canUpdateStatus && (
             <form onSubmit={submitQuote} className="mb-4 grid gap-3 sm:grid-cols-3">
-              <input required placeholder="ID proveedor *" value={quoteForm.supplierId} onChange={(event) => setQuoteForm({ ...quoteForm, supplierId: event.target.value })} className={inputClassName} />
-              <input required type="number" min="0" step="0.01" placeholder="Valor *" value={quoteForm.amount} onChange={(event) => setQuoteForm({ ...quoteForm, amount: event.target.value })} className={inputClassName} />
-              <input required type="date" value={quoteForm.validUntil} onChange={(event) => setQuoteForm({ ...quoteForm, validUntil: event.target.value })} className={inputClassName} />
-              <input required placeholder="Alcance *" value={quoteForm.scope} onChange={(event) => setQuoteForm({ ...quoteForm, scope: event.target.value })} className="sm:col-span-2" />
-              <input required placeholder="Condiciones *" value={quoteForm.conditions} onChange={(event) => setQuoteForm({ ...quoteForm, conditions: event.target.value })} className={inputClassName} />
-              <input placeholder="Documento" value={quoteForm.documentRef} onChange={(event) => setQuoteForm({ ...quoteForm, documentRef: event.target.value })} className={inputClassName} />
-              <div className="flex items-end"><ActionButton type="submit" disabled={isQuoteSaving}><Save size={14} /> Guardar cotización</ActionButton></div>
+              <input
+                required
+                placeholder="ID proveedor *"
+                value={quoteForm.supplierId}
+                onChange={(event) => setQuoteForm({ ...quoteForm, supplierId: event.target.value })}
+                className={inputClassName}
+              />
+              <input
+                required
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Valor *"
+                value={quoteForm.amount}
+                onChange={(event) => setQuoteForm({ ...quoteForm, amount: event.target.value })}
+                className={inputClassName}
+              />
+              <input
+                required
+                type="date"
+                value={quoteForm.validUntil}
+                onChange={(event) => setQuoteForm({ ...quoteForm, validUntil: event.target.value })}
+                className={inputClassName}
+              />
+              <input
+                required
+                placeholder="Alcance *"
+                value={quoteForm.scope}
+                onChange={(event) => setQuoteForm({ ...quoteForm, scope: event.target.value })}
+                className="sm:col-span-2"
+              />
+              <input
+                required
+                placeholder="Condiciones *"
+                value={quoteForm.conditions}
+                onChange={(event) => setQuoteForm({ ...quoteForm, conditions: event.target.value })}
+                className={inputClassName}
+              />
+              <input
+                placeholder="Documento"
+                value={quoteForm.documentRef}
+                onChange={(event) =>
+                  setQuoteForm({ ...quoteForm, documentRef: event.target.value })
+                }
+                className={inputClassName}
+              />
+              <div className="flex items-end">
+                <ActionButton type="submit" disabled={isQuoteSaving}>
+                  <Save size={14} /> Guardar cotización
+                </ActionButton>
+              </div>
             </form>
           )}
-          {quotes.length === 0 ? <p className="mb-5 text-sm text-slate-400">No hay cotizaciones registradas.</p> : (
+          {quotes.length === 0 ? (
+            <p className="mb-5 text-sm text-slate-400">No hay cotizaciones registradas.</p>
+          ) : (
             <div className="mb-5 overflow-x-auto">
-              <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-100 text-xs text-slate-400"><th className="px-2 py-2">Proveedor</th><th className="px-2 py-2">Valor</th><th className="px-2 py-2">Vigencia</th><th className="px-2 py-2">Alcance</th><th className="px-2 py-2">Condiciones</th></tr></thead><tbody>{quotes.map((quote) => <tr key={quote.id} className="border-b border-slate-50"><td className="px-2 py-2">{quote.supplier?.name || quote.supplierId}</td><td className="px-2 py-2 font-semibold">{formatCurrency(quote.amount)}</td><td className="px-2 py-2">{quote.validUntil}</td><td className="px-2 py-2">{quote.scope}</td><td className="px-2 py-2">{quote.conditions}</td></tr>)}</tbody></table>
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs text-slate-400">
+                    <th className="px-2 py-2">Proveedor</th>
+                    <th className="px-2 py-2">Valor</th>
+                    <th className="px-2 py-2">Vigencia</th>
+                    <th className="px-2 py-2">Alcance</th>
+                    <th className="px-2 py-2">Condiciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((quote) => (
+                    <tr key={quote.id} className="border-b border-slate-50">
+                      <td className="px-2 py-2">{quote.supplier?.name || quote.supplierId}</td>
+                      <td className="px-2 py-2 font-semibold">{formatCurrency(quote.amount)}</td>
+                      <td className="px-2 py-2">{quote.validUntil}</td>
+                      <td className="px-2 py-2">{quote.scope}</td>
+                      <td className="px-2 py-2">{quote.conditions}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -634,30 +718,76 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           {canUpdateStatus ? (
             <form onSubmit={submitSupplier} className="mb-5 grid gap-4 sm:grid-cols-3">
               <label className="sm:col-span-3">
-                <span className="mb-1 block text-xs font-bold text-slate-500">Proveedor existente</span>
+                <span className="mb-1 block text-xs font-bold text-slate-500">
+                  Proveedor existente
+                </span>
                 <select
                   value={supplierForm.supplierId}
                   onFocus={loadSuppliers}
-                  onChange={(event) => setSupplierForm({ ...supplierForm, supplierId: event.target.value })}
+                  onChange={(event) =>
+                    setSupplierForm({ ...supplierForm, supplierId: event.target.value })
+                  }
                   className={inputClassName}
                 >
                   <option value="">Registrar proveedor nuevo</option>
                   {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </option>
                   ))}
                 </select>
               </label>
               {!supplierForm.supplierId && (
                 <>
-                  <input required placeholder="Identificación *" value={supplierForm.identification} onChange={(event) => setSupplierForm({ ...supplierForm, identification: event.target.value })} className={inputClassName} />
-                  <input required placeholder="Nombre *" value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} className={inputClassName} />
-                  <input placeholder="Teléfono" value={supplierForm.phone} onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })} className={inputClassName} />
-                  <input type="email" placeholder="Correo" value={supplierForm.email} onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })} className={inputClassName} />
+                  <input
+                    required
+                    placeholder="Identificación *"
+                    value={supplierForm.identification}
+                    onChange={(event) =>
+                      setSupplierForm({ ...supplierForm, identification: event.target.value })
+                    }
+                    className={inputClassName}
+                  />
+                  <input
+                    required
+                    placeholder="Nombre *"
+                    value={supplierForm.name}
+                    onChange={(event) =>
+                      setSupplierForm({ ...supplierForm, name: event.target.value })
+                    }
+                    className={inputClassName}
+                  />
+                  <input
+                    placeholder="Teléfono"
+                    value={supplierForm.phone}
+                    onChange={(event) =>
+                      setSupplierForm({ ...supplierForm, phone: event.target.value })
+                    }
+                    className={inputClassName}
+                  />
+                  <input
+                    type="email"
+                    placeholder="Correo"
+                    value={supplierForm.email}
+                    onChange={(event) =>
+                      setSupplierForm({ ...supplierForm, email: event.target.value })
+                    }
+                    className={inputClassName}
+                  />
                 </>
               )}
-              <input placeholder="Documento relacionado" value={supplierForm.documentRef} onChange={(event) => setSupplierForm({ ...supplierForm, documentRef: event.target.value })} className={inputClassName} />
+              <input
+                placeholder="Documento relacionado"
+                value={supplierForm.documentRef}
+                onChange={(event) =>
+                  setSupplierForm({ ...supplierForm, documentRef: event.target.value })
+                }
+                className={inputClassName}
+              />
               <div className="flex items-end">
-                <ActionButton type="submit" disabled={isSupplierSaving}><Save size={14} /> Guardar proveedor</ActionButton>
+                <ActionButton type="submit" disabled={isSupplierSaving}>
+                  <Save size={14} /> Guardar proveedor
+                </ActionButton>
               </div>
             </form>
           ) : (

@@ -7,17 +7,20 @@ function mapQuote(quote) {
     maintenanceId: data.maintenanceId,
     supplierId: data.supplierId,
     amount: Number(data.amount),
-    validUntil: typeof data.validUntil === 'string' ? data.validUntil.slice(0, 10) : data.validUntil,
+    validUntil:
+      typeof data.validUntil === 'string' ? data.validUntil.slice(0, 10) : data.validUntil,
     documentRef: data.documentRef,
     scope: data.scope,
     conditions: data.conditions,
-    supplier: data.supplier ? {
-      id: data.supplier.id,
-      name: data.supplier.name,
-      identification: data.supplier.identification,
-      phone: data.supplier.phone,
-      email: data.supplier.email
-    } : null
+    supplier: data.supplier
+      ? {
+          id: data.supplier.id,
+          name: data.supplier.name,
+          identification: data.supplier.identification,
+          phone: data.supplier.phone,
+          email: data.supplier.email
+        }
+      : null
   };
 }
 
@@ -28,7 +31,9 @@ export class MaintenanceQuoteRepository {
   }
 
   async findById(id) {
-    const quote = await MaintenanceQuote.findByPk(id, { include: [{ model: Supplier, as: 'supplier' }] });
+    const quote = await MaintenanceQuote.findByPk(id, {
+      include: [{ model: Supplier, as: 'supplier' }]
+    });
     return quote ? mapQuote(quote) : null;
   }
 
@@ -36,7 +41,10 @@ export class MaintenanceQuoteRepository {
     const quotes = await MaintenanceQuote.findAll({
       where: { maintenanceId: Number(maintenanceId) },
       include: [{ model: Supplier, as: 'supplier' }],
-      order: [['amount', 'ASC'], ['id', 'ASC']]
+      order: [
+        ['amount', 'ASC'],
+        ['id', 'ASC']
+      ]
     });
     return quotes.map(mapQuote);
   }

@@ -89,23 +89,36 @@ export const assignMaintenanceSupplierSchema = z
     identification: z.string().trim().optional().nullable(),
     name: z.string().trim().optional().nullable(),
     phone: z.string().optional().nullable(),
-    email: z.union([z.email('El correo debe ser un email válido.'), z.literal('')]).optional().nullable(),
+    email: z
+      .union([z.email('El correo debe ser un email válido.'), z.literal('')])
+      .optional()
+      .nullable(),
     documentRef: z.string().trim().max(255).optional().nullable()
   })
   .superRefine((value, context) => {
     if (value.supplierId) return;
     if (!value.identification) {
-      context.addIssue({ code: 'custom', path: ['identification'], message: 'La identificación del proveedor es obligatoria.' });
+      context.addIssue({
+        code: 'custom',
+        path: ['identification'],
+        message: 'La identificación del proveedor es obligatoria.'
+      });
     }
     if (!value.name) {
-      context.addIssue({ code: 'custom', path: ['name'], message: 'El nombre del proveedor es obligatorio.' });
+      context.addIssue({
+        code: 'custom',
+        path: ['name'],
+        message: 'El nombre del proveedor es obligatorio.'
+      });
     }
   });
 
 export const createMaintenanceQuoteSchema = z.object({
   supplierId: z.coerce.number().int().positive(),
   amount: z.coerce.number().nonnegative(),
-  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La vigencia debe tener el formato YYYY-MM-DD.'),
+  validUntil: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La vigencia debe tener el formato YYYY-MM-DD.'),
   documentRef: z.string().trim().max(255).optional().nullable(),
   scope: z.string().trim().min(1, 'El alcance es obligatorio.'),
   conditions: z.string().trim().min(1, 'Las condiciones son obligatorias.')
