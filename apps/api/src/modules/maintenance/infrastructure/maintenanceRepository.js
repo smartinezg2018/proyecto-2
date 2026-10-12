@@ -182,7 +182,9 @@ export class MaintenanceRepository {
   }
 
   async findById(id) {
-    const maintenance = await Maintenance.findByPk(id, { include: [assetInclude, supplierInclude] });
+    const maintenance = await Maintenance.findByPk(id, {
+      include: [assetInclude, supplierInclude]
+    });
     return mapMaintenance(maintenance);
   }
 

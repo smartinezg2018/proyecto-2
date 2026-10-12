@@ -196,7 +196,10 @@ maintenanceRoutes.get(
   ensureMaintenanceBuildingAccess,
   asyncHandler(async (request, response) => {
     const quotes = await maintenanceQuoteUseCases.list(request.params.maintenanceId);
-    response.json({ data: quotes, meta: { requestId: request.id, page: 1, pageSize: quotes.length } });
+    response.json({
+      data: quotes,
+      meta: { requestId: request.id, page: 1, pageSize: quotes.length }
+    });
   })
 );
 

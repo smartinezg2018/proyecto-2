@@ -122,6 +122,54 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   building2 = initialBuildings.payload.data.find((item) => item.nit === '900111003');
   assert.ok(building1 && building2);
 
+  await check('CP-037-01', 'Persistir anticipación y clasificar pólizas por edificio', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}`;
+    const otherPath = `/api/v1/insurance/buildings/${building2.id}`;
+    expectStatus(
+      await request(path + '/alert-settings', {
+        method: 'PUT',
+        cookie: admin.cookie,
+        body: { alertDays: 0 }
+      }),
+      200
+    );
+    assert.equal(
+      (await request(path + '/alert-settings', { cookie: admin.cookie })).payload.data.alertDays,
+      0
+    );
+    assert.equal(
+      (await request(otherPath + '/alert-settings', { cookie: admin.cookie })).payload.data
+        .alertDays,
+      30
+    );
+    const policy = {
+      number: 'HU037-001',
+      insurer: 'Seguros Prueba',
+      coverage: 'Incendio',
+      insuredValue: 150000,
+      validFrom: '2020-01-01',
+      validUntil: '2021-01-01'
+    };
+    expectStatus(
+      await request(path + '/policies', { method: 'POST', cookie: admin.cookie, body: policy }),
+      201
+    );
+    expectStatus(
+      await request(path + '/policies', { method: 'POST', cookie: admin.cookie, body: policy }),
+      409
+    );
+    const list = await request(path + '/policies', { cookie: admin.cookie });
+    expectStatus(list, 200);
+    assert.equal(list.payload.data.length, 1);
+    assert.equal(list.payload.data[0].expirationStatus, 'Vencida');
+    assert.equal(list.payload.data[0].insuredValue, 150000);
+    assert.equal(list.payload.data[0].validUntil, policy.validUntil);
+    assert.deepEqual(
+      (await request(otherPath + '/policies', { cookie: admin.cookie })).payload.data,
+      []
+    );
+  });
+
   await check('CP-001-01', 'Registrar edificio válido', async () => {
     const response = await request('/api/v1/administration/buildings', {
       method: 'POST',

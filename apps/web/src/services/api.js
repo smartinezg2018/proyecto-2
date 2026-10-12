@@ -217,6 +217,28 @@ export function getInsuranceQuotes(buildingId) {
   return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`);
 }
 
+export function getInsurancePolicies(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies`);
+}
+
+export function createInsurancePolicy(buildingId, policy) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies`, {
+    method: 'POST',
+    body: JSON.stringify(policy)
+  });
+}
+
+export function getInsuranceAlertSettings(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/alert-settings`);
+}
+
+export function saveInsuranceAlertSettings(buildingId, alertDays) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/alert-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ alertDays })
+  });
+}
+
 export function createInsuranceQuote(buildingId, quote) {
   return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`, {
     method: 'POST',

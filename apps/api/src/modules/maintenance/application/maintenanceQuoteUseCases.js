@@ -17,7 +17,11 @@ function validateInput(input) {
   }
 }
 
-export function createMaintenanceQuoteUseCases(quoteRepository, maintenanceRepository, supplierRepository) {
+export function createMaintenanceQuoteUseCases(
+  quoteRepository,
+  maintenanceRepository,
+  supplierRepository
+) {
   return {
     async list(maintenanceId) {
       if (!(await maintenanceRepository.findById(maintenanceId))) {
@@ -28,7 +32,8 @@ export function createMaintenanceQuoteUseCases(quoteRepository, maintenanceRepos
 
     async create(maintenanceId, input, userId = null) {
       const maintenance = await maintenanceRepository.findById(maintenanceId);
-      if (!maintenance) throw new AppError('El mantenimiento no existe.', 404, 'MAINTENANCE_NOT_FOUND');
+      if (!maintenance)
+        throw new AppError('El mantenimiento no existe.', 404, 'MAINTENANCE_NOT_FOUND');
       const supplier = await supplierRepository.findById(input.supplierId);
       if (!supplier) throw new AppError('El proveedor no existe.', 404, 'SUPPLIER_NOT_FOUND');
       validateInput(input);
