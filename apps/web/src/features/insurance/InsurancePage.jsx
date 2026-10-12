@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 
-import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
 import { InsurancePolicies } from './InsurancePolicies.jsx';
+import { InsuranceClaims } from './InsuranceClaims.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 import { createInsuranceQuote, getInsuranceQuotes } from '../../services/api.js';
@@ -161,68 +161,11 @@ export function ModuleSeguros({ activeBuildingId = null, permissions = [] }) {
           </table>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <p className="text-sm font-bold text-slate-700">
-              Registro de Reclamaciones e Indemnizaciones
-            </p>
-            <Btn variant="secondary">
-              <Plus size={13} /> Registrar Siniestro
-            </Btn>
-          </div>
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                {[
-                  'Radicado',
-                  'Fecha',
-                  'P�liza',
-                  'Descripci�n',
-                  'Estado',
-                  'Monto Aprobado',
-                  'Monto Recibido'
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">
-                  RAD-2026-001
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-500">2026-03-14</td>
-                <td className="px-4 py-3 text-sm text-slate-500">POL-2025-003</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  Da�o el�ctrico planta de emergencia
-                </td>
-                <td className="px-4 py-3">
-                  <Badge label="Activo" />
-                </td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-700">$18.500.000</td>
-                <td className="px-4 py-3 text-sm font-semibold text-emerald-600">$18.500.000</td>
-              </tr>
-              <tr className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">
-                  RAD-2026-002
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-500">2026-06-08</td>
-                <td className="px-4 py-3 text-sm text-slate-500">POL-2025-001</td>
-                <td className="px-4 py-3 text-sm text-slate-700">Da�o cubierta por granizo</td>
-                <td className="px-4 py-3">
-                  <Badge label="En mora" />
-                </td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-700">$42.000.000</td>
-                <td className="px-4 py-3 text-sm text-slate-300">�</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <InsuranceClaims
+          key={activeBuildingId ?? 'none'}
+          buildingId={activeBuildingId}
+          permissions={permissions}
+        />
       )}
     </div>
   );

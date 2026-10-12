@@ -2,6 +2,19 @@ import { database } from '../../../../database/connection.js';
 import { AppError } from '../../../shared/errors/AppError.js';
 
 export class InsurancePolicyRepository {
+  async findById(id) {
+    const [rows] = await database.execute(
+      `SELECT id, building_id AS buildingId, number, insurer,
+              coverage, insured_value AS insuredValue,
+              DATE_FORMAT(valid_from, '%Y-%m-%d') AS validFrom,
+              DATE_FORMAT(valid_until, '%Y-%m-%d') AS validUntil
+         FROM insurance_policies WHERE id = ?`,
+      [id]
+    );
+    if (!rows[0]) return null;
+    return { ...rows[0], insuredValue: Number(rows[0].insuredValue) };
+  }
+
   async findByBuilding(buildingId) {
     const [rows] = await database.execute(
       `SELECT id, building_id AS buildingId, number, insurer,

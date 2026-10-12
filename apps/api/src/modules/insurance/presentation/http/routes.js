@@ -4,15 +4,22 @@ import { requireAuth } from '../../../auth/presentation/http/middleware/requireA
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
+import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { InsuranceQuoteRepository } from '../../infrastructure/insuranceQuoteRepository.js';
 import { createInsuranceQuoteUseCases } from '../../application/insuranceQuoteUseCases.js';
 import {
   createInsuranceQuoteSchema,
   createInsurancePolicySchema,
+  createInsuranceClaimSchema,
   insuranceAlertSettingsSchema
 } from './schemas.js';
 import { InsurancePolicyRepository } from '../../infrastructure/insurancePolicyRepository.js';
 import { createInsurancePolicyUseCases } from '../../application/insurancePolicyUseCases.js';
+import { InsuranceClaimRepository } from '../../infrastructure/insuranceClaimRepository.js';
+import { createInsuranceClaimUseCases } from '../../application/insuranceClaimUseCases.js';
+import { claimUpload } from './claimUpload.js';
+import { ClaimDocumentStorage } from '../../infrastructure/claimDocumentStorage.js';
+import { AppError } from '../../../../shared/errors/AppError.js';
 
 export const insuranceRoutes = Router();
 const useCases = createInsuranceQuoteUseCases(
@@ -23,8 +30,76 @@ const policyUseCases = createInsurancePolicyUseCases(
   new InsurancePolicyRepository(),
   new BuildingRepository()
 );
+const claimUseCases = createInsuranceClaimUseCases(
+  new InsuranceClaimRepository(),
+  new InsurancePolicyRepository(),
+  new AssetRepository(),
+  new BuildingRepository()
+);
 const asyncHandler = (handler) => (request, response, next) =>
   Promise.resolve(handler(request, response, next)).catch(next);
+
+insuranceRoutes.get(
+  '/buildings/:buildingId/claims',
+  requireAuth,
+  requirePermission('insurance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const claims = await claimUseCases.list(request.params.buildingId);
+    response.json({
+      data: claims,
+      meta: { requestId: request.id, page: 1, pageSize: claims.length }
+    });
+  })
+);
+
+insuranceRoutes.post(
+  '/buildings/:buildingId/claims',
+  requireAuth,
+  requirePermission('insurance.update'),
+  ensureBuildingAccess,
+  claimUpload,
+  validateBody(createInsuranceClaimSchema),
+  asyncHandler(async (request, response) => {
+    const claim = await claimUseCases.create(
+      request.params.buildingId,
+      request.body,
+      request.user.id,
+      request.files ?? []
+    );
+    response.status(201).json({ data: claim, meta: { requestId: request.id } });
+  })
+);
+
+insuranceRoutes.get(
+  '/buildings/:buildingId/claims/:claimId/documents/:documentId',
+  requireAuth,
+  requirePermission('insurance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response, next) => {
+    const { buildingId, claimId, documentId } = request.params;
+    const storage = new ClaimDocumentStorage();
+    const filePath = storage.filePath(documentId);
+    if (!/^[1-9]\d*$/.test(claimId))
+      throw new AppError('Documento no encontrado.', 404, 'DOCUMENT_NOT_FOUND');
+    const document = await new InsuranceClaimRepository().findDocument(
+      buildingId,
+      claimId,
+      documentId
+    );
+    if (!document) throw new AppError('Documento no encontrado.', 404, 'DOCUMENT_NOT_FOUND');
+    response.set({
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "sandbox; default-src 'none'",
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/octet-stream'
+    });
+    response.download(filePath, document.originalName, (error) => {
+      if (error && !response.headersSent)
+        next(new AppError('Documento no disponible.', 404, 'DOCUMENT_NOT_FOUND'));
+    });
+  })
+);
 
 insuranceRoutes.get(
   '/buildings/:buildingId/policies',

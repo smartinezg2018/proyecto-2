@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import 'dotenv/config';
+import { ClaimDocumentStorage } from '../src/modules/insurance/infrastructure/claimDocumentStorage.js';
 
 describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async () => {
   // A fresh database per run prevents duplicate fixtures and protects application data.
@@ -21,8 +22,10 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   let server;
   let database;
   let sequelize;
+  const uploadedDocuments = [];
   after(async () => {
     try {
+      await new ClaimDocumentStorage().remove(uploadedDocuments);
       if (server?.listening) await new Promise((resolve) => server.close(resolve));
       if (database) await database.end();
       if (sequelize) await sequelize.close();
@@ -618,6 +621,70 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
     expectStatus(response2, 201);
     asset2 = response2.payload.data;
     assert.equal(asset1.buildingId, building1.id);
+  });
+
+  await check('CP-038-01', 'Registrar reclamación con póliza, activos y documentos', async () => {
+    const policies = await request(`/api/v1/insurance/buildings/${building1.id}/policies`, {
+      cookie: admin.cookie
+    });
+    const policy = policies.payload.data.find((item) => item.number === 'HU037-001');
+    assert.ok(policy);
+    const claimBody = {
+      policyId: policy.id,
+      claimDate: '2020-01-01',
+      description: 'Daño eléctrico de prueba',
+      status: 'reportada',
+      claimedAmount: 250000,
+      documentRefs: ['acta-prueba.pdf'],
+      assetIds: [asset1.id]
+    };
+    expectStatus(
+      await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: { ...claimBody, assetIds: [asset2.id] }
+      }),
+      400
+    );
+    expectStatus(
+      await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: claimBody
+      }),
+      201
+    );
+    const claims = await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+      cookie: admin.cookie
+    });
+    expectStatus(claims, 200);
+    assert.equal(claims.payload.data[0].policyNumber, 'HU037-001');
+    assert.equal(claims.payload.data[0].assets[0].id, asset1.id);
+    assert.deepEqual(claims.payload.data[0].documentRefs, ['acta-prueba.pdf']);
+    const formData = new FormData();
+    const pdf = '%PDF-1.4\n% persistence test\n%%EOF';
+    formData.append('payload', JSON.stringify(claimBody));
+    formData.append('documents', new Blob([pdf], { type: 'application/pdf' }), 'acta.pdf');
+    const uploaded = await fetch(`${baseUrl}/api/v1/insurance/buildings/${building1.id}/claims`, {
+      method: 'POST',
+      body: formData,
+      headers: { Cookie: admin.cookie, 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const payload = await uploaded.json();
+    uploadedDocuments.push(...(payload.data?.documents ?? []));
+    assert.equal(uploaded.status, 201, JSON.stringify(payload));
+    assert.equal(payload.data.documents.length, 1);
+    const claimId = payload.data.id;
+    const documentId = payload.data.documents[0].id;
+    const downloadPath = `/api/v1/insurance/buildings/${building1.id}/claims/${claimId}/documents/${documentId}`;
+    const download = await fetch(baseUrl + downloadPath, { headers: { Cookie: admin.cookie } });
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), pdf);
+    const wrongBuilding = await fetch(
+      baseUrl + downloadPath.replace(`/buildings/${building1.id}/`, `/buildings/${building2.id}/`),
+      { headers: { Cookie: admin.cookie } }
+    );
+    assert.equal(wrongBuilding.status, 404);
   });
 
   await check('CP-012-02', 'Rechazar activo sin datos obligatorios', async () => {
