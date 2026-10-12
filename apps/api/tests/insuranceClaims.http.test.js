@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 
 test('HU-038 HTTP: sesión, permisos, edificio y registro de reclamación', async (t) => {
   let permissions = ['insurance.view', 'insurance.update'];
+  let receivedFilters = {};
   const claims = [];
   const storage = new ClaimDocumentStorage();
   t.mock.method(UserRepository.prototype, 'findById', async () => ({ id: 7, status: 'active' }));
@@ -33,7 +34,10 @@ test('HU-038 HTTP: sesión, permisos, edificio y registro de reclamación', asyn
     buildingId: 1
   }));
   t.mock.method(AssetRepository.prototype, 'findById', async () => ({ id: 20, buildingId: 1 }));
-  t.mock.method(InsuranceClaimRepository.prototype, 'findByBuilding', async () => claims);
+  t.mock.method(InsuranceClaimRepository.prototype, 'findByBuilding', async (_id, filters = {}) => {
+    receivedFilters = filters;
+    return claims;
+  });
   t.mock.method(InsuranceClaimRepository.prototype, 'create', async (input) => {
     const claim = { id: 1, ...input };
     claims.push(claim);
@@ -141,6 +145,9 @@ test('HU-038 HTTP: sesión, permisos, edificio y registro de reclamación', asyn
     assert.equal((await request('/1/claims', 'POST', { ...body, assetIds: [] })).status, 400);
     assert.equal((await request('/1/claims', 'POST', body)).status, 201);
     assert.equal((await request('/1/claims')).payload.data.length, 2);
+    assert.equal((await request('/1/claims?policyId=10&assetId=20')).status, 200);
+    assert.deepEqual(receivedFilters, { policyId: 10, assetId: 20 });
+    assert.equal((await request('/1/claims?policyId=10%20OR%201=1')).status, 400);
     permissions = ['insurance.view'];
     assert.equal((await request('/1/claims')).status, 200);
     assert.equal((await request('/1/claims', 'POST', body)).status, 403);

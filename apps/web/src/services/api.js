@@ -242,8 +242,12 @@ export function saveInsuranceAlertSettings(buildingId, alertDays) {
   });
 }
 
-export function getInsuranceClaims(buildingId) {
-  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims`);
+export function getInsuranceClaims(buildingId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.policyId) params.set('policyId', filters.policyId);
+  if (filters.assetId) params.set('assetId', filters.assetId);
+  const query = params.toString();
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims${query ? `?${query}` : ''}`);
 }
 
 export function createInsuranceClaim(buildingId, claim, files = []) {

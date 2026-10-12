@@ -4,6 +4,7 @@ function mapClaim(row) {
   return {
     ...row,
     claimedAmount: Number(row.claimedAmount),
+    indemnityAmount: row.indemnityAmount == null ? null : Number(row.indemnityAmount),
     documentRefs:
       typeof row.documentRefs === 'string' ? JSON.parse(row.documentRefs) : row.documentRefs,
     assets: [],
@@ -50,19 +51,34 @@ export class InsuranceClaimRepository {
     return rows[0] ?? null;
   }
 
-  async findByBuilding(buildingId, pool = this.pool) {
+  async findByBuilding(buildingId, filters = {}, pool = this.pool) {
+    const conditions = ['c.building_id = ?'];
+    const parameters = [buildingId];
+    if (filters.policyId) {
+      conditions.push('c.policy_id = ?');
+      parameters.push(filters.policyId);
+    }
+    if (filters.assetId) {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM insurance_claim_assets filter_ca WHERE filter_ca.claim_id = c.id AND filter_ca.asset_id = ?)'
+      );
+      parameters.push(filters.assetId);
+    }
     const [rows] = await pool.execute(
       `SELECT c.id, c.building_id AS buildingId, c.policy_id AS policyId,
               p.number AS policyNumber, p.insurer,
               DATE_FORMAT(c.claim_date, '%Y-%m-%d') AS claimDate,
-              c.description, c.status, c.claimed_amount AS claimedAmount,
+              c.description, c.status, c.result,
+              c.claimed_amount AS claimedAmount,
+              c.indemnity_amount AS indemnityAmount,
+              DATE_FORMAT(c.resolved_at, '%Y-%m-%d') AS resolvedAt,
               c.document_refs AS documentRefs, c.created_by AS createdBy,
               c.created_at AS createdAt
          FROM insurance_claims c
          JOIN insurance_policies p ON p.id = c.policy_id
-        WHERE c.building_id = ?
+        WHERE ${conditions.join(' AND ')}
         ORDER BY c.claim_date DESC, c.id DESC`,
-      [buildingId]
+      parameters
     );
     return attachAssets(pool, rows.map(mapClaim));
   }
@@ -73,16 +89,19 @@ export class InsuranceClaimRepository {
       await connection.beginTransaction();
       const [result] = await connection.execute(
         `INSERT INTO insurance_claims
-          (building_id, policy_id, claim_date, description, status, claimed_amount,
-           document_refs, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (building_id, policy_id, claim_date, description, status, result, claimed_amount,
+           indemnity_amount, resolved_at, document_refs, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.buildingId,
           input.policyId,
           input.claimDate,
           input.description,
           input.status,
+          input.result,
           input.claimedAmount,
+          input.indemnityAmount,
+          input.resolvedAt,
           JSON.stringify(input.documentRefs),
           input.createdBy,
           input.createdBy
@@ -106,7 +125,7 @@ export class InsuranceClaimRepository {
           ]
         );
       }
-      const claims = await this.findByBuilding(input.buildingId, connection);
+      const claims = await this.findByBuilding(input.buildingId, {}, connection);
       await connection.commit();
       return claims.find((claim) => Number(claim.id) === Number(result.insertId));
     } catch (error) {
