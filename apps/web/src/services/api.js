@@ -1,7 +1,10 @@
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...options.headers
+    },
     credentials: 'include'
   });
 
@@ -236,6 +239,21 @@ export function saveInsuranceAlertSettings(buildingId, alertDays) {
   return apiRequest(`/api/v1/insurance/buildings/${buildingId}/alert-settings`, {
     method: 'PUT',
     body: JSON.stringify({ alertDays })
+  });
+}
+
+export function getInsuranceClaims(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims`);
+}
+
+export function createInsuranceClaim(buildingId, claim, files = []) {
+  const body = new FormData();
+  body.append('payload', JSON.stringify(claim));
+  for (const file of files) body.append('documents', file);
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body
   });
 }
 
