@@ -20,10 +20,15 @@ const emptyForm = {
   claimDate: '',
   description: '',
   status: 'reportada',
+  result: '',
   claimedAmount: '',
+  indemnityAmount: '',
+  resolvedAt: '',
   documentRefs: '',
   assetIds: []
 };
+
+const currency = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' });
 
 export function InsuranceClaims({ buildingId, permissions }) {
   const [claims, setClaims] = useState([]);
@@ -32,15 +37,17 @@ export function InsuranceClaims({ buildingId, permissions }) {
   const [form, setForm] = useState(emptyForm);
   const [files, setFiles] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [filters, setFilters] = useState({ policyId: '', assetId: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const canView = hasPermission(permissions, 'insurance.view');
   const canEdit = hasPermission(permissions, 'insurance.update');
 
   useEffect(() => {
     let active = true;
-    if (!buildingId) {
+    if (!buildingId || !canView) {
       setLoading(false);
       return;
     }
@@ -64,7 +71,35 @@ export function InsuranceClaims({ buildingId, permissions }) {
     return () => {
       active = false;
     };
-  }, [buildingId]);
+  }, [buildingId, canView]);
+
+  async function applyFilters(event) {
+    event?.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await getInsuranceClaims(buildingId, filters);
+      setClaims(response.data ?? []);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function clearFilters() {
+    setFilters({ policyId: '', assetId: '' });
+    setLoading(true);
+    setError('');
+    try {
+      const response = await getInsuranceClaims(buildingId);
+      setClaims(response.data ?? []);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function toggleAsset(assetId) {
     setForm((current) => ({
@@ -87,6 +122,9 @@ export function InsuranceClaims({ buildingId, permissions }) {
           ...form,
           policyId: Number(form.policyId),
           claimedAmount: Number(form.claimedAmount),
+          result: form.result.trim() || null,
+          indemnityAmount: form.indemnityAmount === '' ? null : Number(form.indemnityAmount),
+          resolvedAt: form.resolvedAt || null,
           documentRefs: form.documentRefs
             .split('\n')
             .map((value) => value.trim())
@@ -94,7 +132,12 @@ export function InsuranceClaims({ buildingId, permissions }) {
         },
         files
       );
-      setClaims((current) => [response.data, ...current]);
+      const matchesPolicy =
+        !filters.policyId || Number(filters.policyId) === response.data.policyId;
+      const matchesAsset =
+        !filters.assetId ||
+        (response.data.assets ?? []).some((asset) => Number(asset.id) === Number(filters.assetId));
+      if (matchesPolicy && matchesAsset) setClaims((current) => [response.data, ...current]);
       setForm(emptyForm);
       setFiles([]);
       setShowForm(false);
@@ -106,6 +149,7 @@ export function InsuranceClaims({ buildingId, permissions }) {
     }
   }
 
+  if (!canView) return <p>No tienes permiso para consultar reclamaciones.</p>;
   if (!buildingId) return <p>Selecciona un edificio para consultar sus reclamaciones.</p>;
   if (loading) return <p role="status">Cargando reclamaciones…</p>;
   return (
@@ -120,6 +164,51 @@ export function InsuranceClaims({ buildingId, permissions }) {
           {message}
         </p>
       )}
+      <form
+        onSubmit={applyFilters}
+        className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-[1fr_1fr_auto_auto]"
+      >
+        <label className="text-sm font-medium">
+          Póliza
+          <select
+            value={filters.policyId}
+            onChange={(event) => setFilters({ ...filters, policyId: event.target.value })}
+            className="mt-1 block w-full rounded-lg border px-3 py-2"
+          >
+            <option value="">Todas las pólizas</option>
+            {policies.map((policy) => (
+              <option key={policy.id} value={policy.id}>
+                {policy.number} · {policy.insurer}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          Activo
+          <select
+            value={filters.assetId}
+            onChange={(event) => setFilters({ ...filters, assetId: event.target.value })}
+            className="mt-1 block w-full rounded-lg border px-3 py-2"
+          >
+            <option value="">Todos los activos</option>
+            {assets.map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {asset.code} · {asset.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="self-end rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white">
+          Filtrar
+        </button>
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="self-end rounded-lg border px-4 py-2 text-sm font-semibold"
+        >
+          Limpiar
+        </button>
+      </form>
       {canEdit && (
         <button
           type="button"
@@ -196,6 +285,37 @@ export function InsuranceClaims({ buildingId, permissions }) {
               className="mt-1 block w-full rounded-lg border px-3 py-2"
             />
           </label>
+          <label className="text-sm font-medium">
+            Valor indemnizado (COP, opcional)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.indemnityAmount}
+              onChange={(event) => setForm({ ...form, indemnityAmount: event.target.value })}
+              className="mt-1 block w-full rounded-lg border px-3 py-2"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Fecha de resolución (opcional)
+            <input
+              type="date"
+              min={form.claimDate || undefined}
+              value={form.resolvedAt}
+              onChange={(event) => setForm({ ...form, resolvedAt: event.target.value })}
+              className="mt-1 block w-full rounded-lg border px-3 py-2"
+            />
+          </label>
+          <label className="text-sm font-medium md:col-span-2">
+            Resultado (opcional)
+            <textarea
+              maxLength="5000"
+              value={form.result}
+              onChange={(event) => setForm({ ...form, result: event.target.value })}
+              placeholder="Resultado de la reclamación"
+              className="mt-1 block min-h-20 w-full rounded-lg border px-3 py-2"
+            />
+          </label>
           <fieldset className="rounded-lg border p-3 md:col-span-2">
             <legend className="px-1 text-sm font-medium">Activos afectados</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -266,7 +386,9 @@ export function InsuranceClaims({ buildingId, permissions }) {
                 'Descripción',
                 'Activos',
                 'Estado',
-                'Valor',
+                'Resultado',
+                'Valores',
+                'Resolución',
                 'Documentos'
               ].map((heading) => (
                 <th
@@ -289,11 +411,17 @@ export function InsuranceClaims({ buildingId, permissions }) {
                 <td className="max-w-64 px-3 py-3">{claim.description}</td>
                 <td className="px-3 py-3">{claim.assets.map((asset) => asset.code).join(', ')}</td>
                 <td className="whitespace-nowrap px-3 py-3">{statusLabel(claim.status)}</td>
+                <td className="max-w-64 px-3 py-3">{claim.result || 'Pendiente'}</td>
                 <td className="whitespace-nowrap px-3 py-3">
-                  {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(
-                    claim.claimedAmount
-                  )}
+                  <span className="block">Reclamado: {currency.format(claim.claimedAmount)}</span>
+                  <span className="block text-slate-500">
+                    Indemnizado:{' '}
+                    {claim.indemnityAmount == null
+                      ? 'Pendiente'
+                      : currency.format(claim.indemnityAmount)}
+                  </span>
                 </td>
+                <td className="whitespace-nowrap px-3 py-3">{claim.resolvedAt || 'Pendiente'}</td>
                 <td className="px-3 py-3">
                   {(claim.documents ?? []).map((document) => (
                     <a

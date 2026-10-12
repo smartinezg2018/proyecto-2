@@ -11,7 +11,8 @@ import {
   createInsuranceQuoteSchema,
   createInsurancePolicySchema,
   createInsuranceClaimSchema,
-  insuranceAlertSettingsSchema
+  insuranceAlertSettingsSchema,
+  listInsuranceClaimsQuerySchema
 } from './schemas.js';
 import { InsurancePolicyRepository } from '../../infrastructure/insurancePolicyRepository.js';
 import { createInsurancePolicyUseCases } from '../../application/insurancePolicyUseCases.js';
@@ -45,7 +46,11 @@ insuranceRoutes.get(
   requirePermission('insurance.view'),
   ensureBuildingAccess,
   asyncHandler(async (request, response) => {
-    const claims = await claimUseCases.list(request.params.buildingId);
+    const parsed = listInsuranceClaimsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError('Los filtros de reclamaciones no son válidos.', 400, 'VALIDATION_ERROR');
+    }
+    const claims = await claimUseCases.list(request.params.buildingId, parsed.data);
     response.json({
       data: claims,
       meta: { requestId: request.id, page: 1, pageSize: claims.length }

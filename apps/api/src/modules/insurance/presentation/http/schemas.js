@@ -6,14 +6,33 @@ const claimDateSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener el formato YYYY-MM-DD.')
   .refine(isCalendarDate, 'La fecha no es válida.');
 
-export const createInsuranceClaimSchema = z.object({
-  policyId: z.number().int().positive(),
-  claimDate: claimDateSchema,
-  description: z.string().trim().min(1).max(5000),
-  status: z.enum(['reportada', 'en_revision', 'aprobada', 'rechazada', 'indemnizada']),
-  claimedAmount: z.number().nonnegative().max(9999999999999.99),
-  documentRefs: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
-  assetIds: z.array(z.number().int().positive()).min(1).max(100)
+export const createInsuranceClaimSchema = z
+  .object({
+    policyId: z.number().int().positive(),
+    claimDate: claimDateSchema,
+    description: z.string().trim().min(1).max(5000),
+    status: z.enum(['reportada', 'en_revision', 'aprobada', 'rechazada', 'indemnizada']),
+    result: z.string().trim().max(5000).nullable().optional().default(null),
+    claimedAmount: z.number().nonnegative().max(9999999999999.99),
+    indemnityAmount: z
+      .number()
+      .nonnegative()
+      .max(9999999999999.99)
+      .nullable()
+      .optional()
+      .default(null),
+    resolvedAt: claimDateSchema.nullable().optional().default(null),
+    documentRefs: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+    assetIds: z.array(z.number().int().positive()).min(1).max(100)
+  })
+  .refine((input) => !input.resolvedAt || input.resolvedAt >= input.claimDate, {
+    message: 'La fecha de resolución no puede ser anterior al siniestro.',
+    path: ['resolvedAt']
+  });
+
+export const listInsuranceClaimsQuerySchema = z.object({
+  policyId: z.coerce.number().int().positive().optional(),
+  assetId: z.coerce.number().int().positive().optional()
 });
 
 export const insuranceAlertSettingsSchema = z.object({

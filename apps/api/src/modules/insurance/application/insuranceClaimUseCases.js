@@ -17,9 +17,9 @@ export function createInsuranceClaimUseCases(
   }
 
   return {
-    async list(buildingId) {
+    async list(buildingId, filters = {}) {
       await checkBuilding(buildingId);
-      return claimRepository.findByBuilding(buildingId);
+      return claimRepository.findByBuilding(buildingId, filters);
     },
 
     async create(buildingId, input, userId = null, files = []) {
@@ -30,6 +30,9 @@ export function createInsuranceClaimUseCases(
           400,
           'VALIDATION_ERROR'
         );
+      }
+      if (input.resolvedAt && input.resolvedAt > clock()) {
+        throw new AppError('La fecha de resolución no puede ser futura.', 400, 'VALIDATION_ERROR');
       }
 
       const policy = await policyRepository.findById(input.policyId);
@@ -61,7 +64,10 @@ export function createInsuranceClaimUseCases(
           claimDate: input.claimDate,
           description: input.description.trim(),
           status: input.status,
+          result: input.result?.trim() || null,
           claimedAmount: input.claimedAmount,
+          indemnityAmount: input.indemnityAmount,
+          resolvedAt: input.resolvedAt,
           documentRefs: input.documentRefs,
           assetIds,
           createdBy: userId,
