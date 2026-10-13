@@ -4,12 +4,15 @@ import { requireAuth } from '../../../auth/presentation/http/middleware/requireA
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
+import { AuditRepository } from '../../../administration/infrastructure/auditRepository.js';
 import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { InsuranceQuoteRepository } from '../../infrastructure/insuranceQuoteRepository.js';
 import { createInsuranceQuoteUseCases } from '../../application/insuranceQuoteUseCases.js';
 import {
   createInsuranceQuoteSchema,
   createInsurancePolicySchema,
+  updateInsurancePolicySchema,
+  listInsurancePoliciesQuerySchema,
   createInsuranceClaimSchema,
   insuranceAlertSettingsSchema,
   listInsuranceClaimsQuerySchema
@@ -29,7 +32,10 @@ const useCases = createInsuranceQuoteUseCases(
 );
 const policyUseCases = createInsurancePolicyUseCases(
   new InsurancePolicyRepository(),
-  new BuildingRepository()
+  new BuildingRepository(),
+  undefined,
+  new AssetRepository(),
+  new AuditRepository()
 );
 const claimUseCases = createInsuranceClaimUseCases(
   new InsuranceClaimRepository(),
@@ -112,9 +118,14 @@ insuranceRoutes.get(
   requirePermission('insurance.view'),
   ensureBuildingAccess,
   asyncHandler(async (request, response) => {
+    const parsed = listInsurancePoliciesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError('Los filtros de pólizas no son válidos.', 400, 'VALIDATION_ERROR');
+    }
+    const policies = await policyUseCases.list(request.params.buildingId, parsed.data);
     response.json({
-      data: await policyUseCases.list(request.params.buildingId),
-      meta: { requestId: request.id }
+      data: policies,
+      meta: { requestId: request.id, page: 1, pageSize: policies.length }
     });
   })
 );
@@ -128,6 +139,55 @@ insuranceRoutes.post(
   asyncHandler(async (request, response) => {
     response.status(201).json({
       data: await policyUseCases.create(request.params.buildingId, request.body, request.user.id),
+      meta: { requestId: request.id }
+    });
+  })
+);
+
+insuranceRoutes.get(
+  '/buildings/:buildingId/assets/:assetId/policies',
+  requireAuth,
+  requirePermission('insurance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const policies = await policyUseCases.listByAsset(
+      request.params.buildingId,
+      request.params.assetId
+    );
+    response.json({
+      data: policies,
+      meta: { requestId: request.id, page: 1, pageSize: policies.length }
+    });
+  })
+);
+
+insuranceRoutes.get(
+  '/buildings/:buildingId/policies/:policyId',
+  requireAuth,
+  requirePermission('insurance.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    response.json({
+      data: await policyUseCases.getById(request.params.buildingId, request.params.policyId),
+      meta: { requestId: request.id }
+    });
+  })
+);
+
+insuranceRoutes.put(
+  '/buildings/:buildingId/policies/:policyId',
+  requireAuth,
+  requirePermission('insurance.update'),
+  ensureBuildingAccess,
+  validateBody(updateInsurancePolicySchema),
+  asyncHandler(async (request, response) => {
+    response.json({
+      data: await policyUseCases.update(
+        request.params.buildingId,
+        request.params.policyId,
+        request.body,
+        request.user.id
+      ),
       meta: { requestId: request.id }
     });
   })

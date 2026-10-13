@@ -241,8 +241,15 @@ export function getInsuranceQuotes(buildingId) {
   return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`);
 }
 
-export function getInsurancePolicies(buildingId) {
-  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies`);
+export function getInsurancePolicies(buildingId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.insurer) params.set('insurer', filters.insurer);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.validUntil) params.set('validUntil', filters.validUntil);
+  const query = params.toString();
+  return apiRequest(
+    `/api/v1/insurance/buildings/${buildingId}/policies${query ? `?${query}` : ''}`
+  );
 }
 
 export function createInsurancePolicy(buildingId, policy) {
@@ -250,6 +257,17 @@ export function createInsurancePolicy(buildingId, policy) {
     method: 'POST',
     body: JSON.stringify(policy)
   });
+}
+
+export function updateInsurancePolicy(buildingId, policyId, policy) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies/${policyId}`, {
+    method: 'PUT',
+    body: JSON.stringify(policy)
+  });
+}
+
+export function getAssetPolicies(buildingId, assetId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/assets/${assetId}/policies`);
 }
 
 export function getInsuranceAlertSettings(buildingId) {

@@ -9,6 +9,7 @@ import {
   getAssetHistory,
   getAssetSupplier,
   getAssets,
+  getAssetPolicies,
   getBuildings,
   getSuppliers,
   registerAcquisitionCost,
@@ -174,6 +175,7 @@ export function ModuleInventario() {
   const [buildingId, setBuildingId] = useState('');
   const [assets, setAssets] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [assetPolicies, setAssetPolicies] = useState([]);
   const [history, setHistory] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [assetSupplier, setAssetSupplier] = useState(null);
@@ -298,10 +300,17 @@ export function ModuleInventario() {
 
   async function openAsset(asset) {
     setSelectedAsset(asset);
+    setAssetPolicies([]);
     setIsCreateOpen(false);
     setStatus({ type: '', message: '' });
     try {
-      await Promise.all([loadHistory(asset.id), loadAssetEconomics(asset.id)]);
+      await Promise.all([
+        loadHistory(asset.id),
+        loadAssetEconomics(asset.id),
+        getAssetPolicies(asset.buildingId, asset.id)
+          .then((response) => setAssetPolicies(response.data))
+          .catch(() => setAssetPolicies([]))
+      ]);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -690,6 +699,17 @@ export function ModuleInventario() {
               </p>
               <p className="sm:col-span-2">
                 <strong>Descripción:</strong> {selectedAsset.description || 'Sin descripción'}
+              </p>
+              <p className="sm:col-span-2">
+                <strong>Pólizas:</strong>{' '}
+                {assetPolicies.length === 0
+                  ? 'Sin póliza asociada'
+                  : assetPolicies
+                      .map(
+                        (policy) =>
+                          `${policy.number} · ${policy.insurer} · ${policy.expirationStatus} · ${policy.validUntil}`
+                      )
+                      .join(' | ')}
               </p>
             </div>
           </div>

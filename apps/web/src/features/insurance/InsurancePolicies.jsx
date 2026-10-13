@@ -3,18 +3,23 @@ import { hasPermission } from '../../app/permissions.js';
 import {
   getInsurancePolicies,
   createInsurancePolicy,
+  updateInsurancePolicy,
   getInsuranceAlertSettings,
-  saveInsuranceAlertSettings
+  saveInsuranceAlertSettings,
+  getAssets
 } from '../../services/api.js';
 
 const emptyForm = {
   number: '',
   insurer: '',
-  coverage: '',
+  coverages: '',
   insuredValue: '',
   validFrom: '',
-  validUntil: ''
+  validUntil: '',
+  assetIds: []
 };
+const emptyFilters = { insurer: '', status: '', validUntil: '' };
+const statusOptions = ['Vigente', 'Próxima a vencer', 'Vencida', 'Pendiente de inicio'];
 const colors = {
   Vigente: 'bg-green-100 text-green-800',
   'Próxima a vencer': 'bg-amber-100 text-amber-800',
@@ -24,9 +29,12 @@ const colors = {
 
 export function InsurancePolicies({ buildingId, permissions }) {
   const [policies, setPolicies] = useState([]);
+  const [assets, setAssets] = useState([]);
   const [days, setDays] = useState('30');
   const [savedDays, setSavedDays] = useState(30);
   const [form, setForm] = useState(emptyForm);
+  const [filters, setFilters] = useState(emptyFilters);
+  const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,10 +48,15 @@ export function InsurancePolicies({ buildingId, permissions }) {
       setLoading(false);
       return;
     }
-    Promise.all([getInsurancePolicies(buildingId), getInsuranceAlertSettings(buildingId)])
-      .then(([list, settings]) => {
+    Promise.all([
+      getInsurancePolicies(buildingId),
+      getInsuranceAlertSettings(buildingId),
+      getAssets(buildingId)
+    ])
+      .then(([list, settings, assetList]) => {
         if (!active) return;
         setPolicies(list.data);
+        setAssets(assetList.data ?? []);
         setDays(String(settings.data.alertDays));
         setSavedDays(settings.data.alertDays);
       })
@@ -65,19 +78,41 @@ export function InsurancePolicies({ buildingId, permissions }) {
     setMessage('');
     try {
       if (registering) {
-        await createInsurancePolicy(buildingId, {
-          ...form,
-          insuredValue: Number(form.insuredValue)
-        });
+        const payload = {
+          number: form.number,
+          insurer: form.insurer,
+          coverages: form.coverages
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          insuredValue: Number(form.insuredValue),
+          validFrom: form.validFrom,
+          validUntil: form.validUntil,
+          assetIds: form.assetIds.map(Number)
+        };
+        if (payload.coverages.length === 0 || payload.assetIds.length === 0) {
+          throw new Error('Indica al menos una cobertura y un activo del edificio.');
+        }
+        if (editingId) {
+          await updateInsurancePolicy(buildingId, editingId, payload);
+          setMessage('Póliza actualizada.');
+        } else {
+          await createInsurancePolicy(buildingId, payload);
+          setMessage('Póliza registrada.');
+        }
         setForm(emptyForm);
+        setEditingId(null);
         setShowForm(false);
-        setMessage('Póliza registrada.');
       } else {
         await saveInsuranceAlertSettings(buildingId, Number(days));
         setSavedDays(Number(days));
         setMessage('Anticipación guardada.');
       }
-      const list = await getInsurancePolicies(buildingId);
+      const list = await getInsurancePolicies(buildingId, {
+        insurer: filters.insurer,
+        status: filters.status,
+        validUntil: filters.validUntil
+      });
       setPolicies(list.data);
     } catch (cause) {
       setError(cause.message);
@@ -154,14 +189,70 @@ export function InsurancePolicies({ buildingId, permissions }) {
           </ul>
         </div>
       )}
+      <form
+        className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setSaving(true);
+          setError('');
+          try {
+            const list = await getInsurancePolicies(buildingId, filters);
+            setPolicies(list.data);
+          } catch (cause) {
+            setError(cause.message);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <label className="text-sm">
+          Aseguradora
+          <input
+            value={filters.insurer}
+            onChange={(event) => setFilters({ ...filters, insurer: event.target.value })}
+            className="block rounded border px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          Estado
+          <select
+            value={filters.status}
+            onChange={(event) => setFilters({ ...filters, status: event.target.value })}
+            className="block rounded border px-3 py-2"
+          >
+            <option value="">Todos</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          Fecha de vencimiento
+          <input
+            type="date"
+            value={filters.validUntil}
+            onChange={(event) => setFilters({ ...filters, validUntil: event.target.value })}
+            className="block rounded border px-3 py-2"
+          />
+        </label>
+        <button disabled={saving} className="rounded bg-slate-800 px-4 py-2 text-white">
+          Consultar
+        </button>
+      </form>
       {canEdit && (
         <button
           type="button"
           disabled={saving}
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setShowForm(!showForm);
+            setEditingId(null);
+            setForm(emptyForm);
+          }}
           className="rounded bg-blue-600 px-4 py-2 text-white"
         >
-          {showForm ? 'Cancelar registro' : 'Registrar póliza'}
+          {showForm ? 'Cancelar' : 'Registrar póliza'}
         </button>
       )}
       {showForm && (
@@ -172,7 +263,6 @@ export function InsurancePolicies({ buildingId, permissions }) {
           {[
             ['number', 'Número de póliza', 'text'],
             ['insurer', 'Aseguradora', 'text'],
-            ['coverage', 'Cobertura', 'text'],
             ['insuredValue', 'Valor asegurado (COP)', 'number'],
             ['validFrom', 'Inicio de vigencia', 'date'],
             ['validUntil', 'Fin de vigencia', 'date']
@@ -186,17 +276,50 @@ export function InsurancePolicies({ buildingId, permissions }) {
                 disabled={saving}
                 min={type === 'number' ? '0' : undefined}
                 step={type === 'number' ? '0.01' : undefined}
-                maxLength={name === 'number' ? 100 : name === 'insurer' ? 150 : 5000}
+                maxLength={name === 'number' ? 100 : name === 'insurer' ? 150 : undefined}
                 onChange={(event) => setForm({ ...form, [name]: event.target.value })}
                 className="block w-full rounded border px-3 py-2"
               />
             </label>
           ))}
+          <label className="text-sm md:col-span-2">
+            Coberturas, una por línea
+            <textarea
+              required
+              rows={3}
+              value={form.coverages}
+              disabled={saving}
+              onChange={(event) => setForm({ ...form, coverages: event.target.value })}
+              className="block w-full rounded border px-3 py-2"
+            />
+          </label>
+          <fieldset className="text-sm md:col-span-2">
+            <legend>Activos cubiertos del edificio</legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {assets.map((asset) => (
+                <label key={asset.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.assetIds.includes(asset.id)}
+                    disabled={saving}
+                    onChange={(event) => {
+                      const assetIds = event.target.checked
+                        ? [...form.assetIds, asset.id]
+                        : form.assetIds.filter((id) => id !== asset.id);
+                      setForm({ ...form, assetIds });
+                    }}
+                  />
+                  {asset.code} · {asset.name}
+                </label>
+              ))}
+            </div>
+            {assets.length === 0 && <p>Este edificio no tiene activos para asociar.</p>}
+          </fieldset>
           <button
             disabled={saving}
             className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
           >
-            Guardar póliza
+            {editingId ? 'Guardar cambios' : 'Guardar póliza'}
           </button>
         </form>
       )}
@@ -211,7 +334,8 @@ export function InsurancePolicies({ buildingId, permissions }) {
                 'Vigencia',
                 'Valor asegurado',
                 'Estado',
-                'Vencimiento'
+                'Vencimiento',
+                'Activos'
               ].map((label) => (
                 <th key={label} className="p-3">
                   {label}
@@ -224,7 +348,7 @@ export function InsurancePolicies({ buildingId, permissions }) {
               <tr key={p.id} className="border-t">
                 <td className="p-3">{p.number}</td>
                 <td className="p-3">{p.insurer}</td>
-                <td className="p-3">{p.coverage}</td>
+                <td className="p-3">{(p.coverages ?? [p.coverage]).join(', ')}</td>
                 <td className="p-3">
                   {p.validFrom} — {p.validUntil}
                 </td>
@@ -244,6 +368,30 @@ export function InsurancePolicies({ buildingId, permissions }) {
                     : p.daysRemaining === 0
                       ? 'Hoy'
                       : `En ${p.daysRemaining} días`}
+                </td>
+                <td className="p-3">
+                  {(p.assets ?? []).map((asset) => asset.code).join(', ') || 'Sin activos'}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="ml-2 text-blue-700"
+                      onClick={() => {
+                        setEditingId(p.id);
+                        setShowForm(true);
+                        setForm({
+                          number: p.number,
+                          insurer: p.insurer,
+                          coverages: (p.coverages ?? [p.coverage]).join('\n'),
+                          insuredValue: String(p.insuredValue),
+                          validFrom: p.validFrom,
+                          validUntil: p.validUntil,
+                          assetIds: (p.assets ?? []).map((asset) => asset.id)
+                        });
+                      }}
+                    >
+                      Editar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

@@ -38,16 +38,48 @@ export const listInsuranceClaimsQuerySchema = z.object({
 export const insuranceAlertSettingsSchema = z.object({
   alertDays: z.number().int().min(0).max(365)
 });
+const coverageItem = z.string().trim().min(1).max(200);
+const policyDates = {
+  validFrom: z.iso.date(),
+  validUntil: z.iso.date()
+};
+const laterEndDate = (input) => input.validUntil > input.validFrom;
+
+export const listInsurancePoliciesQuerySchema = z.object({
+  insurer: z.string().trim().min(1).max(150).optional(),
+  status: z.enum(['Vigente', 'Próxima a vencer', 'Vencida', 'Pendiente de inicio']).optional(),
+  validUntil: claimDateSchema.optional()
+});
+
 export const createInsurancePolicySchema = z
   .object({
     number: z.string().trim().min(1).max(100),
     insurer: z.string().trim().min(1).max(150),
-    coverage: z.string().trim().min(1).max(5000),
+    coverage: z.string().trim().min(1).max(5000).optional(),
+    coverages: z.array(coverageItem).min(1).max(20).optional(),
     insuredValue: z.number().nonnegative().max(9999999999999.99),
-    validFrom: z.iso.date(),
-    validUntil: z.iso.date()
+    assetIds: z.array(z.number().int().positive()).min(1).max(100).optional(),
+    ...policyDates
   })
-  .refine((input) => input.validUntil > input.validFrom, {
+  .refine((input) => Boolean(input.coverage) || Boolean(input.coverages?.length), {
+    message: 'Debe indicar al menos una cobertura.',
+    path: ['coverages']
+  })
+  .refine(laterEndDate, {
+    message: 'La fecha final debe ser posterior a la inicial.',
+    path: ['validUntil']
+  });
+
+export const updateInsurancePolicySchema = z
+  .object({
+    number: z.string().trim().min(1).max(100),
+    insurer: z.string().trim().min(1).max(150),
+    coverages: z.array(coverageItem).min(1).max(20),
+    insuredValue: z.number().nonnegative().max(9999999999999.99),
+    assetIds: z.array(z.number().int().positive()).min(1).max(100),
+    ...policyDates
+  })
+  .refine(laterEndDate, {
     message: 'La fecha final debe ser posterior a la inicial.',
     path: ['validUntil']
   });

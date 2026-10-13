@@ -14,8 +14,12 @@ HU-037: alertas de vencimiento
   GET/PUT `/api/v1/insurance/buildings/:buildingId/alert-settings` (cuerpo: `{"alertDays":30}`).
 - Consulta: `insurance.view`. Registro/configuración: `insurance.update`.
   Todas las operaciones verifican sesión y acceso al edificio.
-- Alertas visibles en pantalla; no se envían correos. El registro es básico,
-  sin flujo de renovación ni asociación de activos.
+- Alertas visibles en pantalla; no se envían correos.
+- HU-033 a HU-036: el registro captura número, aseguradora, vigencia, valor y coberturas.
+  La fecha final debe ser posterior a la inicial. Una póliza se asocia a uno o varios
+  activos del mismo edificio y aparece en el detalle de cada activo. La actualización
+  modifica los campos autorizados y deja el cambio en auditoría. La consulta lista solo
+  el edificio seleccionado y filtra por aseguradora, estado y fecha de vencimiento.
 - Pruebas incluidas en `npm.cmd test`: fechas límite, validaciones, configuración y HTTP.
 
 HU-038: reclamaciones

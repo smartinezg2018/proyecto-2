@@ -101,3 +101,156 @@ test('HU-037: guarda por edificio y recalcula con la configuración nueva', asyn
   });
   await assert.rejects(() => useCases.getSettings(9), { code: 'BUILDING_NOT_FOUND' });
 });
+
+function policyFixture(overrides = {}) {
+  return {
+    number: 'POL-100',
+    insurer: 'Sura',
+    coverages: ['Incendio', 'Terremoto'],
+    insuredValue: 250000000,
+    validFrom: '2026-01-01',
+    validUntil: '2026-12-31',
+    assetIds: [4],
+    ...overrides
+  };
+}
+
+function memoryPolicyModule() {
+  const policies = [];
+  const audits = [];
+  const assets = [
+    { id: 4, buildingId: 1, code: 'ASC-1', name: 'Ascensor' },
+    { id: 8, buildingId: 2, code: 'BOM-1', name: 'Bomba' }
+  ];
+  const repository = {
+    async findByBuilding(buildingId) {
+      return policies.filter((policy) => Number(policy.buildingId) === Number(buildingId));
+    },
+    async findByAsset(buildingId, assetId) {
+      return policies.filter(
+        (policy) =>
+          Number(policy.buildingId) === Number(buildingId) &&
+          policy.assets.some((asset) => Number(asset.id) === Number(assetId))
+      );
+    },
+    async findDetailed(id) {
+      return policies.find((policy) => Number(policy.id) === Number(id)) ?? null;
+    },
+    async getSettings() {
+      return { alertDays: 30 };
+    },
+    async create(buildingId, input, userId) {
+      const created = {
+        id: policies.length + 1,
+        buildingId: Number(buildingId),
+        ...input,
+        createdBy: userId,
+        assets: input.assetIds.map((assetId) => assets.find((asset) => asset.id === assetId))
+      };
+      policies.push(created);
+      return created;
+    },
+    async update(id, input) {
+      const index = policies.findIndex((policy) => Number(policy.id) === Number(id));
+      policies[index] = {
+        ...policies[index],
+        ...input,
+        assets: input.assetIds.map((assetId) => assets.find((asset) => asset.id === assetId))
+      };
+      return policies[index];
+    }
+  };
+  const useCases = createInsurancePolicyUseCases(
+    repository,
+    {
+      async findById(id) {
+        return Number(id) === 1 ? { id: 1 } : null;
+      }
+    },
+    () => today,
+    {
+      async findById(id) {
+        return assets.find((asset) => asset.id === Number(id)) ?? null;
+      }
+    },
+    {
+      audits,
+      async record(entry) {
+        audits.push(entry);
+      }
+    }
+  );
+  return { policies, audits, useCases };
+}
+
+test('HU-033 rechaza una vigencia que no termina después de iniciar', async () => {
+  const { useCases } = memoryPolicyModule();
+  await assert.rejects(() => useCases.create(1, policyFixture({ validUntil: '2026-01-01' }), 5), {
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('HU-033 y HU-034 registran coberturas y activos del mismo edificio', async () => {
+  const { useCases, audits } = memoryPolicyModule();
+  const policy = await useCases.create(1, policyFixture(), 5);
+  assert.deepEqual(policy.coverages, ['Incendio', 'Terremoto']);
+  assert.deepEqual(
+    policy.assets.map((asset) => asset.code),
+    ['ASC-1']
+  );
+  assert.equal(audits[0].action, 'create');
+  assert.equal(audits[0].entity, 'insurance_policy');
+});
+
+test('HU-034 rechaza un activo de otro edificio', async () => {
+  const { useCases } = memoryPolicyModule();
+  await assert.rejects(() => useCases.create(1, policyFixture({ assetIds: [8] }), 5), {
+    code: 'INVALID_ASSET'
+  });
+});
+
+test('HU-035 actualiza la póliza y deja el cambio en la auditoría', async () => {
+  const { useCases, audits } = memoryPolicyModule();
+  const created = await useCases.create(1, policyFixture(), 5);
+  const updated = await useCases.update(
+    1,
+    created.id,
+    policyFixture({ insurer: 'Bolívar', insuredValue: 300000000 }),
+    9
+  );
+  assert.equal(updated.insurer, 'Bolívar');
+  assert.equal(audits[1].action, 'update');
+  assert.equal(
+    audits[1].metadata.changes.some((change) => change.field === 'insurer'),
+    true
+  );
+});
+
+test('HU-036 lista solo el edificio y filtra aseguradora, estado y vencimiento', async () => {
+  const { useCases, policies } = memoryPolicyModule();
+  await useCases.create(1, policyFixture(), 5);
+  policies.push({
+    id: 50,
+    buildingId: 2,
+    number: 'OTRA',
+    insurer: 'Sura',
+    coverage: 'Otra',
+    coverages: ['Otra'],
+    insuredValue: 1,
+    validFrom: '2026-01-01',
+    validUntil: '2026-12-31',
+    assets: []
+  });
+  const byBuilding = await useCases.list(1);
+  assert.equal(byBuilding.length, 1);
+  assert.equal(byBuilding[0].number, 'POL-100');
+  assert.equal((await useCases.list(1, { insurer: 'sura' })).length, 1);
+  assert.equal((await useCases.list(1, { insurer: 'mapfre' })).length, 0);
+  assert.equal((await useCases.list(1, { status: 'Vigente' })).length, 1);
+  assert.equal((await useCases.list(1, { status: 'Vencida' })).length, 0);
+  assert.equal((await useCases.list(1, { validUntil: '2026-12-31' })).length, 1);
+  assert.equal((await useCases.list(1, { validUntil: '2026-06-01' })).length, 0);
+  const covered = await useCases.listByAsset(1, 4);
+  assert.equal(covered.length, 1);
+  assert.equal(covered[0].number, 'POL-100');
+});
