@@ -46,14 +46,14 @@ test('HU-037: diferencia de días correcta en año bisiesto', () => {
   );
 });
 
-test('HU-037: rechaza anticipaciones inválidas y admite los extremos', () => {
+test('HU-037 / CP-037-02: rechaza anticipaciones inválidas y admite extremos', () => {
   for (const alertDays of [-1, 366, 1.5, '', null, '30'])
     assert.equal(insuranceAlertSettingsSchema.safeParse({ alertDays }).success, false);
   for (const alertDays of [0, 30, 365])
     assert.equal(insuranceAlertSettingsSchema.safeParse({ alertDays }).success, true);
 });
 
-test('el registro rechaza fechas imposibles, invertidas e iguales', () => {
+test('HU-033 / CP-033-02: rechaza fechas imposibles, invertidas e iguales', () => {
   const input = {
     number: 'P1',
     insurer: 'Seguros',
@@ -68,7 +68,37 @@ test('el registro rechaza fechas imposibles, invertidas e iguales', () => {
   }
 });
 
-test('HU-037: guarda por edificio y recalcula con la configuración nueva', async () => {
+test('HU-033 / CP-033-01: registra todos los datos de una póliza', async () => {
+  let saved;
+  const useCases = createInsurancePolicyUseCases(
+    {
+      async create(buildingId, input, userId) {
+        saved = { id: 1, buildingId: Number(buildingId), ...input, createdBy: userId };
+        return saved;
+      }
+    },
+    {
+      async findById(id) {
+        return Number(id) === 1 ? { id: 1 } : null;
+      }
+    }
+  );
+  const input = createInsurancePolicySchema.parse({
+    number: 'POL-001',
+    insurer: 'Seguros Andinos',
+    coverage: 'Incendio y terremoto',
+    insuredValue: 500000000,
+    validFrom: '2026-01-01',
+    validUntil: '2027-01-01'
+  });
+
+  assert.deepEqual(await useCases.create(1, input, 7), saved);
+  assert.equal(saved.coverage, 'Incendio y terremoto');
+  assert.equal(saved.insuredValue, 500000000);
+  assert.equal(saved.createdBy, 7);
+});
+
+test('HU-037 / CP-037-01: guarda anticipación y recalcula la clasificación', async () => {
   const settings = new Map();
   const repository = {
     async getSettings(id) {

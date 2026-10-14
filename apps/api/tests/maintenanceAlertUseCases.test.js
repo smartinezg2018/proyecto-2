@@ -89,7 +89,7 @@ function setup() {
   return { useCases, alerts, maintenances };
 }
 
-test('genera una alerta para el preventivo próximo y no duplica', async () => {
+test('HU-030 / CP-030-01: genera una alerta próxima sin duplicarla', async () => {
   const { useCases, alerts } = setup();
 
   const first = await useCases.list(10);
@@ -115,10 +115,7 @@ test('avisa el mismo día de ejecución si está dentro de la anticipación', as
 
   const listed = await useCases.list(10);
   assert.equal(listed.length, 2);
-  assert.deepEqual(
-    listed.map((alert) => alert.targetDate).sort(),
-    ['2026-10-15', '2026-10-20']
-  );
+  assert.deepEqual(listed.map((alert) => alert.targetDate).sort(), ['2026-10-15', '2026-10-20']);
 });
 
 test('oculta alertas viejas que ya no corresponden a la fecha de ejecución', async () => {
@@ -158,13 +155,10 @@ test('genera una alerta para un correctivo próximo y omite el que está fuera d
   );
 
   const listed = await useCases.list(10);
-  assert.deepEqual(
-    listed.map((alert) => alert.targetDate).sort(),
-    ['2026-10-19', '2026-10-20']
-  );
+  assert.deepEqual(listed.map((alert) => alert.targetDate).sort(), ['2026-10-19', '2026-10-20']);
 });
 
-test('permite configurar la anticipación y marcar una alerta como atendida', async () => {
+test('HU-030 / CP-030-02: configura anticipación y atiende la alerta una sola vez', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.saveSettings(10, { alertDays: 400 }), {

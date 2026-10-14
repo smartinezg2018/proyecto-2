@@ -22,7 +22,7 @@ function setup() {
   return { quotes, useCases: createInsuranceQuoteUseCases(quoteRepository, buildingRepository) };
 }
 
-test('registra una cotización de seguro con cobertura, prima, vigencia y documento', async () => {
+test('HU-032 / CP-032-01: registra cotización de seguro para comparar', async () => {
   const { useCases, quotes } = setup();
   const quote = await useCases.create(
     1,
@@ -49,7 +49,7 @@ test('consulta las cotizaciones del edificio para compararlas', async () => {
   assert.equal(list.length, 2);
 });
 
-test('rechaza una vigencia invertida', async () => {
+test('HU-032 / CP-032-02: rechaza una vigencia invertida', async () => {
   const { useCases } = setup();
   await assert.rejects(
     () =>

@@ -7,9 +7,9 @@ import mysql from 'mysql2/promise';
 import 'dotenv/config';
 import { ClaimDocumentStorage } from '../src/modules/insurance/infrastructure/claimDocumentStorage.js';
 
-describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async () => {
+describe('Sprint - pruebas funcionales de API', { concurrency: false }, async () => {
   // A fresh database per run prevents duplicate fixtures and protects application data.
-  const testDatabase = 'codex_sprint1_' + randomUUID().replaceAll('-', '');
+  const testDatabase = 'codex_sprint2_' + randomUUID().replaceAll('-', '');
   const testConfig = {
     host: process.env.TEST_DB_HOST || '127.0.0.1',
     port: Number(process.env.TEST_DB_PORT || 3306),
@@ -82,7 +82,18 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
-    const payload = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const responseBody = await response.text();
+    const payload = contentType.includes('application/json')
+      ? responseBody
+        ? JSON.parse(responseBody)
+        : null
+      : {
+          error: {
+            code: 'NON_JSON_RESPONSE',
+            message: `La ruta respondió ${response.status} sin el contrato JSON esperado`
+          }
+        };
     return { status: response.status, payload, cookie: response.headers.get('set-cookie') };
   }
 
@@ -115,6 +126,7 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   let asset1;
   let asset2;
   let claim1;
+  let policy1;
 
   admin = await login('admin@example.com', 'Admin123!');
   operator = await login('operador@example.com', 'Operador123!');
@@ -154,10 +166,13 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       validFrom: '2020-01-01',
       validUntil: '2021-01-01'
     };
-    expectStatus(
-      await request(path + '/policies', { method: 'POST', cookie: admin.cookie, body: policy }),
-      201
-    );
+    const createdPolicy = await request(path + '/policies', {
+      method: 'POST',
+      cookie: admin.cookie,
+      body: policy
+    });
+    expectStatus(createdPolicy, 201);
+    policy1 = createdPolicy.payload.data;
     expectStatus(
       await request(path + '/policies', { method: 'POST', cookie: admin.cookie, body: policy }),
       409
@@ -873,5 +888,148 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       }
     });
     expectStatus(response, 400);
+  });
+
+  await check('CP-028-02', 'HU-028: impedir consultar historial de otro edificio', async () => {
+    const response = await request(`/api/v1/maintenance/assets/${asset2.id}/maintenances`, {
+      cookie: operator.cookie
+    });
+    expectStatus(response, 403);
+  });
+
+  await check(
+    'CP-034-01',
+    'HU-034: asociar varios activos y mostrarlos en el detalle',
+    async () => {
+      const association = await request(
+        `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}/assets`,
+        {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { assetIds: [asset1.id] }
+        }
+      );
+      expectStatus(association, 200);
+      assert.deepEqual(association.payload.data.assetIds, [asset1.id]);
+
+      const detail = await request(`/api/v1/assets/${asset1.id}`, { cookie: admin.cookie });
+      expectStatus(detail, 200);
+      assert.ok(detail.payload.data.policies.some((policy) => policy.id === policy1.id));
+    }
+  );
+
+  await check(
+    'CP-034-02',
+    'HU-034: rechazar activos de otro edificio sin cambios parciales',
+    async () => {
+      const response = await request(
+        `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}/assets`,
+        {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { assetIds: [asset1.id, asset2.id] }
+        }
+      );
+      expectStatus(response, 400);
+
+      const detail = await request(`/api/v1/assets/${asset2.id}`, { cookie: admin.cookie });
+      expectStatus(detail, 200);
+      assert.ok(!(detail.payload.data.policies ?? []).some((policy) => policy.id === policy1.id));
+    }
+  );
+
+  await check(
+    'CP-036-01',
+    'HU-036: filtrar pólizas por aseguradora, estado y vencimiento',
+    async () => {
+      const path = `/api/v1/insurance/buildings/${building1.id}/policies`;
+      expectStatus(
+        await request(path, {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: {
+            number: 'HU036-002',
+            insurer: 'Otra Aseguradora',
+            coverage: 'Responsabilidad civil',
+            insuredValue: 200000,
+            validFrom: '2098-01-01',
+            validUntil: '2099-01-01'
+          }
+        }),
+        201
+      );
+      const filtered = await request(
+        `${path}?insurer=Seguros%20Prueba&status=vencida&expiresTo=2021-12-31`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(filtered, 200);
+      assert.deepEqual(
+        filtered.payload.data.map((policy) => policy.id),
+        [policy1.id]
+      );
+    }
+  );
+
+  await check('CP-036-02', 'HU-036: rechazar filtros inválidos y otro edificio', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/policies`;
+    expectStatus(await request(`${path}?expiresFrom=no-es-fecha`, { cookie: admin.cookie }), 400);
+    expectStatus(
+      await request(`/api/v1/insurance/buildings/${building2.id}/policies`, {
+        cookie: operator.cookie
+      }),
+      403
+    );
+  });
+
+  await check('CP-035-01', 'HU-035: actualizar póliza y registrar auditoría', async () => {
+    const response = await request(
+      `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}`,
+      {
+        method: 'PUT',
+        cookie: admin.cookie,
+        body: {
+          number: policy1.number,
+          insurer: 'Seguros Prueba Actualizada',
+          coverage: 'Incendio, terremoto y responsabilidad civil',
+          insuredValue: 175000,
+          validFrom: '2020-01-01',
+          validUntil: '2022-01-01'
+        }
+      }
+    );
+    expectStatus(response, 200);
+    assert.equal(response.payload.data.insurer, 'Seguros Prueba Actualizada');
+
+    const audit = await request(
+      `/api/v1/administration/audit-logs?entity=insurance_policy&entityId=${policy1.id}`,
+      { cookie: admin.cookie }
+    );
+    expectStatus(audit, 200);
+    assert.ok(audit.payload.data.some((entry) => entry.action === 'update'));
+  });
+
+  await check('CP-035-02', 'HU-035: rechazar fechas inválidas y falta de acceso', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}`;
+    const invalid = await request(path, {
+      method: 'PUT',
+      cookie: admin.cookie,
+      body: {
+        number: policy1.number,
+        insurer: policy1.insurer,
+        coverage: policy1.coverage,
+        insuredValue: policy1.insuredValue,
+        validFrom: '2027-01-01',
+        validUntil: '2026-01-01'
+      }
+    });
+    expectStatus(invalid, 400);
+    expectStatus(
+      await request(path, {
+        method: 'PUT',
+        cookie: operator.cookie,
+        body: policy1
+      }),
+      403
+    );
   });
 });

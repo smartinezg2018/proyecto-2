@@ -59,7 +59,7 @@ function setup({ policyBuilding = 1, assetBuildings = [1, 1] } = {}) {
   };
 }
 
-test('HU-038: registra reclamación, documentos y activos sin duplicarlos', async () => {
+test('HU-038 / CP-038-01: registra reclamación, documentos y activos', async () => {
   const context = setup();
   const claim = await context.useCases.create(1, validInput, 7);
   assert.equal(claim.description, 'Daño eléctrico');
@@ -68,7 +68,7 @@ test('HU-038: registra reclamación, documentos y activos sin duplicarlos', asyn
   assert.equal(context.saved.createdBy, 7);
 });
 
-test('HU-038: rechaza póliza o activo de otro edificio', async () => {
+test('HU-038 / CP-038-02: rechaza póliza o activo de otro edificio', async () => {
   await assert.rejects(() => setup({ policyBuilding: 2 }).useCases.create(1, validInput), {
     code: 'INVALID_POLICY'
   });
@@ -103,7 +103,7 @@ test('HU-038: lista por edificio y rechaza edificio inexistente', async () => {
   await assert.rejects(() => setup().useCases.list(2), { code: 'BUILDING_NOT_FOUND' });
 });
 
-test('historial de reclamaciones: acepta resultado, indemnización y fecha de resolución', async () => {
+test('HU-039 / CP-039-01: muestra resultado, indemnización y resolución', async () => {
   const context = setup();
   const input = {
     ...validInput,
@@ -119,7 +119,7 @@ test('historial de reclamaciones: acepta resultado, indemnización y fecha de re
   assert.equal(claim.resolvedAt, '2026-10-11');
 });
 
-test('historial de reclamaciones: rechaza fechas de resolución inválidas', async () => {
+test('HU-039 / CP-039-02: rechaza fechas de resolución inválidas', async () => {
   assert.equal(
     createInsuranceClaimSchema.safeParse({ ...validInput, resolvedAt: '2020-01-01' }).success,
     false
