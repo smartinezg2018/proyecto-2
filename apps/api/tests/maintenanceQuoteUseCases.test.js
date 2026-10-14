@@ -34,7 +34,7 @@ function setup() {
   };
 }
 
-test('registra una cotización de mantenimiento con alcance y condiciones', async () => {
+test('HU-031 / CP-031-01: registra cotización para comparar', async () => {
   const { useCases, quotes } = setup();
   const quote = await useCases.create(
     1,
@@ -61,7 +61,7 @@ test('lista cotizaciones para comparar', async () => {
   assert.equal(list.length, 2);
 });
 
-test('rechaza proveedor inexistente', async () => {
+test('HU-031 / CP-031-02: rechaza cotización con proveedor inexistente', async () => {
   const { useCases } = setup();
   await assert.rejects(
     () =>

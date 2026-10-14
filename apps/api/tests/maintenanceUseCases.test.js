@@ -105,7 +105,7 @@ const validInput = {
   description: '  Revisión general de cables y frenos  '
 };
 
-test('registra un mantenimiento asociado al activo con tipo, fecha y descripción', async () => {
+test('HU-023 / CP-023-01: registra mantenimiento asociado al activo', async () => {
   const { useCases } = setup();
 
   const saved = await useCases.register(1, validInput, 7);
@@ -153,7 +153,7 @@ test('registra auditoría del mantenimiento', async () => {
   assert.equal(auditEntries[0].buildingId, 10);
 });
 
-test('rechaza registrar mantenimiento sobre un activo inexistente', async () => {
+test('HU-023 / CP-023-02: rechaza mantenimiento para un activo inexistente', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.register(99, validInput), {
@@ -255,7 +255,7 @@ const correctiveInput = {
   actionsTaken: '  Reemplazo del sello y purga del circuito  '
 };
 
-test('registra un mantenimiento correctivo con falla, causa y acciones ejecutadas', async () => {
+test('HU-025 / CP-025-01: registra correctivo con falla, causa y acciones', async () => {
   const { useCases, maintenances } = setup();
 
   const saved = await useCases.register(1, correctiveInput, 7);
@@ -301,7 +301,7 @@ test('registra auditoría con detalles del correctivo', async () => {
   assert.equal(auditEntries[0].metadata.actionsTaken, 'Reemplazo del sello y purga del circuito');
 });
 
-test('rechaza un correctivo sin falla', async () => {
+test('HU-025 / CP-025-02: rechaza un correctivo sin falla', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.register(1, { ...correctiveInput, failure: '   ' }), {
@@ -328,7 +328,7 @@ test('rechaza un correctivo sin acciones ejecutadas', async () => {
   });
 });
 
-test('un mantenimiento nuevo inicia en programado y registra usuario y fecha', async () => {
+test('HU-029 / CP-029-01: conserva estado, usuario y fecha en el historial', async () => {
   const { useCases, statusHistory } = setup();
 
   const saved = await useCases.register(1, { ...validInput, status: 'finalizado' }, 7);
@@ -423,7 +423,7 @@ test('rechaza dejar el mantenimiento en el mismo estado', async () => {
   assert.equal(statusHistory.length, 1);
 });
 
-test('rechaza saltar de programado a finalizado', async () => {
+test('HU-029 / CP-029-02: rechaza una transición de estado inválida', async () => {
   const { useCases } = setup();
   const saved = await useCases.register(1, validInput, 7);
 
@@ -462,7 +462,7 @@ test('rechaza actualizar el estado de un mantenimiento inexistente', async () =>
   });
 });
 
-test('registra costo estimado y costo real al crear el mantenimiento', async () => {
+test('HU-026 / CP-026-01: registra costos estimado y real', async () => {
   const { useCases, auditEntries } = setup();
 
   const saved = await useCases.register(
@@ -486,7 +486,7 @@ test('los costos son opcionales al registrar el mantenimiento', async () => {
   assert.equal(saved.actualCost, null);
 });
 
-test('rechaza registrar un mantenimiento con costo negativo', async () => {
+test('HU-026 / CP-026-02: rechaza un costo negativo', async () => {
   const { useCases, maintenances } = setup();
 
   await assert.rejects(() => useCases.register(1, { ...validInput, estimatedCost: -1 }), {
@@ -565,7 +565,7 @@ test('rechaza actualizar costos de un mantenimiento inexistente', async () => {
   });
 });
 
-test('programa un preventivo con frecuencia, responsable y próxima fecha calculada', async () => {
+test('HU-024 / CP-024-01: programa preventivo y calcula la próxima fecha', async () => {
   const { useCases } = setup();
   const future = new Date();
   future.setFullYear(future.getFullYear() + 1);
@@ -601,7 +601,7 @@ test('permite registrar la próxima fecha de ejecución en lugar de calcularla',
   assert.equal(saved.nextExecutionDate, '2026-02-01');
 });
 
-test('lista el historial de un activo en orden cronológico', async () => {
+test('HU-028 / CP-028-01: lista el historial en orden cronológico', async () => {
   const { useCases } = setup();
   await useCases.register(1, { ...validInput, maintenanceDate: '2026-01-10' });
   await useCases.register(1, { ...validInput, maintenanceDate: '2026-03-10' });
@@ -615,7 +615,7 @@ test('lista el historial de un activo en orden cronológico', async () => {
   );
 });
 
-test('rechaza programar un correctivo con frecuencia', async () => {
+test('HU-024 / CP-024-02: rechaza frecuencia en un correctivo', async () => {
   const { useCases } = setup();
 
   await assert.rejects(

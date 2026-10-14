@@ -36,7 +36,7 @@ function setup() {
   return { useCases, suppliers, maintenances, auditEntries };
 }
 
-test('registra un proveedor nuevo con contacto y documento del mantenimiento', async () => {
+test('HU-027 / CP-027-01: registra proveedor con contacto y documento', async () => {
   const { useCases, maintenances, auditEntries } = setup();
   const supplier = await useCases.assign(
     1,
@@ -83,5 +83,13 @@ test('rechaza un mantenimiento inexistente', async () => {
   await assert.rejects(() => useCases.assign(99, { supplierId: 4 }), {
     statusCode: 404,
     code: 'MAINTENANCE_NOT_FOUND'
+  });
+});
+
+test('HU-027 / CP-027-02: rechaza un proveedor seleccionado inexistente', async () => {
+  const { useCases } = setup();
+  await assert.rejects(() => useCases.assign(1, { supplierId: 999 }), {
+    statusCode: 404,
+    code: 'SUPPLIER_NOT_FOUND'
   });
 });
