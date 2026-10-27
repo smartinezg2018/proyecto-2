@@ -20,3 +20,12 @@ export const generateExtraordinaryChargesSchema = z.object({
   installments: z.coerce.number().int().positive().max(120),
   approvalReference: z.string().trim().min(1).max(255)
 });
+
+export const generateRetroactiveChargesSchema = z.object({
+  unitIds: z.array(z.coerce.number().int().positive()).min(1),
+  originPeriod: periodSchema,
+  startPeriod: periodSchema,
+  concept: z.string().trim().min(1).max(255),
+  totalAmount: z.coerce.number().positive(),
+  installments: z.coerce.number().int().positive().max(120)
+});

@@ -7,6 +7,7 @@ import { BillingRepository } from '../../infrastructure/billingRepository.js';
 import { createBillingUseCases } from '../../application/billingUseCases.js';
 import {
   generateExtraordinaryChargesSchema,
+  generateRetroactiveChargesSchema,
   generateOrdinaryInvoicesSchema
 } from './billingSchemas.js';
 
@@ -26,21 +27,36 @@ billingRoutes.post(
       { ...request.body, buildingId: Number(request.params.buildingId) },
       request.user.id
     );
-
-    billingRoutes.post(
-      '/buildings/:buildingId/charges/extraordinary',
-      requireAuth,
-      requirePermission('billing.charge.create'),
-      ensureBuildingAccess,
-      validateBody(generateExtraordinaryChargesSchema),
-      asyncHandler(async (request, response) => {
-        const charges = await useCases.generateExtraordinaryCharges(
-          { ...request.body, buildingId: Number(request.params.buildingId) },
-          request.user.id
-        );
-        response.status(201).json({ data: charges, meta: { requestId: request.id } });
-      })
-    );
     response.status(201).json({ data: invoices, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/charges/extraordinary',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(generateExtraordinaryChargesSchema),
+  asyncHandler(async (request, response) => {
+    const charges = await useCases.generateExtraordinaryCharges(
+      { ...request.body, buildingId: Number(request.params.buildingId) },
+      request.user.id
+    );
+    response.status(201).json({ data: charges, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/charges/retroactive',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(generateRetroactiveChargesSchema),
+  asyncHandler(async (request, response) => {
+    const charges = await useCases.generateRetroactiveCharges(
+      { ...request.body, buildingId: Number(request.params.buildingId) },
+      request.user.id
+    );
+    response.status(201).json({ data: charges, meta: { requestId: request.id } });
   })
 );
