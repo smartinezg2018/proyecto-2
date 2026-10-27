@@ -74,3 +74,40 @@ test('distribuye un cobro extraordinario en las cuotas solicitadas', async () =>
   assert.equal(created.installments, 3);
   assert.equal(created.createdBy, 7);
 });
+
+test('programa cobros retroactivos en los periodos definidos', async () => {
+  let created;
+  const useCases = createBillingUseCases({
+    async createRetroactiveCharges(input) {
+      created = input;
+      return [];
+    }
+  });
+
+  test('genera la información de una colilla para una factura existente', async () => {
+    const useCases = createBillingUseCases({
+      async findPaymentSlip() {
+        return { id: 8, total: 100000 };
+      }
+    });
+
+    const slip = await useCases.generatePaymentSlip(8);
+    assert.equal(slip.id, 8);
+  });
+
+  await useCases.generateRetroactiveCharges(
+    {
+      buildingId: 4,
+      unitIds: [10],
+      originPeriod: '2026-08',
+      startPeriod: '2026-10',
+      concept: 'Ajuste de vigilancia',
+      totalAmount: 100000,
+      installments: 1
+    },
+    7
+  );
+
+  assert.equal(created.originPeriod, '2026-08');
+  assert.equal(created.installments, 1);
+});

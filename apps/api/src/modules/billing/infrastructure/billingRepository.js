@@ -67,6 +67,16 @@ export class BillingRepository {
     return invoices.map(mapInvoice);
   }
 
+  async findPaymentSlip(invoiceId) {
+    const invoice = await Invoice.findByPk(invoiceId, {
+      include: [
+        { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+        { model: InvoiceItem, as: 'items', attributes: ['id', 'concept', 'amount'] }
+      ]
+    });
+    return invoice ? mapInvoice(invoice) : null;
+  }
+
   async createExtraordinaryCharges({
     buildingId,
     unitIds,

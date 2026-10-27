@@ -39,6 +39,14 @@ export function createBillingUseCases(repository) {
         );
       }
       return repository.createRetroactiveCharges({ ...input, unitIds, createdBy });
+    },
+
+    async generatePaymentSlip(invoiceId) {
+      const slip = await repository.findPaymentSlip(invoiceId);
+      if (!slip) {
+        throw new AppError('La factura no existe.', 404, 'INVOICE_NOT_FOUND');
+      }
+      return slip;
     }
   };
 }

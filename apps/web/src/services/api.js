@@ -32,6 +32,39 @@ export function getMyBuildings() {
   return apiRequest('/api/v1/auth/buildings');
 }
 
+export function generateOrdinaryInvoices(buildingId, invoice) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/invoices/ordinary`, {
+    method: 'POST',
+    body: JSON.stringify(invoice)
+  });
+}
+
+export function generateExtraordinaryCharges(buildingId, charge) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/charges/extraordinary`, {
+    method: 'POST',
+    body: JSON.stringify(charge)
+  });
+}
+
+export function generateRetroactiveCharges(buildingId, charge) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/charges/retroactive`, {
+    method: 'POST',
+    body: JSON.stringify(charge)
+  });
+}
+
+export function getPaymentSlip(invoiceId) {
+  return fetch(`/api/v1/billing/invoices/${invoiceId}/payment-slip`, {
+    credentials: 'include'
+  }).then(async (response) => {
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.error?.message || 'No fue posible generar la colilla.');
+    }
+    return response.blob();
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }
