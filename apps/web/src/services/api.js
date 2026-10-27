@@ -1,7 +1,10 @@
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...options.headers
+    },
     credentials: 'include'
   });
 
@@ -210,6 +213,27 @@ export function getBuildingMaintenances(buildingId) {
   return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/maintenances`);
 }
 
+export function getMaintenanceAlertSettings(buildingId) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alert-settings`);
+}
+
+export function saveMaintenanceAlertSettings(buildingId, alertDays) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alert-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ alertDays })
+  });
+}
+
+export function getMaintenanceAlerts(buildingId) {
+  return apiRequest(`/api/v1/maintenance/buildings/${buildingId}/alerts`);
+}
+
+export function attendMaintenanceAlert(alertId) {
+  return apiRequest(`/api/v1/maintenance/alerts/${alertId}/attend`, {
+    method: 'PATCH'
+  });
+}
+
 export function updateMaintenanceStatus(maintenanceId, status) {
   return apiRequest(`/api/v1/maintenance/maintenances/${maintenanceId}/status`, {
     method: 'PATCH',
@@ -248,6 +272,47 @@ export function createMaintenanceQuote(maintenanceId, quote) {
 
 export function getInsuranceQuotes(buildingId) {
   return apiRequest(`/api/v1/insurance/buildings/${buildingId}/quotes`);
+}
+
+export function getInsurancePolicies(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies`);
+}
+
+export function createInsurancePolicy(buildingId, policy) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/policies`, {
+    method: 'POST',
+    body: JSON.stringify(policy)
+  });
+}
+
+export function getInsuranceAlertSettings(buildingId) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/alert-settings`);
+}
+
+export function saveInsuranceAlertSettings(buildingId, alertDays) {
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/alert-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ alertDays })
+  });
+}
+
+export function getInsuranceClaims(buildingId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.policyId) params.set('policyId', filters.policyId);
+  if (filters.assetId) params.set('assetId', filters.assetId);
+  const query = params.toString();
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims${query ? `?${query}` : ''}`);
+}
+
+export function createInsuranceClaim(buildingId, claim, files = []) {
+  const body = new FormData();
+  body.append('payload', JSON.stringify(claim));
+  for (const file of files) body.append('documents', file);
+  return apiRequest(`/api/v1/insurance/buildings/${buildingId}/claims`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body
+  });
 }
 
 export function createInsuranceQuote(buildingId, quote) {

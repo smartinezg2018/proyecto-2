@@ -30,27 +30,43 @@ function setup() {
       return supplier;
     }
   };
-  const useCases = createMaintenanceSupplierUseCases(
-    maintenanceRepository,
-    supplierRepository,
-    { record: async (entry) => auditEntries.push(entry) }
-  );
+  const useCases = createMaintenanceSupplierUseCases(maintenanceRepository, supplierRepository, {
+    record: async (entry) => auditEntries.push(entry)
+  });
   return { useCases, suppliers, maintenances, auditEntries };
 }
 
-test('registra un proveedor nuevo con contacto y documento del mantenimiento', async () => {
+test('HU-027 / CP-027-01: registra proveedor con contacto y documento', async () => {
   const { useCases, maintenances, auditEntries } = setup();
-  const supplier = await useCases.assign(1, {
-    identification: '900123456',
-    name: 'Mantenimientos Andinos',
-    phone: '3001234567',
-    email: 'contacto@andinos.test',
-    documentRef: 'orden-123.pdf'
-  }, 7);
+  const supplier = await useCases.assign(
+    1,
+    {
+      identification: '900123456',
+      name: 'Mantenimientos Andinos',
+      phone: '3001234567',
+      email: 'contacto@andinos.test',
+      documentRef: 'orden-123.pdf'
+    },
+    7
+  );
 
   assert.equal(supplier.name, 'Mantenimientos Andinos');
   assert.equal(maintenances[0].supplierDocumentRef, 'orden-123.pdf');
   assert.equal(auditEntries[0].entity, 'maintenance_supplier');
+});
+
+test('registra un proveedor solo con nombre, teléfono y correo', async () => {
+  const { useCases, suppliers } = setup();
+  const supplier = await useCases.assign(1, {
+    name: 'Soluciones Verticales',
+    phone: '3105177599',
+    email: 'contacto@verticales.test'
+  });
+
+  assert.equal(supplier.name, 'Soluciones Verticales');
+  assert.equal(supplier.phone, '3105177599');
+  assert.equal(supplier.email, 'contacto@verticales.test');
+  assert.equal(suppliers[0].identification, '3105177599');
 });
 
 test('selecciona un proveedor existente', async () => {
@@ -67,5 +83,13 @@ test('rechaza un mantenimiento inexistente', async () => {
   await assert.rejects(() => useCases.assign(99, { supplierId: 4 }), {
     statusCode: 404,
     code: 'MAINTENANCE_NOT_FOUND'
+  });
+});
+
+test('HU-027 / CP-027-02: rechaza un proveedor seleccionado inexistente', async () => {
+  const { useCases } = setup();
+  await assert.rejects(() => useCases.assign(1, { supplierId: 999 }), {
+    statusCode: 404,
+    code: 'SUPPLIER_NOT_FOUND'
   });
 });

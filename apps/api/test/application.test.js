@@ -5,10 +5,11 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import 'dotenv/config';
+import { ClaimDocumentStorage } from '../src/modules/insurance/infrastructure/claimDocumentStorage.js';
 
-describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async () => {
+describe('Sprint - pruebas funcionales de API', { concurrency: false }, async () => {
   // A fresh database per run prevents duplicate fixtures and protects application data.
-  const testDatabase = 'codex_sprint1_' + randomUUID().replaceAll('-', '');
+  const testDatabase = 'codex_sprint2_' + randomUUID().replaceAll('-', '');
   const testConfig = {
     host: process.env.TEST_DB_HOST || '127.0.0.1',
     port: Number(process.env.TEST_DB_PORT || 3306),
@@ -21,8 +22,10 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   let server;
   let database;
   let sequelize;
+  const uploadedDocuments = [];
   after(async () => {
     try {
+      await new ClaimDocumentStorage().remove(uploadedDocuments);
       if (server?.listening) await new Promise((resolve) => server.close(resolve));
       if (database) await database.end();
       if (sequelize) await sequelize.close();
@@ -79,7 +82,18 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
-    const payload = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const responseBody = await response.text();
+    const payload = contentType.includes('application/json')
+      ? responseBody
+        ? JSON.parse(responseBody)
+        : null
+      : {
+          error: {
+            code: 'NON_JSON_RESPONSE',
+            message: `La ruta respondió ${response.status} sin el contrato JSON esperado`
+          }
+        };
     return { status: response.status, payload, cookie: response.headers.get('set-cookie') };
   }
 
@@ -111,6 +125,8 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   let unit2;
   let asset1;
   let asset2;
+  let claim1;
+  let policy1;
 
   admin = await login('admin@example.com', 'Admin123!');
   operator = await login('operador@example.com', 'Operador123!');
@@ -121,6 +137,57 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
   building1 = initialBuildings.payload.data.find((item) => item.nit === '900111001');
   building2 = initialBuildings.payload.data.find((item) => item.nit === '900111003');
   assert.ok(building1 && building2);
+
+  await check('CP-037-01', 'Persistir anticipación y clasificar pólizas por edificio', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}`;
+    const otherPath = `/api/v1/insurance/buildings/${building2.id}`;
+    expectStatus(
+      await request(path + '/alert-settings', {
+        method: 'PUT',
+        cookie: admin.cookie,
+        body: { alertDays: 0 }
+      }),
+      200
+    );
+    assert.equal(
+      (await request(path + '/alert-settings', { cookie: admin.cookie })).payload.data.alertDays,
+      0
+    );
+    assert.equal(
+      (await request(otherPath + '/alert-settings', { cookie: admin.cookie })).payload.data
+        .alertDays,
+      30
+    );
+    const policy = {
+      number: 'HU037-001',
+      insurer: 'Seguros Prueba',
+      coverage: 'Incendio',
+      insuredValue: 150000,
+      validFrom: '2020-01-01',
+      validUntil: '2021-01-01'
+    };
+    const createdPolicy = await request(path + '/policies', {
+      method: 'POST',
+      cookie: admin.cookie,
+      body: policy
+    });
+    expectStatus(createdPolicy, 201);
+    policy1 = createdPolicy.payload.data;
+    expectStatus(
+      await request(path + '/policies', { method: 'POST', cookie: admin.cookie, body: policy }),
+      409
+    );
+    const list = await request(path + '/policies', { cookie: admin.cookie });
+    expectStatus(list, 200);
+    assert.equal(list.payload.data.length, 1);
+    assert.equal(list.payload.data[0].expirationStatus, 'Vencida');
+    assert.equal(list.payload.data[0].insuredValue, 150000);
+    assert.equal(list.payload.data[0].validUntil, policy.validUntil);
+    assert.deepEqual(
+      (await request(otherPath + '/policies', { cookie: admin.cookie })).payload.data,
+      []
+    );
+  });
 
   await check('CP-001-01', 'Registrar edificio válido', async () => {
     const response = await request('/api/v1/administration/buildings', {
@@ -572,6 +639,91 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
     assert.equal(asset1.buildingId, building1.id);
   });
 
+  await check('CP-038-01', 'Registrar reclamación con póliza, activos y documentos', async () => {
+    const policies = await request(`/api/v1/insurance/buildings/${building1.id}/policies`, {
+      cookie: admin.cookie
+    });
+    const policy = policies.payload.data.find((item) => item.number === 'HU037-001');
+    assert.ok(policy);
+    const claimBody = {
+      policyId: policy.id,
+      claimDate: '2020-01-01',
+      description: 'Daño eléctrico de prueba',
+      status: 'indemnizada',
+      result: 'Indemnización aprobada',
+      claimedAmount: 250000,
+      indemnityAmount: 200000,
+      resolvedAt: '2020-02-01',
+      documentRefs: ['acta-prueba.pdf'],
+      assetIds: [asset1.id]
+    };
+    expectStatus(
+      await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: { ...claimBody, assetIds: [asset2.id] }
+      }),
+      400
+    );
+    const created = await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+      method: 'POST',
+      cookie: admin.cookie,
+      body: claimBody
+    });
+    expectStatus(created, 201);
+    claim1 = created.payload.data;
+    const claims = await request(`/api/v1/insurance/buildings/${building1.id}/claims`, {
+      cookie: admin.cookie
+    });
+    expectStatus(claims, 200);
+    assert.equal(claims.payload.data[0].policyNumber, 'HU037-001');
+    assert.equal(claims.payload.data[0].assets[0].id, asset1.id);
+    assert.deepEqual(claims.payload.data[0].documentRefs, ['acta-prueba.pdf']);
+    const formData = new FormData();
+    const pdf = '%PDF-1.4\n% persistence test\n%%EOF';
+    formData.append('payload', JSON.stringify(claimBody));
+    formData.append('documents', new Blob([pdf], { type: 'application/pdf' }), 'acta.pdf');
+    const uploaded = await fetch(`${baseUrl}/api/v1/insurance/buildings/${building1.id}/claims`, {
+      method: 'POST',
+      body: formData,
+      headers: { Cookie: admin.cookie, 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const payload = await uploaded.json();
+    uploadedDocuments.push(...(payload.data?.documents ?? []));
+    assert.equal(uploaded.status, 201, JSON.stringify(payload));
+    assert.equal(payload.data.documents.length, 1);
+    const claimId = payload.data.id;
+    const documentId = payload.data.documents[0].id;
+    const downloadPath = `/api/v1/insurance/buildings/${building1.id}/claims/${claimId}/documents/${documentId}`;
+    const download = await fetch(baseUrl + downloadPath, { headers: { Cookie: admin.cookie } });
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), pdf);
+    const wrongBuilding = await fetch(
+      baseUrl + downloadPath.replace(`/buildings/${building1.id}/`, `/buildings/${building2.id}/`),
+      { headers: { Cookie: admin.cookie } }
+    );
+    assert.equal(wrongBuilding.status, 404);
+  });
+
+  await check('CP-039-01', 'Consultar historial por edificio, póliza o activo', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/claims`;
+    const filtered = await request(`${path}?policyId=${claim1.policyId}&assetId=${asset1.id}`, {
+      cookie: admin.cookie
+    });
+    expectStatus(filtered, 200);
+    assert.ok(filtered.payload.data.some((claim) => claim.id === claim1.id));
+    const claim = filtered.payload.data.find((item) => item.id === claim1.id);
+    assert.equal(claim.result, 'Indemnización aprobada');
+    assert.equal(claim.indemnityAmount, 200000);
+    assert.equal(claim.resolvedAt, '2020-02-01');
+    assert.ok(claim.documentRefs.includes('acta-prueba.pdf'));
+
+    const otherAsset = await request(`${path}?assetId=${asset2.id}`, { cookie: admin.cookie });
+    expectStatus(otherAsset, 200);
+    assert.equal(otherAsset.payload.data.length, 0);
+    expectStatus(await request(path, { cookie: operator.cookie }), 403);
+  });
+
   await check('CP-012-02', 'Rechazar activo sin datos obligatorios', async () => {
     expectStatus(
       await request('/api/v1/assets/buildings/999999/assets', {
@@ -736,5 +888,148 @@ describe('Sprint 1 - pruebas funcionales de API', { concurrency: false }, async 
       }
     });
     expectStatus(response, 400);
+  });
+
+  await check('CP-028-02', 'HU-028: impedir consultar historial de otro edificio', async () => {
+    const response = await request(`/api/v1/maintenance/assets/${asset2.id}/maintenances`, {
+      cookie: operator.cookie
+    });
+    expectStatus(response, 403);
+  });
+
+  await check(
+    'CP-034-01',
+    'HU-034: asociar varios activos y mostrarlos en el detalle',
+    async () => {
+      const association = await request(
+        `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}/assets`,
+        {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { assetIds: [asset1.id] }
+        }
+      );
+      expectStatus(association, 200);
+      assert.deepEqual(association.payload.data.assetIds, [asset1.id]);
+
+      const detail = await request(`/api/v1/assets/${asset1.id}`, { cookie: admin.cookie });
+      expectStatus(detail, 200);
+      assert.ok(detail.payload.data.policies.some((policy) => policy.id === policy1.id));
+    }
+  );
+
+  await check(
+    'CP-034-02',
+    'HU-034: rechazar activos de otro edificio sin cambios parciales',
+    async () => {
+      const response = await request(
+        `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}/assets`,
+        {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { assetIds: [asset1.id, asset2.id] }
+        }
+      );
+      expectStatus(response, 400);
+
+      const detail = await request(`/api/v1/assets/${asset2.id}`, { cookie: admin.cookie });
+      expectStatus(detail, 200);
+      assert.ok(!(detail.payload.data.policies ?? []).some((policy) => policy.id === policy1.id));
+    }
+  );
+
+  await check(
+    'CP-036-01',
+    'HU-036: filtrar pólizas por aseguradora, estado y vencimiento',
+    async () => {
+      const path = `/api/v1/insurance/buildings/${building1.id}/policies`;
+      expectStatus(
+        await request(path, {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: {
+            number: 'HU036-002',
+            insurer: 'Otra Aseguradora',
+            coverage: 'Responsabilidad civil',
+            insuredValue: 200000,
+            validFrom: '2098-01-01',
+            validUntil: '2099-01-01'
+          }
+        }),
+        201
+      );
+      const filtered = await request(
+        `${path}?insurer=Seguros%20Prueba&status=vencida&expiresTo=2021-12-31`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(filtered, 200);
+      assert.deepEqual(
+        filtered.payload.data.map((policy) => policy.id),
+        [policy1.id]
+      );
+    }
+  );
+
+  await check('CP-036-02', 'HU-036: rechazar filtros inválidos y otro edificio', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/policies`;
+    expectStatus(await request(`${path}?expiresFrom=no-es-fecha`, { cookie: admin.cookie }), 400);
+    expectStatus(
+      await request(`/api/v1/insurance/buildings/${building2.id}/policies`, {
+        cookie: operator.cookie
+      }),
+      403
+    );
+  });
+
+  await check('CP-035-01', 'HU-035: actualizar póliza y registrar auditoría', async () => {
+    const response = await request(
+      `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}`,
+      {
+        method: 'PUT',
+        cookie: admin.cookie,
+        body: {
+          number: policy1.number,
+          insurer: 'Seguros Prueba Actualizada',
+          coverage: 'Incendio, terremoto y responsabilidad civil',
+          insuredValue: 175000,
+          validFrom: '2020-01-01',
+          validUntil: '2022-01-01'
+        }
+      }
+    );
+    expectStatus(response, 200);
+    assert.equal(response.payload.data.insurer, 'Seguros Prueba Actualizada');
+
+    const audit = await request(
+      `/api/v1/administration/audit-logs?entity=insurance_policy&entityId=${policy1.id}`,
+      { cookie: admin.cookie }
+    );
+    expectStatus(audit, 200);
+    assert.ok(audit.payload.data.some((entry) => entry.action === 'update'));
+  });
+
+  await check('CP-035-02', 'HU-035: rechazar fechas inválidas y falta de acceso', async () => {
+    const path = `/api/v1/insurance/buildings/${building1.id}/policies/${policy1.id}`;
+    const invalid = await request(path, {
+      method: 'PUT',
+      cookie: admin.cookie,
+      body: {
+        number: policy1.number,
+        insurer: policy1.insurer,
+        coverage: policy1.coverage,
+        insuredValue: policy1.insuredValue,
+        validFrom: '2027-01-01',
+        validUntil: '2026-01-01'
+      }
+    });
+    expectStatus(invalid, 400);
+    expectStatus(
+      await request(path, {
+        method: 'PUT',
+        cookie: operator.cookie,
+        body: policy1
+      }),
+      403
+    );
   });
 });

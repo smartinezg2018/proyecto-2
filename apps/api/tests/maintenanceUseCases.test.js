@@ -42,7 +42,16 @@ function createRepositories() {
         return maintenances.find((item) => String(item.id) === String(id)) ?? null;
       },
       async findByAsset(assetId) {
-        return maintenances.filter((item) => String(item.assetId) === String(assetId));
+        return maintenances
+          .filter((item) => String(item.assetId) === String(assetId))
+          .sort((left, right) => String(right.maintenanceDate).localeCompare(left.maintenanceDate));
+      },
+      async findOpenForAlertsByBuilding(buildingId) {
+        return maintenances.filter(
+          (item) =>
+            String(item.buildingId) === String(buildingId) &&
+            ['programado', 'en_ejecucion'].includes(item.status)
+        );
       },
       async findByBuilding(buildingId) {
         return maintenances.filter((item) => String(item.buildingId) === String(buildingId));
@@ -96,7 +105,7 @@ const validInput = {
   description: '  Revisión general de cables y frenos  '
 };
 
-test('registra un mantenimiento asociado al activo con tipo, fecha y descripción', async () => {
+test('HU-023 / CP-023-01: registra mantenimiento asociado al activo', async () => {
   const { useCases } = setup();
 
   const saved = await useCases.register(1, validInput, 7);
@@ -144,7 +153,7 @@ test('registra auditoría del mantenimiento', async () => {
   assert.equal(auditEntries[0].buildingId, 10);
 });
 
-test('rechaza registrar mantenimiento sobre un activo inexistente', async () => {
+test('HU-023 / CP-023-02: rechaza mantenimiento para un activo inexistente', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.register(99, validInput), {
@@ -181,16 +190,30 @@ test('rechaza una fecha con formato inválido', async () => {
   );
 });
 
-test('rechaza una fecha futura', async () => {
+test('permite programar un preventivo en una fecha futura', async () => {
   const { useCases } = setup();
   const future = new Date();
   future.setFullYear(future.getFullYear() + 1);
   const futureDate = future.toISOString().slice(0, 10);
 
-  await assert.rejects(() => useCases.register(1, { ...validInput, maintenanceDate: futureDate }), {
-    statusCode: 400,
-    message: 'La fecha del mantenimiento no puede ser futura.'
+  const saved = await useCases.register(1, { ...validInput, maintenanceDate: futureDate });
+  assert.equal(saved.maintenanceDate, futureDate);
+});
+
+test('permite programar un correctivo en una fecha futura', async () => {
+  const { useCases } = setup();
+  const future = new Date();
+  future.setFullYear(future.getFullYear() + 1);
+  const futureDate = future.toISOString().slice(0, 10);
+
+  const saved = await useCases.register(1, {
+    maintenanceType: 'correctivo',
+    maintenanceDate: futureDate,
+    failure: 'Fuga',
+    cause: 'Sello',
+    actionsTaken: 'Cambio'
   });
+  assert.equal(saved.maintenanceDate, futureDate);
 });
 
 test('rechaza una descripción vacía', async () => {
@@ -232,7 +255,7 @@ const correctiveInput = {
   actionsTaken: '  Reemplazo del sello y purga del circuito  '
 };
 
-test('registra un mantenimiento correctivo con falla, causa y acciones ejecutadas', async () => {
+test('HU-025 / CP-025-01: registra correctivo con falla, causa y acciones', async () => {
   const { useCases, maintenances } = setup();
 
   const saved = await useCases.register(1, correctiveInput, 7);
@@ -278,7 +301,7 @@ test('registra auditoría con detalles del correctivo', async () => {
   assert.equal(auditEntries[0].metadata.actionsTaken, 'Reemplazo del sello y purga del circuito');
 });
 
-test('rechaza un correctivo sin falla', async () => {
+test('HU-025 / CP-025-02: rechaza un correctivo sin falla', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.register(1, { ...correctiveInput, failure: '   ' }), {
@@ -305,7 +328,7 @@ test('rechaza un correctivo sin acciones ejecutadas', async () => {
   });
 });
 
-test('un mantenimiento nuevo inicia en programado y registra usuario y fecha', async () => {
+test('HU-029 / CP-029-01: conserva estado, usuario y fecha en el historial', async () => {
   const { useCases, statusHistory } = setup();
 
   const saved = await useCases.register(1, { ...validInput, status: 'finalizado' }, 7);
@@ -400,7 +423,7 @@ test('rechaza dejar el mantenimiento en el mismo estado', async () => {
   assert.equal(statusHistory.length, 1);
 });
 
-test('rechaza saltar de programado a finalizado', async () => {
+test('HU-029 / CP-029-02: rechaza una transición de estado inválida', async () => {
   const { useCases } = setup();
   const saved = await useCases.register(1, validInput, 7);
 
@@ -439,7 +462,7 @@ test('rechaza actualizar el estado de un mantenimiento inexistente', async () =>
   });
 });
 
-test('registra costo estimado y costo real al crear el mantenimiento', async () => {
+test('HU-026 / CP-026-01: registra costos estimado y real', async () => {
   const { useCases, auditEntries } = setup();
 
   const saved = await useCases.register(
@@ -463,7 +486,7 @@ test('los costos son opcionales al registrar el mantenimiento', async () => {
   assert.equal(saved.actualCost, null);
 });
 
-test('rechaza registrar un mantenimiento con costo negativo', async () => {
+test('HU-026 / CP-026-02: rechaza un costo negativo', async () => {
   const { useCases, maintenances } = setup();
 
   await assert.rejects(() => useCases.register(1, { ...validInput, estimatedCost: -1 }), {
@@ -540,4 +563,75 @@ test('rechaza actualizar costos de un mantenimiento inexistente', async () => {
     statusCode: 404,
     code: 'MAINTENANCE_NOT_FOUND'
   });
+});
+
+test('HU-024 / CP-024-01: programa preventivo y calcula la próxima fecha', async () => {
+  const { useCases } = setup();
+  const future = new Date();
+  future.setFullYear(future.getFullYear() + 1);
+  const futureDate = future.toISOString().slice(0, 10);
+
+  const saved = await useCases.register(
+    1,
+    {
+      ...validInput,
+      maintenanceDate: futureDate,
+      frequency: 'mensual',
+      responsible: '  Ana Martínez  '
+    },
+    7
+  );
+
+  assert.equal(saved.frequency, 'mensual');
+  assert.equal(saved.responsible, 'Ana Martínez');
+  assert.notEqual(saved.nextExecutionDate, futureDate);
+  assert.match(saved.nextExecutionDate, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('permite registrar la próxima fecha de ejecución en lugar de calcularla', async () => {
+  const { useCases } = setup();
+
+  const saved = await useCases.register(1, {
+    ...validInput,
+    frequency: 'semanal',
+    responsible: 'Carlos Ruiz',
+    nextExecutionDate: '2026-02-01'
+  });
+
+  assert.equal(saved.nextExecutionDate, '2026-02-01');
+});
+
+test('HU-028 / CP-028-01: lista el historial en orden cronológico', async () => {
+  const { useCases } = setup();
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-01-10' });
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-03-10' });
+  await useCases.register(1, { ...validInput, maintenanceDate: '2026-02-10' });
+
+  const history = await useCases.listByAsset(1);
+
+  assert.deepEqual(
+    history.map((item) => item.maintenanceDate),
+    ['2026-03-10', '2026-02-10', '2026-01-10']
+  );
+});
+
+test('HU-024 / CP-024-02: rechaza frecuencia en un correctivo', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(
+    () =>
+      useCases.register(1, {
+        maintenanceType: 'correctivo',
+        maintenanceDate: '2026-01-15',
+        failure: 'Fuga',
+        cause: 'Sello',
+        actionsTaken: 'Cambio',
+        frequency: 'mensual',
+        responsible: 'Ana'
+      }),
+    {
+      statusCode: 400,
+      message: 'Solo los mantenimientos preventivos se pueden programar con frecuencia.'
+    }
+  );
 });

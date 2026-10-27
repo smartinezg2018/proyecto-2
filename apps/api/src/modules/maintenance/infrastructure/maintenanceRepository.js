@@ -55,6 +55,9 @@ function mapMaintenance(maintenance) {
     supplierDocumentRef: data.supplierDocumentRef,
     maintenanceType: data.maintenanceType,
     maintenanceDate: formatDate(data.maintenanceDate),
+    frequency: data.frequency ?? null,
+    responsible: data.responsible ?? null,
+    nextExecutionDate: formatDate(data.nextExecutionDate),
     description: data.description,
     failure: data.failureDescription ?? null,
     cause: data.cause ?? null,
@@ -102,6 +105,9 @@ export class MaintenanceRepository {
           supplierDocumentRef: maintenance.supplierDocumentRef ?? null,
           maintenanceType: maintenance.maintenanceType,
           maintenanceDate: maintenance.maintenanceDate,
+          frequency: maintenance.frequency ?? null,
+          responsible: maintenance.responsible ?? null,
+          nextExecutionDate: maintenance.nextExecutionDate ?? null,
           description: maintenance.description,
           failureDescription: maintenance.failureDescription ?? null,
           cause: maintenance.cause ?? null,
@@ -182,13 +188,28 @@ export class MaintenanceRepository {
   }
 
   async findById(id) {
-    const maintenance = await Maintenance.findByPk(id, { include: [assetInclude, supplierInclude] });
+    const maintenance = await Maintenance.findByPk(id, {
+      include: [assetInclude, supplierInclude]
+    });
     return mapMaintenance(maintenance);
   }
 
   async findByAsset(assetId) {
     const maintenances = await Maintenance.findAll({
       where: { assetId: Number(assetId) },
+      include: [assetInclude, supplierInclude],
+      order: chronologicalOrder
+    });
+
+    return maintenances.map(mapMaintenance);
+  }
+
+  async findOpenForAlertsByBuilding(buildingId) {
+    const maintenances = await Maintenance.findAll({
+      where: {
+        buildingId: Number(buildingId),
+        status: ['programado', 'en_ejecucion']
+      },
       include: [assetInclude, supplierInclude],
       order: chronologicalOrder
     });
