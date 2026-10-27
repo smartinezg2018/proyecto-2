@@ -1,5 +1,5 @@
 import { sequelize } from '../../../../database/connection.js';
-import { Invoice, InvoiceItem, Unit } from '../../../../database/models/index.js';
+import { ChargeSchedule, Invoice, InvoiceItem, Unit } from '../../../../database/models/index.js';
 
 function mapInvoice(invoice) {
   const data = invoice.get({ plain: true });
@@ -66,4 +66,52 @@ export class BillingRepository {
     });
     return invoices.map(mapInvoice);
   }
+
+  async createExtraordinaryCharges({
+    buildingId,
+    unitIds,
+    originPeriod,
+    startPeriod,
+    concept,
+    totalAmount,
+    installments,
+    approvalReference,
+    createdBy
+  }) {
+    const units = await Unit.findAll({ where: { buildingId, id: unitIds }, attributes: ['id'] });
+    if (units.length !== unitIds.length) {
+      const error = new Error('Uno o más apartamentos no pertenecen al edificio.');
+      error.code = 'UNIT_BUILDING_MISMATCH';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const installmentAmount = Math.round((Number(totalAmount) / installments) * 100) / 100;
+    const schedules = [];
+    for (const unit of units) {
+      for (let index = 0; index < installments; index += 1) {
+        schedules.push({
+          buildingId,
+          unitId: unit.id,
+          chargeType: 'extraordinario',
+          originPeriod,
+          scheduledPeriod: addMonths(startPeriod, index),
+          concept,
+          amount: index === installments - 1
+            ? Number(totalAmount) - installmentAmount * (installments - 1)
+            : installmentAmount,
+          approvalReference,
+          createdBy
+        });
+      }
+    }
+    await ChargeSchedule.bulkCreate(schedules);
+    return schedules;
+  }
+}
+
+function addMonths(period, months) {
+  const [year, month] = period.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + months, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 }
