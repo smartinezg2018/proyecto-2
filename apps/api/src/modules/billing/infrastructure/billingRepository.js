@@ -108,6 +108,44 @@ export class BillingRepository {
     await ChargeSchedule.bulkCreate(schedules);
     return schedules;
   }
+
+  async createRetroactiveCharges({
+    buildingId,
+    unitIds,
+    originPeriod,
+    startPeriod,
+    concept,
+    totalAmount,
+    installments,
+    createdBy
+  }) {
+    const units = await Unit.findAll({ where: { buildingId, id: unitIds }, attributes: ['id'] });
+    if (units.length !== unitIds.length) {
+      const error = new Error('Uno o más apartamentos no pertenecen al edificio.');
+      error.code = 'UNIT_BUILDING_MISMATCH';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const installmentAmount = Math.round((Number(totalAmount) / installments) * 100) / 100;
+    const schedules = units.flatMap((unit) =>
+      Array.from({ length: installments }, (_, index) => ({
+        buildingId,
+        unitId: unit.id,
+        chargeType: 'retroactivo',
+        originPeriod,
+        scheduledPeriod: addMonths(startPeriod, index),
+        concept,
+        amount:
+          index === installments - 1
+            ? Number(totalAmount) - installmentAmount * (installments - 1)
+            : installmentAmount,
+        createdBy
+      }))
+    );
+    await ChargeSchedule.bulkCreate(schedules);
+    return schedules;
+  }
 }
 
 function addMonths(period, months) {

@@ -24,6 +24,21 @@ export function createBillingUseCases(repository) {
         );
       }
       return repository.createExtraordinaryCharges({ ...input, unitIds, createdBy });
+    },
+
+    async generateRetroactiveCharges(input, createdBy) {
+      const unitIds = [...new Set(input.unitIds)];
+      if (unitIds.length !== input.unitIds.length) {
+        throw new AppError('No puede repetir apartamentos en el mismo cobro.', 400, 'DUPLICATE_UNITS');
+      }
+      if (input.startPeriod < input.originPeriod) {
+        throw new AppError(
+          'El periodo inicial no puede ser anterior al periodo de origen.',
+          400,
+          'INVALID_CHARGE_PERIOD'
+        );
+      }
+      return repository.createRetroactiveCharges({ ...input, unitIds, createdBy });
     }
   };
 }
