@@ -10,6 +10,9 @@ import { Person } from './Person.js';
 import { Supplier } from './Supplier.js';
 import { Unit } from './Unit.js';
 import { UnitResponsible } from './UnitResponsible.js';
+import { Invoice } from './Invoice.js';
+import { InvoiceItem } from './InvoiceItem.js';
+import { ChargeSchedule } from './ChargeSchedule.js';
 
 Unit.hasOne(UnitResponsible, { foreignKey: 'unitId', as: 'responsibleAssignment' });
 UnitResponsible.belongsTo(Unit, { foreignKey: 'unitId' });
@@ -40,6 +43,13 @@ Maintenance.hasMany(MaintenanceQuote, { foreignKey: 'maintenanceId', as: 'quotes
 MaintenanceQuote.belongsTo(Maintenance, { foreignKey: 'maintenanceId' });
 MaintenanceQuote.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
 Supplier.hasMany(MaintenanceQuote, { foreignKey: 'supplierId' });
+Invoice.hasMany(InvoiceItem, { foreignKey: 'invoiceId', as: 'items' });
+InvoiceItem.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+Invoice.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
+Unit.hasMany(Invoice, { foreignKey: 'unitId', as: 'invoices' });
+ChargeSchedule.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
+Unit.hasMany(ChargeSchedule, { foreignKey: 'unitId', as: 'chargeSchedules' });
+ChargeSchedule.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
 
 export {
   Asset,
@@ -53,5 +63,8 @@ export {
   Person,
   Supplier,
   Unit,
-  UnitResponsible
+  UnitResponsible,
+  Invoice,
+  InvoiceItem,
+  ChargeSchedule
 };
