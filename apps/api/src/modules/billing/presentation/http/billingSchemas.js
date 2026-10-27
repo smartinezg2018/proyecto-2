@@ -10,3 +10,13 @@ export const generateOrdinaryInvoicesSchema = z.object({
   baseAmount: z.coerce.number().positive(),
   dueDate: dateSchema
 });
+
+export const generateExtraordinaryChargesSchema = z.object({
+  unitIds: z.array(z.coerce.number().int().positive()).min(1),
+  originPeriod: periodSchema,
+  startPeriod: periodSchema,
+  concept: z.string().trim().min(1).max(255),
+  totalAmount: z.coerce.number().positive(),
+  installments: z.coerce.number().int().positive().max(120),
+  approvalReference: z.string().trim().min(1).max(255)
+});

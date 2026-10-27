@@ -47,3 +47,30 @@ test('rechaza apartamentos repetidos', async () => {
     { code: 'DUPLICATE_UNITS', statusCode: 400 }
   );
 });
+
+test('distribuye un cobro extraordinario en las cuotas solicitadas', async () => {
+  let created;
+  const useCases = createBillingUseCases({
+    async createExtraordinaryCharges(input) {
+      created = input;
+      return [{ scheduledPeriod: '2026-11', amount: 50000 }];
+    }
+  });
+
+  await useCases.generateExtraordinaryCharges(
+    {
+      buildingId: 4,
+      unitIds: [10],
+      originPeriod: '2026-10',
+      startPeriod: '2026-11',
+      concept: 'Impermeabilización',
+      totalAmount: 150000,
+      installments: 3,
+      approvalReference: 'Acta 12'
+    },
+    7
+  );
+
+  assert.equal(created.installments, 3);
+  assert.equal(created.createdBy, 7);
+});
