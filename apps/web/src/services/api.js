@@ -392,6 +392,17 @@ export function registerProjectQuote(buildingId, projectId, quote) {
   });
 }
 
+export function getProjectProgress(buildingId, projectId) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`);
+}
+
+export function registerProjectProgress(buildingId, projectId, progress) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`, {
+    method: 'POST',
+    body: JSON.stringify(progress)
+  });
+}
+
 export function selectProjectQuote(buildingId, projectId, selection) {
   return apiRequest(
     `/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes/selection`,

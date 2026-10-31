@@ -6,6 +6,7 @@ import {
   getBuildingProjects,
   getSuppliers,
   registerProject,
+  registerProjectProgress,
   registerProjectQuote,
   selectProjectQuote
 } from '../../services/api.js';
@@ -82,6 +83,21 @@ function createEmptyQuoteForm() {
   };
 }
 
+function createEmptyProgressForm() {
+  return {
+    quoteId: '',
+    progressDate: '',
+    percentage: '',
+    executedCost: '',
+    observations: '',
+    evidenceRef: ''
+  };
+}
+
+function isProjectOpen(status) {
+  return status !== 'finalizado' && status !== 'cancelado';
+}
+
 export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const canCreate = hasPermission(permissions, 'projects.create');
   const canAddQuote = hasPermission(permissions, 'projects.update');
@@ -97,6 +113,9 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const [selectionProjectId, setSelectionProjectId] = useState(null);
   const [selectionForm, setSelectionForm] = useState({ quoteId: '', justification: '' });
   const [isSavingSelection, setIsSavingSelection] = useState(false);
+  const [progressFormProjectId, setProgressFormProjectId] = useState(null);
+  const [progressForm, setProgressForm] = useState(createEmptyProgressForm);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
 
   useEffect(() => {
@@ -235,11 +254,50 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     }
   }
 
+  function openProgressForm(project) {
+    setProgressFormProjectId(project.id);
+    setProgressForm({
+      ...createEmptyProgressForm(),
+      quoteId: project.selectedQuoteId ? String(project.selectedQuoteId) : ''
+    });
+  }
+
+  function updateProgressField(event) {
+    const { name, value } = event.target;
+    setProgressForm({ ...progressForm, [name]: value });
+  }
+
+  async function submitProgress(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !progressFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingProgress(true);
+
+    try {
+      await registerProjectProgress(activeBuildingId, progressFormProjectId, {
+        quoteId: Number(progressForm.quoteId),
+        progressDate: progressForm.progressDate,
+        percentage: Number(progressForm.percentage),
+        executedCost: Number(progressForm.executedCost),
+        observations: progressForm.observations,
+        evidenceRef: progressForm.evidenceRef || null
+      });
+      await reloadProjects();
+      setProgressForm(createEmptyProgressForm());
+      setProgressFormProjectId(null);
+      setStatus({ type: 'success', message: 'Avance registrado correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingProgress(false);
+    }
+  }
+
   return (
     <div>
       <SectionHeader
         title="Proyectos"
-        subtitle="Registro de proyectos y cotizaciones por edificio"
+        subtitle="Registro, cotización y avance de proyectos por edificio"
         action={
           canCreate ? (
             <ActionButton onClick={() => setIsFormOpen(true)} disabled={!activeBuildingId}>
@@ -420,6 +478,18 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                   <p className="mb-0.5 text-xs text-slate-400">Fin</p>
                   <p className="font-mono text-sm font-bold text-slate-800">
                     {formatDateDisplay(project.endDate)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Avance</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {Number(project.currentPercentage || 0)}%
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Ejecutado</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {formatCurrency(project.currentExecutedCost || 0)}
                   </p>
                 </div>
               </div>
@@ -740,6 +810,159 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       <button
                         type="button"
                         onClick={() => setQuoteFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">
+                    Avances ({(project.progressEntries ?? []).length})
+                  </h4>
+                  {canAddQuote && isProjectOpen(project.status) && (
+                    <button
+                      type="button"
+                      onClick={() => openProgressForm(project)}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Registrar avance
+                    </button>
+                  )}
+                </div>
+
+                {(project.progressEntries ?? []).length === 0 &&
+                  progressFormProjectId !== project.id && (
+                    <p className="text-xs text-slate-400">Aún no hay avances en este proyecto.</p>
+                  )}
+
+                <div className="space-y-2">
+                  {(project.progressEntries ?? []).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">
+                            {entry.percentage}% · {formatCurrency(entry.executedCost)}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {formatDateDisplay(entry.progressDate)}
+                            {entry.supplierName ? ` · ${entry.supplierName}` : ''}
+                            {entry.evidenceRef ? ` · ${entry.evidenceRef}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-600">{entry.observations}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {progressFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitProgress}
+                    className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Cotización ejecutora *
+                      </span>
+                      <select
+                        name="quoteId"
+                        value={progressForm.quoteId}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      >
+                        <option value="">Selecciona una cotización</option>
+                        {(project.quotes ?? []).map((quote) => (
+                          <option key={quote.id} value={quote.id}>
+                            {quote.supplier?.name || 'Proveedor'} · {formatCurrency(quote.amount)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Fecha de avance *
+                      </span>
+                      <input
+                        name="progressDate"
+                        type="date"
+                        value={progressForm.progressDate}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Porcentaje *
+                      </span>
+                      <input
+                        name="percentage"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={progressForm.percentage}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Costo ejecutado (COP) *
+                      </span>
+                      <input
+                        name="executedCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={progressForm.executedCost}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Observaciones *
+                      </span>
+                      <textarea
+                        name="observations"
+                        value={progressForm.observations}
+                        onChange={updateProgressField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Evidencia
+                      </span>
+                      <input
+                        name="evidenceRef"
+                        value={progressForm.evidenceRef}
+                        onChange={updateProgressField}
+                        placeholder="Referencia o nombre del archivo"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingProgress}>
+                        <Save size={14} /> Guardar avance
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setProgressFormProjectId(null)}
                         className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
                       >
                         Cancelar

@@ -1,4 +1,5 @@
 import { Project } from '../../../../database/models/index.js';
+import { mapProjectProgress } from './projectProgressRepository.js';
 import { mapProjectQuote } from './projectQuoteRepository.js';
 
 function formatDate(value) {
@@ -40,7 +41,14 @@ function mapProject(project) {
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
-    quotes: (data.quotes ?? []).map(mapProjectQuote)
+    quotes: (data.quotes ?? []).map(mapProjectQuote),
+    progressEntries: (data.progressEntries ?? []).map(mapProjectProgress),
+    currentPercentage: Array.isArray(data.progressEntries) && data.progressEntries.length
+      ? Number(mapProjectProgress(data.progressEntries[0]).percentage)
+      : 0,
+    currentExecutedCost: Array.isArray(data.progressEntries) && data.progressEntries.length
+      ? Number(mapProjectProgress(data.progressEntries[0]).executedCost)
+      : 0
   };
 }
 
@@ -72,11 +80,25 @@ export class ProjectRepository {
   async findByBuilding(buildingId) {
     const projects = await Project.findAll({
       where: { buildingId: Number(buildingId) },
-      include: [{ association: 'quotes', include: [{ association: 'supplier' }] }],
+      include: [
+        {
+          association: 'quotes',
+          include: [{ association: 'supplier' }],
+          separate: true,
+          order: [['id', 'ASC']]
+        },
+        {
+          association: 'progressEntries',
+          separate: true,
+          order: [
+            ['progressDate', 'DESC'],
+            ['id', 'DESC']
+          ]
+        }
+      ],
       order: [
         ['startDate', 'DESC'],
-        ['id', 'DESC'],
-        [{ association: 'quotes' }, 'id', 'ASC']
+        ['id', 'DESC']
       ]
     });
 
@@ -92,6 +114,11 @@ export class ProjectRepository {
       },
       { where: { id: Number(id) } }
     );
+    return this.findById(id);
+  }
+
+  async updateStatus(id, status, updatedBy = null) {
+    await Project.update({ status, updatedBy }, { where: { id: Number(id) } });
     return this.findById(id);
   }
 }
