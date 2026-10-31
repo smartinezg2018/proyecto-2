@@ -16,7 +16,8 @@ import {
   registerProjectSchema,
   registerProjectQuoteSchema,
   registerProjectProgressSchema,
-  selectProjectQuoteSchema
+  selectProjectQuoteSchema,
+  closeProjectSchema
 } from './projectSchemas.js';
 
 export const projectRoutes = Router();
@@ -75,6 +76,23 @@ projectRoutes.post(
       request.user.id
     );
     response.status(201).json({ data: project, meta: { requestId: request.id } });
+  })
+);
+
+projectRoutes.post(
+  '/buildings/:buildingId/projects/:projectId/close',
+  requireAuth,
+  requirePermission('projects.update'),
+  ensureBuildingAccess,
+  validateBody(closeProjectSchema),
+  asyncHandler(async (request, response) => {
+    const project = await projectUseCases.close(
+      request.params.buildingId,
+      request.params.projectId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: project, meta: { requestId: request.id } });
   })
 );
 

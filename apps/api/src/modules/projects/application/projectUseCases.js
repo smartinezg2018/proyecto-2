@@ -34,25 +34,52 @@ function validateDate(value, fieldLabel) {
   return value;
 }
 
-function normalizeBudget(value) {
+function normalizeAmount(value, fieldLabel) {
   const amount = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
   if (typeof amount !== 'number' || !Number.isFinite(amount)) {
-    throw new AppError('El presupuesto debe ser numérico.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} debe ser numérico.`, 400, 'VALIDATION_ERROR');
   }
 
   if (amount < 0) {
-    throw new AppError('El presupuesto no puede ser negativo.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} no puede ser negativo.`, 400, 'VALIDATION_ERROR');
   }
 
   if (amount > MAX_BUDGET) {
-    throw new AppError('El presupuesto excede el valor máximo permitido.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} excede el valor máximo permitido.`, 400, 'VALIDATION_ERROR');
   }
 
   if (Math.round(amount * 100) / 100 !== amount) {
-    throw new AppError('El presupuesto admite como máximo dos decimales.', 400, 'VALIDATION_ERROR');
+    throw new AppError(
+      `${fieldLabel} admite como máximo dos decimales.`,
+      400,
+      'VALIDATION_ERROR'
+    );
   }
 
   return amount;
+}
+
+function normalizeBudget(value) {
+  return normalizeAmount(value, 'El presupuesto');
+}
+
+function validateCloseInput(input) {
+  const closeDate = validateDate(input.closeDate, 'La fecha de cierre');
+  const documentValue =
+    typeof input.closingDocumentRef === 'string'
+      ? input.closingDocumentRef.trim()
+      : input.closingDocumentRef;
+  const closingDocumentRef =
+    documentValue === undefined || documentValue === null || documentValue === ''
+      ? null
+      : requiredText(input.closingDocumentRef, 'El documento de cierre', 255);
+
+  return {
+    closeDate,
+    totalCost: normalizeAmount(input.totalCost, 'El costo total'),
+    result: requiredText(input.result, 'El resultado del proyecto', 5000),
+    closingDocumentRef
+  };
 }
 
 function validateRegisterInput(input) {
@@ -142,6 +169,15 @@ export function createProjectUseCases(projectRepository, buildingRepository, aud
     return building;
   }
 
+  async function getProjectInBuilding(buildingId, projectId) {
+    await getBuilding(buildingId);
+    const project = await projectRepository.findById(projectId);
+    if (!project || Number(project.buildingId) !== Number(buildingId)) {
+      throw new AppError('El proyecto no existe en este edificio.', 404, 'PROJECT_NOT_FOUND');
+    }
+    return project;
+  }
+
   return {
     async register(buildingId, input, userId = null) {
       await getBuilding(buildingId);
@@ -180,6 +216,52 @@ export function createProjectUseCases(projectRepository, buildingRepository, aud
     async listByBuilding(buildingId, filters = {}) {
       await getBuilding(buildingId);
       return projectRepository.findByBuilding(buildingId, parseListFilters(filters));
+    },
+
+    async close(buildingId, projectId, input, userId = null) {
+      const project = await getProjectInBuilding(buildingId, projectId);
+      if (project.status === 'finalizado' || project.status === 'cancelado') {
+        throw new AppError(
+          'No se puede cerrar un proyecto que ya está cerrado.',
+          409,
+          'PROJECT_CLOSED'
+        );
+      }
+
+      const closure = validateCloseInput(input);
+      if (closure.closeDate < project.startDate) {
+        throw new AppError(
+          'La fecha de cierre no puede ser anterior a la fecha de inicio.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      const saved = await projectRepository.close(projectId, {
+        ...closure,
+        updatedBy: userId
+      });
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'update',
+          module: 'projects',
+          entity: 'project',
+          entityId: Number(projectId),
+          buildingId: Number(buildingId),
+          metadata: {
+            projectName: project.name,
+            status: 'finalizado',
+            closeDate: saved.closeDate,
+            totalCost: saved.totalCost,
+            result: saved.result,
+            closingDocumentRef: saved.closingDocumentRef
+          }
+        });
+      }
+
+      return saved;
     }
   };
 }

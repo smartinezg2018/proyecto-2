@@ -38,6 +38,11 @@ function mapProject(project) {
     status: data.status,
     selectedQuoteId: data.selectedQuoteId ?? null,
     selectionJustification: data.selectionJustification ?? null,
+    closeDate: formatDate(data.closeDate),
+    totalCost:
+      data.totalCost === null || data.totalCost === undefined ? null : Number(data.totalCost),
+    result: data.result ?? null,
+    closingDocumentRef: data.closingDocumentRef ?? null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
@@ -137,6 +142,21 @@ export class ProjectRepository {
 
   async updateStatus(id, status, updatedBy = null) {
     await Project.update({ status, updatedBy }, { where: { id: Number(id) } });
+    return this.findById(id);
+  }
+
+  async close(id, closure) {
+    await Project.update(
+      {
+        status: 'finalizado',
+        closeDate: closure.closeDate,
+        totalCost: closure.totalCost,
+        result: closure.result,
+        closingDocumentRef: closure.closingDocumentRef,
+        updatedBy: closure.updatedBy
+      },
+      { where: { id: Number(id) } }
+    );
     return this.findById(id);
   }
 }

@@ -61,6 +61,16 @@ export const registerProjectProgressSchema = z.object({
   evidenceRef: z.string().trim().max(255).optional().nullable()
 });
 
+export const closeProjectSchema = z.object({
+  closeDate: dateSchema,
+  totalCost: z
+    .number()
+    .nonnegative('El costo total no puede ser negativo.')
+    .max(9999999999999.99),
+  result: z.string().trim().min(1, 'El resultado del proyecto es obligatorio.').max(5000),
+  closingDocumentRef: z.string().trim().max(255).optional().nullable()
+});
+
 export const selectProjectQuoteSchema = z.object({
   quoteId: z.number().int().positive('La cotización es obligatoria.'),
   justification: z
