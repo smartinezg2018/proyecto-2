@@ -1,29 +1,8 @@
 import { database, sequelize } from '../connection.js';
 import { hashPassword } from '../../src/modules/auth/infrastructure/password.js';
+import { REAL_BUILDINGS } from './realBuildings.js';
 
-const SEED_BUILDINGS = [
-  {
-    nit: '900111001',
-    name: 'Conjunto El Nogal',
-    address: 'Calle 10 # 20-30, Bogotá',
-    phone: '6015550101',
-    email: 'nogal@example.com'
-  },
-  {
-    nit: '900111002',
-    name: 'Torre Central',
-    address: 'Av. 68 # 45-12, Bogotá',
-    phone: '6015550102',
-    email: 'central@example.com'
-  },
-  {
-    nit: '900111003',
-    name: 'Residencia Los Robles',
-    address: 'Carrera 7 # 80-15, Bogotá',
-    phone: '6015550103',
-    email: 'robles@example.com'
-  }
-];
+const SEED_BUILDINGS = [...REAL_BUILDINGS];
 
 const SEED_PROFILES = [
   {
@@ -54,7 +33,9 @@ const SEED_PROFILES = [
       'insurance.update',
       'billing.view',
       'budget.view',
-      'projects.view'
+      'projects.view',
+      'projects.create',
+      'projects.update'
     ]
   },
   {
@@ -89,7 +70,7 @@ const SEED_USERS = [
     password: 'Admin123!',
     status: 'active',
     profileName: 'Administrador general',
-    buildingNits: ['900111001', '900111002', '900111003']
+    buildingNits: REAL_BUILDINGS.map((item) => item.nit)
   },
   {
     identification: '1000000002',
@@ -98,7 +79,7 @@ const SEED_USERS = [
     password: 'Edificio123!',
     status: 'active',
     profileName: 'Administrador de edificio',
-    buildingNits: ['900111001', '900111002']
+    buildingNits: ['900170804-8', '900501288-9']
   },
   {
     identification: '1000000003',
@@ -116,7 +97,7 @@ const SEED_USERS = [
     password: 'Operador123!',
     status: 'active',
     profileName: 'Operador',
-    buildingNits: ['900111001']
+    buildingNits: ['900170804-8']
   },
   {
     identification: '1000000005',
@@ -125,7 +106,7 @@ const SEED_USERS = [
     password: 'Inactivo123!',
     status: 'inactive',
     profileName: 'Operador',
-    buildingNits: ['900111001']
+    buildingNits: ['900170804-8']
   }
 ];
 

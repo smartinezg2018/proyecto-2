@@ -183,7 +183,7 @@ export default function App() {
       case 'presupuesto':
         return <ModulePresupuesto />;
       case 'proyectos':
-        return <ModuleProyectos />;
+        return <ModuleProyectos permissions={permissions} activeBuildingId={activeBuildingId} />;
       case 'usuarios':
         return <UsersPage />;
       case 'perfiles':
