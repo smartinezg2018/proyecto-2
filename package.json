@@ -7,7 +7,6 @@
     "install:all": "npm install --prefix apps/api && npm install --prefix apps/web",
     "db:migrate": "npm run db:migrate --prefix apps/api",
     "db:seed": "npm run db:seed --prefix apps/api",
-    "db:import-buildings": "npm run db:import-buildings --prefix apps/api",
     "test": "npm test --prefix apps/api",
     "lint": "eslint apps/api apps/web",
     "lint:fix": "eslint apps/api apps/web --fix",

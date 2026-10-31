@@ -8,8 +8,7 @@
     "start": "node src/server.js",
     "test": "node --test",
     "db:migrate": "node database/migrations/run.js",
-    "db:seed": "node database/seeds/run.js",
-    "db:import-buildings": "node database/seeds/importRealBuildings.js"
+    "db:seed": "node database/seeds/run.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
