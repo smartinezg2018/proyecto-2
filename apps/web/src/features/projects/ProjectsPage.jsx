@@ -83,6 +83,15 @@ function createEmptyQuoteForm() {
   };
 }
 
+function createEmptyFilters() {
+  return {
+    status: '',
+    projectType: '',
+    dateFrom: '',
+    dateTo: ''
+  };
+}
+
 function createEmptyProgressForm() {
   return {
     quoteId: '',
@@ -106,6 +115,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [filters, setFilters] = useState(createEmptyFilters);
   const [form, setForm] = useState(createEmptyForm);
   const [quoteFormProjectId, setQuoteFormProjectId] = useState(null);
   const [quoteForm, setQuoteForm] = useState(createEmptyQuoteForm);
@@ -131,11 +141,11 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     }
 
     setIsLoading(true);
-    getBuildingProjects(activeBuildingId)
+    getBuildingProjects(activeBuildingId, filters)
       .then((response) => setProjects(response.data ?? []))
       .catch((error) => setStatus({ type: 'error', message: error.message }))
       .finally(() => setIsLoading(false));
-  }, [activeBuildingId]);
+  }, [activeBuildingId, filters]);
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -159,7 +169,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
         responsible: form.responsible,
         approvalReference: form.approvalReference
       });
-      const response = await getBuildingProjects(activeBuildingId);
+      const response = await getBuildingProjects(activeBuildingId, filters);
       setProjects(response.data ?? []);
       setForm(createEmptyForm());
       setIsFormOpen(false);
@@ -173,7 +183,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
 
   async function reloadProjects() {
     if (!activeBuildingId) return;
-    const response = await getBuildingProjects(activeBuildingId);
+    const response = await getBuildingProjects(activeBuildingId, filters);
     setProjects(response.data ?? []);
   }
 
@@ -297,7 +307,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     <div>
       <SectionHeader
         title="Proyectos"
-        subtitle="Registro, cotización y avance de proyectos por edificio"
+        subtitle="Historial filtrable de proyectos por edificio"
         action={
           canCreate ? (
             <ActionButton onClick={() => setIsFormOpen(true)} disabled={!activeBuildingId}>
@@ -321,6 +331,59 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
         <p className="mb-4 text-sm text-slate-400">
           Selecciona un edificio para ver sus proyectos.
         </p>
+      )}
+
+      {activeBuildingId && (
+        <div className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Estado</span>
+            <select
+              value={filters.status}
+              onChange={(event) => setFilters({ ...filters, status: event.target.value })}
+              className={inputClassName}
+            >
+              <option value="">Todos</option>
+              {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Tipo</span>
+            <select
+              value={filters.projectType}
+              onChange={(event) => setFilters({ ...filters, projectType: event.target.value })}
+              className={inputClassName}
+            >
+              <option value="">Todos</option>
+              {PROJECT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Desde</span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })}
+              className={inputClassName}
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Hasta</span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })}
+              className={inputClassName}
+            />
+          </label>
+        </div>
       )}
 
       {isFormOpen && (

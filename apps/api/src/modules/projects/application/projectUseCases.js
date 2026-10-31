@@ -1,6 +1,6 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 import { isCalendarDate } from '../../assets/domain/calendarDate.js';
-import { INITIAL_PROJECT_STATUS, PROJECT_TYPES } from '../domain/projectCatalog.js';
+import { INITIAL_PROJECT_STATUS, PROJECT_STATUSES, PROJECT_TYPES } from '../domain/projectCatalog.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BUDGET = 9999999999999.99;
@@ -96,6 +96,43 @@ function validateRegisterInput(input) {
   };
 }
 
+function parseListFilters(input = {}) {
+  const filters = {};
+  if (input.status) {
+    if (!PROJECT_STATUSES.includes(input.status)) {
+      throw new AppError('El estado del proyecto no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    filters.status = input.status;
+  }
+
+  if (input.projectType) {
+    if (!PROJECT_TYPES.includes(input.projectType)) {
+      throw new AppError(
+        'El tipo de proyecto debe ser obra, mejora, mantenimiento u otro.',
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+    filters.projectType = input.projectType;
+  }
+
+  if (input.dateFrom) {
+    filters.dateFrom = validateDate(input.dateFrom, 'La fecha inicial');
+  }
+  if (input.dateTo) {
+    filters.dateTo = validateDate(input.dateTo, 'La fecha final');
+  }
+  if (filters.dateFrom && filters.dateTo && filters.dateTo < filters.dateFrom) {
+    throw new AppError(
+      'La fecha final no puede ser anterior a la fecha inicial.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  return filters;
+}
+
 export function createProjectUseCases(projectRepository, buildingRepository, audit = null) {
   async function getBuilding(buildingId) {
     const building = await buildingRepository.findById(buildingId);
@@ -140,9 +177,9 @@ export function createProjectUseCases(projectRepository, buildingRepository, aud
       return saved;
     },
 
-    async listByBuilding(buildingId) {
+    async listByBuilding(buildingId, filters = {}) {
       await getBuilding(buildingId);
-      return projectRepository.findByBuilding(buildingId);
+      return projectRepository.findByBuilding(buildingId, parseListFilters(filters));
     }
   };
 }
