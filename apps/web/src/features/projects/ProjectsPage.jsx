@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Plus, Save, X } from 'lucide-react';
 
-import { getBuildingProjects, registerProject } from '../../services/api.js';
+import {
+  createSupplier,
+  getBuildingProjects,
+  getSuppliers,
+  registerProject,
+  registerProjectQuote
+} from '../../services/api.js';
 import { hasPermission } from '../../app/permissions.js';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -60,14 +66,38 @@ function createEmptyForm() {
   };
 }
 
+function createEmptyQuoteForm() {
+  return {
+    supplierMode: 'existing',
+    supplierId: '',
+    identification: '',
+    supplierName: '',
+    amount: '',
+    validUntil: '',
+    scope: '',
+    documentRef: ''
+  };
+}
+
 export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const canCreate = hasPermission(permissions, 'projects.create');
+  const canAddQuote = hasPermission(permissions, 'projects.update');
   const [projects, setProjects] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState(createEmptyForm);
+  const [quoteFormProjectId, setQuoteFormProjectId] = useState(null);
+  const [quoteForm, setQuoteForm] = useState(createEmptyQuoteForm);
+  const [isSavingQuote, setIsSavingQuote] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    getSuppliers()
+      .then((response) => setSuppliers(response.data ?? []))
+      .catch(() => setSuppliers([]));
+  }, []);
 
   useEffect(() => {
     if (!activeBuildingId) {
@@ -116,11 +146,63 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     }
   }
 
+  async function reloadProjects() {
+    if (!activeBuildingId) return;
+    const response = await getBuildingProjects(activeBuildingId);
+    setProjects(response.data ?? []);
+  }
+
+  function openQuoteForm(projectId) {
+    setQuoteFormProjectId(projectId);
+    setQuoteForm(createEmptyQuoteForm());
+  }
+
+  function updateQuoteField(event) {
+    const { name, value } = event.target;
+    setQuoteForm({ ...quoteForm, [name]: value });
+  }
+
+  async function submitQuote(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !quoteFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingQuote(true);
+
+    try {
+      let supplierId = Number(quoteForm.supplierId);
+      if (quoteForm.supplierMode === 'new') {
+        const created = await createSupplier({
+          identification: quoteForm.identification,
+          name: quoteForm.supplierName
+        });
+        supplierId = created.data.id;
+        const supplierResponse = await getSuppliers();
+        setSuppliers(supplierResponse.data ?? []);
+      }
+
+      await registerProjectQuote(activeBuildingId, quoteFormProjectId, {
+        supplierId,
+        amount: Number(quoteForm.amount),
+        validUntil: quoteForm.validUntil,
+        scope: quoteForm.scope,
+        documentRef: quoteForm.documentRef || null
+      });
+      await reloadProjects();
+      setQuoteForm(createEmptyQuoteForm());
+      setQuoteFormProjectId(null);
+      setStatus({ type: 'success', message: 'Cotización registrada correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingQuote(false);
+    }
+  }
+
   return (
     <div>
       <SectionHeader
         title="Proyectos"
-        subtitle="Registro de proyectos aprobados por edificio"
+        subtitle="Registro de proyectos y cotizaciones por edificio"
         action={
           canCreate ? (
             <ActionButton onClick={() => setIsFormOpen(true)} disabled={!activeBuildingId}>
@@ -303,6 +385,191 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                     {formatDateDisplay(project.endDate)}
                   </p>
                 </div>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">
+                    Cotizaciones ({(project.quotes ?? []).length})
+                  </h4>
+                  {canAddQuote && (
+                    <button
+                      type="button"
+                      onClick={() => openQuoteForm(project.id)}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Registrar cotización
+                    </button>
+                  )}
+                </div>
+
+                {(project.quotes ?? []).length === 0 && quoteFormProjectId !== project.id && (
+                  <p className="text-xs text-slate-400">
+                    Aún no hay cotizaciones en este proyecto.
+                  </p>
+                )}
+
+                {(project.quotes ?? []).length > 0 && (
+                  <div className="space-y-2">
+                    {(project.quotes ?? []).map((quote) => (
+                      <div
+                        key={quote.id}
+                        className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {quote.supplier?.name || 'Proveedor'}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Vigencia {formatDateDisplay(quote.validUntil)}
+                              {quote.documentRef ? ` · ${quote.documentRef}` : ''}
+                            </p>
+                          </div>
+                          <p className="text-sm font-bold text-slate-800">
+                            {formatCurrency(quote.amount)}
+                          </p>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-600">{quote.scope}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {quoteFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitQuote}
+                    className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Proveedor *
+                      </span>
+                      <select
+                        name="supplierMode"
+                        value={quoteForm.supplierMode}
+                        onChange={updateQuoteField}
+                        className={inputClassName}
+                      >
+                        <option value="existing">Proveedor existente</option>
+                        <option value="new">Nuevo proveedor</option>
+                      </select>
+                    </label>
+                    {quoteForm.supplierMode === 'existing' ? (
+                      <label>
+                        <span className="mb-1 block text-xs font-bold text-slate-500">
+                          Seleccionar *
+                        </span>
+                        <select
+                          name="supplierId"
+                          value={quoteForm.supplierId}
+                          onChange={updateQuoteField}
+                          required
+                          className={inputClassName}
+                        >
+                          <option value="">Selecciona un proveedor</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <>
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Nombre *
+                          </span>
+                          <input
+                            name="supplierName"
+                            value={quoteForm.supplierName}
+                            onChange={updateQuoteField}
+                            required
+                            className={inputClassName}
+                          />
+                        </label>
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Identificación *
+                          </span>
+                          <input
+                            name="identification"
+                            value={quoteForm.identification}
+                            onChange={updateQuoteField}
+                            required
+                            className={inputClassName}
+                          />
+                        </label>
+                      </>
+                    )}
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Valor (COP) *
+                      </span>
+                      <input
+                        name="amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={quoteForm.amount}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Vigencia *
+                      </span>
+                      <input
+                        name="validUntil"
+                        type="date"
+                        value={quoteForm.validUntil}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Alcance *
+                      </span>
+                      <textarea
+                        name="scope"
+                        value={quoteForm.scope}
+                        onChange={updateQuoteField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Documento
+                      </span>
+                      <input
+                        name="documentRef"
+                        value={quoteForm.documentRef}
+                        onChange={updateQuoteField}
+                        placeholder="Referencia o nombre del archivo"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingQuote}>
+                        <Save size={14} /> Guardar cotización
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setQuoteFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           ))}
