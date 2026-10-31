@@ -1,6 +1,6 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 import { isCalendarDate } from '../../assets/domain/calendarDate.js';
-import { INITIAL_PROJECT_STATUS, PROJECT_TYPES } from '../domain/projectCatalog.js';
+import { INITIAL_PROJECT_STATUS, PROJECT_STATUSES, PROJECT_TYPES } from '../domain/projectCatalog.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BUDGET = 9999999999999.99;
@@ -34,25 +34,52 @@ function validateDate(value, fieldLabel) {
   return value;
 }
 
-function normalizeBudget(value) {
+function normalizeAmount(value, fieldLabel) {
   const amount = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
   if (typeof amount !== 'number' || !Number.isFinite(amount)) {
-    throw new AppError('El presupuesto debe ser numérico.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} debe ser numérico.`, 400, 'VALIDATION_ERROR');
   }
 
   if (amount < 0) {
-    throw new AppError('El presupuesto no puede ser negativo.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} no puede ser negativo.`, 400, 'VALIDATION_ERROR');
   }
 
   if (amount > MAX_BUDGET) {
-    throw new AppError('El presupuesto excede el valor máximo permitido.', 400, 'VALIDATION_ERROR');
+    throw new AppError(`${fieldLabel} excede el valor máximo permitido.`, 400, 'VALIDATION_ERROR');
   }
 
   if (Math.round(amount * 100) / 100 !== amount) {
-    throw new AppError('El presupuesto admite como máximo dos decimales.', 400, 'VALIDATION_ERROR');
+    throw new AppError(
+      `${fieldLabel} admite como máximo dos decimales.`,
+      400,
+      'VALIDATION_ERROR'
+    );
   }
 
   return amount;
+}
+
+function normalizeBudget(value) {
+  return normalizeAmount(value, 'El presupuesto');
+}
+
+function validateCloseInput(input) {
+  const closeDate = validateDate(input.closeDate, 'La fecha de cierre');
+  const documentValue =
+    typeof input.closingDocumentRef === 'string'
+      ? input.closingDocumentRef.trim()
+      : input.closingDocumentRef;
+  const closingDocumentRef =
+    documentValue === undefined || documentValue === null || documentValue === ''
+      ? null
+      : requiredText(input.closingDocumentRef, 'El documento de cierre', 255);
+
+  return {
+    closeDate,
+    totalCost: normalizeAmount(input.totalCost, 'El costo total'),
+    result: requiredText(input.result, 'El resultado del proyecto', 5000),
+    closingDocumentRef
+  };
 }
 
 function validateRegisterInput(input) {
@@ -96,6 +123,43 @@ function validateRegisterInput(input) {
   };
 }
 
+function parseListFilters(input = {}) {
+  const filters = {};
+  if (input.status) {
+    if (!PROJECT_STATUSES.includes(input.status)) {
+      throw new AppError('El estado del proyecto no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    filters.status = input.status;
+  }
+
+  if (input.projectType) {
+    if (!PROJECT_TYPES.includes(input.projectType)) {
+      throw new AppError(
+        'El tipo de proyecto debe ser obra, mejora, mantenimiento u otro.',
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+    filters.projectType = input.projectType;
+  }
+
+  if (input.dateFrom) {
+    filters.dateFrom = validateDate(input.dateFrom, 'La fecha inicial');
+  }
+  if (input.dateTo) {
+    filters.dateTo = validateDate(input.dateTo, 'La fecha final');
+  }
+  if (filters.dateFrom && filters.dateTo && filters.dateTo < filters.dateFrom) {
+    throw new AppError(
+      'La fecha final no puede ser anterior a la fecha inicial.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  return filters;
+}
+
 export function createProjectUseCases(projectRepository, buildingRepository, audit = null) {
   async function getBuilding(buildingId) {
     const building = await buildingRepository.findById(buildingId);
@@ -103,6 +167,15 @@ export function createProjectUseCases(projectRepository, buildingRepository, aud
       throw new AppError('El edificio no existe.', 404, 'BUILDING_NOT_FOUND');
     }
     return building;
+  }
+
+  async function getProjectInBuilding(buildingId, projectId) {
+    await getBuilding(buildingId);
+    const project = await projectRepository.findById(projectId);
+    if (!project || Number(project.buildingId) !== Number(buildingId)) {
+      throw new AppError('El proyecto no existe en este edificio.', 404, 'PROJECT_NOT_FOUND');
+    }
+    return project;
   }
 
   return {
@@ -140,9 +213,55 @@ export function createProjectUseCases(projectRepository, buildingRepository, aud
       return saved;
     },
 
-    async listByBuilding(buildingId) {
+    async listByBuilding(buildingId, filters = {}) {
       await getBuilding(buildingId);
-      return projectRepository.findByBuilding(buildingId);
+      return projectRepository.findByBuilding(buildingId, parseListFilters(filters));
+    },
+
+    async close(buildingId, projectId, input, userId = null) {
+      const project = await getProjectInBuilding(buildingId, projectId);
+      if (project.status === 'finalizado' || project.status === 'cancelado') {
+        throw new AppError(
+          'No se puede cerrar un proyecto que ya está cerrado.',
+          409,
+          'PROJECT_CLOSED'
+        );
+      }
+
+      const closure = validateCloseInput(input);
+      if (closure.closeDate < project.startDate) {
+        throw new AppError(
+          'La fecha de cierre no puede ser anterior a la fecha de inicio.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      const saved = await projectRepository.close(projectId, {
+        ...closure,
+        updatedBy: userId
+      });
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'update',
+          module: 'projects',
+          entity: 'project',
+          entityId: Number(projectId),
+          buildingId: Number(buildingId),
+          metadata: {
+            projectName: project.name,
+            status: 'finalizado',
+            closeDate: saved.closeDate,
+            totalCost: saved.totalCost,
+            result: saved.result,
+            closingDocumentRef: saved.closingDocumentRef
+          }
+        });
+      }
+
+      return saved;
     }
   };
 }

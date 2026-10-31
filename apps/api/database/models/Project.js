@@ -50,6 +50,12 @@ export const Project = sequelize.define(
       allowNull: false,
       defaultValue: 'aprobado'
     },
+    selectedQuoteId: DataTypes.BIGINT.UNSIGNED,
+    selectionJustification: DataTypes.TEXT,
+    closeDate: DataTypes.DATEONLY,
+    totalCost: DataTypes.DECIMAL(15, 2),
+    result: DataTypes.TEXT,
+    closingDocumentRef: { type: DataTypes.STRING(255), field: 'closing_document_ref' },
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
   },

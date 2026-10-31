@@ -1,4 +1,7 @@
+import { Op } from 'sequelize';
 import { Project } from '../../../../database/models/index.js';
+import { mapProjectProgress } from './projectProgressRepository.js';
+import { mapProjectQuote } from './projectQuoteRepository.js';
 
 function formatDate(value) {
   if (!value) {
@@ -33,10 +36,25 @@ function mapProject(project) {
     responsible: data.responsible,
     approvalReference: data.approvalReference,
     status: data.status,
+    selectedQuoteId: data.selectedQuoteId ?? null,
+    selectionJustification: data.selectionJustification ?? null,
+    closeDate: formatDate(data.closeDate),
+    totalCost:
+      data.totalCost === null || data.totalCost === undefined ? null : Number(data.totalCost),
+    result: data.result ?? null,
+    closingDocumentRef: data.closingDocumentRef ?? null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
-    updatedAt: data.updatedAt
+    updatedAt: data.updatedAt,
+    quotes: (data.quotes ?? []).map(mapProjectQuote),
+    progressEntries: (data.progressEntries ?? []).map(mapProjectProgress),
+    currentPercentage: Array.isArray(data.progressEntries) && data.progressEntries.length
+      ? Number(mapProjectProgress(data.progressEntries[0]).percentage)
+      : 0,
+    currentExecutedCost: Array.isArray(data.progressEntries) && data.progressEntries.length
+      ? Number(mapProjectProgress(data.progressEntries[0]).executedCost)
+      : 0
   };
 }
 
@@ -65,9 +83,42 @@ export class ProjectRepository {
     return mapProject(project);
   }
 
-  async findByBuilding(buildingId) {
+  async findByBuilding(buildingId, filters = {}) {
+    const where = { buildingId: Number(buildingId) };
+    if (filters.status) {
+      where.status = filters.status;
+    }
+    if (filters.projectType) {
+      where.projectType = filters.projectType;
+    }
+    if (filters.dateFrom || filters.dateTo) {
+      where.startDate = {};
+      if (filters.dateFrom) {
+        where.startDate[Op.gte] = filters.dateFrom;
+      }
+      if (filters.dateTo) {
+        where.startDate[Op.lte] = filters.dateTo;
+      }
+    }
+
     const projects = await Project.findAll({
-      where: { buildingId: Number(buildingId) },
+      where,
+      include: [
+        {
+          association: 'quotes',
+          include: [{ association: 'supplier' }],
+          separate: true,
+          order: [['id', 'ASC']]
+        },
+        {
+          association: 'progressEntries',
+          separate: true,
+          order: [
+            ['progressDate', 'DESC'],
+            ['id', 'DESC']
+          ]
+        }
+      ],
       order: [
         ['startDate', 'DESC'],
         ['id', 'DESC']
@@ -75,5 +126,37 @@ export class ProjectRepository {
     });
 
     return projects.map(mapProject);
+  }
+
+  async updateSelection(id, selection) {
+    await Project.update(
+      {
+        selectedQuoteId: selection.selectedQuoteId,
+        selectionJustification: selection.selectionJustification,
+        updatedBy: selection.updatedBy
+      },
+      { where: { id: Number(id) } }
+    );
+    return this.findById(id);
+  }
+
+  async updateStatus(id, status, updatedBy = null) {
+    await Project.update({ status, updatedBy }, { where: { id: Number(id) } });
+    return this.findById(id);
+  }
+
+  async close(id, closure) {
+    await Project.update(
+      {
+        status: 'finalizado',
+        closeDate: closure.closeDate,
+        totalCost: closure.totalCost,
+        result: closure.result,
+        closingDocumentRef: closure.closingDocumentRef,
+        updatedBy: closure.updatedBy
+      },
+      { where: { id: Number(id) } }
+    );
+    return this.findById(id);
   }
 }

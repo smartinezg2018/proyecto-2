@@ -9,7 +9,13 @@ Base: `/api/v1/projects`
 | Metodo | Ruta                              | Permiso           | Descripcion                            |
 | ------ | --------------------------------- | ----------------- | -------------------------------------- |
 | POST   | `/buildings/:buildingId/projects` | `projects.create` | Registra un proyecto aprobado (HU-058) |
-| GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista los proyectos del edificio       |
+| GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista y filtra el historial (HU-062)   |
+| POST   | `/buildings/:buildingId/projects/:projectId/close` | `projects.update` | Cierra un proyecto (HU-063) |
+| POST   | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.update` | Registra una cotización (HU-059) |
+| GET    | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.view`   | Lista las cotizaciones del proyecto |
+| POST   | `/buildings/:buildingId/projects/:projectId/quotes/selection` | `projects.update` | Selecciona una cotización (HU-060) |
+| POST   | `/buildings/:buildingId/projects/:projectId/progress` | `projects.update` | Registra un avance (HU-061) |
+| GET    | `/buildings/:buildingId/projects/:projectId/progress` | `projects.view`   | Lista el historial de avances |
 
 Cuerpo de registro (HU-058):
 
@@ -31,3 +37,27 @@ Cuerpo de registro (HU-058):
 - La fecha de fin no puede ser anterior a la de inicio.
 - El proyecto inicia en estado `aprobado`.
 - Queda registrado en auditoría con el usuario y el edificio.
+
+Cuerpo de cotización (HU-059):
+
+```json
+{
+  "supplierId": 2,
+  "amount": 58500000,
+  "validUntil": "2026-11-30",
+  "scope": "Impermeabilización completa de la cubierta.",
+  "conditions": "Pago 40% anticipo y 60% contra entrega. Garantía de 2 años.",
+  "deliveryDays": 60,
+  "documentRef": "cotizacion-cubierta.pdf"
+}
+```
+
+- `amount` es numérico, no negativo, con máximo dos decimales.
+- `validUntil` es una fecha de calendario YYYY-MM-DD.
+- `conditions` y `deliveryDays` permiten comparar cotizaciones (HU-060).
+- Varias cotizaciones pueden asociarse al mismo proyecto.
+- La selección requiere al menos dos cotizaciones y una justificación.
+- El listado acepta `status`, `projectType`, `dateFrom` y `dateTo` sobre la fecha de inicio (HU-062).
+- El primer avance pasa el proyecto de `aprobado` a `en_ejecucion`.
+- El cierre (HU-063) guarda fecha, costo total, resultado y documento, y deja el proyecto en `finalizado`.
+- Cada avance guarda la cotización y el proveedor que lo ejecutó, para que un cambio posterior de cotización no borre ese historial.

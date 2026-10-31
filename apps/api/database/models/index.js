@@ -14,6 +14,8 @@ import { Invoice } from './Invoice.js';
 import { InvoiceItem } from './InvoiceItem.js';
 import { ChargeSchedule } from './ChargeSchedule.js';
 import { Project } from './Project.js';
+import { ProjectQuote } from './ProjectQuote.js';
+import { ProjectProgress } from './ProjectProgress.js';
 
 Unit.hasOne(UnitResponsible, { foreignKey: 'unitId', as: 'responsibleAssignment' });
 UnitResponsible.belongsTo(Unit, { foreignKey: 'unitId' });
@@ -51,6 +53,12 @@ Unit.hasMany(Invoice, { foreignKey: 'unitId', as: 'invoices' });
 ChargeSchedule.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
 Unit.hasMany(ChargeSchedule, { foreignKey: 'unitId', as: 'chargeSchedules' });
 ChargeSchedule.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+Project.hasMany(ProjectQuote, { foreignKey: 'projectId', as: 'quotes' });
+ProjectQuote.belongsTo(Project, { foreignKey: 'projectId' });
+ProjectQuote.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+Supplier.hasMany(ProjectQuote, { foreignKey: 'supplierId', as: 'projectQuotes' });
+Project.hasMany(ProjectProgress, { foreignKey: 'projectId', as: 'progressEntries' });
+ProjectProgress.belongsTo(Project, { foreignKey: 'projectId' });
 
 export {
   Asset,
@@ -68,5 +76,7 @@ export {
   Invoice,
   InvoiceItem,
   ChargeSchedule,
-  Project
+  Project,
+  ProjectQuote,
+  ProjectProgress
 };

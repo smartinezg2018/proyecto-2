@@ -370,8 +370,15 @@ export function assignUserBuildings(userId, buildingIds) {
   });
 }
 
-export function getBuildingProjects(buildingId) {
-  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects`);
+export function getBuildingProjects(buildingId, filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value));
+    }
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects${suffix}`);
 }
 
 export function registerProject(buildingId, project) {
@@ -379,6 +386,45 @@ export function registerProject(buildingId, project) {
     method: 'POST',
     body: JSON.stringify(project)
   });
+}
+
+export function getProjectQuotes(buildingId, projectId) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes`);
+}
+
+export function registerProjectQuote(buildingId, projectId, quote) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes`, {
+    method: 'POST',
+    body: JSON.stringify(quote)
+  });
+}
+
+export function getProjectProgress(buildingId, projectId) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`);
+}
+
+export function closeProject(buildingId, projectId, closure) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/close`, {
+    method: 'POST',
+    body: JSON.stringify(closure)
+  });
+}
+
+export function registerProjectProgress(buildingId, projectId, progress) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`, {
+    method: 'POST',
+    body: JSON.stringify(progress)
+  });
+}
+
+export function selectProjectQuote(buildingId, projectId, selection) {
+  return apiRequest(
+    `/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes/selection`,
+    {
+      method: 'POST',
+      body: JSON.stringify(selection)
+    }
+  );
 }
 
 export function listAuditLogs(query = {}) {

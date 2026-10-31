@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Plus, Save, X } from 'lucide-react';
 
-import { getBuildingProjects, registerProject } from '../../services/api.js';
+import {
+  closeProject,
+  createSupplier,
+  getBuildingProjects,
+  getSuppliers,
+  registerProject,
+  registerProjectProgress,
+  registerProjectQuote,
+  selectProjectQuote
+} from '../../services/api.js';
 import { hasPermission } from '../../app/permissions.js';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
@@ -60,14 +69,83 @@ function createEmptyForm() {
   };
 }
 
+function createEmptyQuoteForm() {
+  return {
+    supplierMode: 'existing',
+    supplierId: '',
+    identification: '',
+    supplierName: '',
+    amount: '',
+    validUntil: '',
+    scope: '',
+    conditions: '',
+    deliveryDays: '',
+    documentRef: ''
+  };
+}
+
+function createEmptyFilters() {
+  return {
+    status: '',
+    projectType: '',
+    dateFrom: '',
+    dateTo: ''
+  };
+}
+
+function createEmptyProgressForm() {
+  return {
+    quoteId: '',
+    progressDate: '',
+    percentage: '',
+    executedCost: '',
+    observations: '',
+    evidenceRef: ''
+  };
+}
+
+function isProjectOpen(status) {
+  return status !== 'finalizado' && status !== 'cancelado';
+}
+
+function createEmptyCloseForm() {
+  return {
+    closeDate: '',
+    totalCost: '',
+    result: '',
+    closingDocumentRef: ''
+  };
+}
+
 export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const canCreate = hasPermission(permissions, 'projects.create');
+  const canAddQuote = hasPermission(permissions, 'projects.update');
   const [projects, setProjects] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [filters, setFilters] = useState(createEmptyFilters);
   const [form, setForm] = useState(createEmptyForm);
+  const [quoteFormProjectId, setQuoteFormProjectId] = useState(null);
+  const [quoteForm, setQuoteForm] = useState(createEmptyQuoteForm);
+  const [isSavingQuote, setIsSavingQuote] = useState(false);
+  const [selectionProjectId, setSelectionProjectId] = useState(null);
+  const [selectionForm, setSelectionForm] = useState({ quoteId: '', justification: '' });
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
+  const [progressFormProjectId, setProgressFormProjectId] = useState(null);
+  const [progressForm, setProgressForm] = useState(createEmptyProgressForm);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [closeFormProjectId, setCloseFormProjectId] = useState(null);
+  const [closeForm, setCloseForm] = useState(createEmptyCloseForm);
+  const [isSavingClose, setIsSavingClose] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    getSuppliers()
+      .then((response) => setSuppliers(response.data ?? []))
+      .catch(() => setSuppliers([]));
+  }, []);
 
   useEffect(() => {
     if (!activeBuildingId) {
@@ -76,11 +154,11 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     }
 
     setIsLoading(true);
-    getBuildingProjects(activeBuildingId)
+    getBuildingProjects(activeBuildingId, filters)
       .then((response) => setProjects(response.data ?? []))
       .catch((error) => setStatus({ type: 'error', message: error.message }))
       .finally(() => setIsLoading(false));
-  }, [activeBuildingId]);
+  }, [activeBuildingId, filters]);
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -104,7 +182,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
         responsible: form.responsible,
         approvalReference: form.approvalReference
       });
-      const response = await getBuildingProjects(activeBuildingId);
+      const response = await getBuildingProjects(activeBuildingId, filters);
       setProjects(response.data ?? []);
       setForm(createEmptyForm());
       setIsFormOpen(false);
@@ -116,11 +194,162 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
     }
   }
 
+  async function reloadProjects() {
+    if (!activeBuildingId) return;
+    const response = await getBuildingProjects(activeBuildingId, filters);
+    setProjects(response.data ?? []);
+  }
+
+  function openQuoteForm(projectId) {
+    setQuoteFormProjectId(projectId);
+    setQuoteForm(createEmptyQuoteForm());
+  }
+
+  function updateQuoteField(event) {
+    const { name, value } = event.target;
+    setQuoteForm({ ...quoteForm, [name]: value });
+  }
+
+  async function submitQuote(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !quoteFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingQuote(true);
+
+    try {
+      let supplierId = Number(quoteForm.supplierId);
+      if (quoteForm.supplierMode === 'new') {
+        const created = await createSupplier({
+          identification: quoteForm.identification,
+          name: quoteForm.supplierName
+        });
+        supplierId = created.data.id;
+        const supplierResponse = await getSuppliers();
+        setSuppliers(supplierResponse.data ?? []);
+      }
+
+      await registerProjectQuote(activeBuildingId, quoteFormProjectId, {
+        supplierId,
+        amount: Number(quoteForm.amount),
+        validUntil: quoteForm.validUntil,
+        scope: quoteForm.scope,
+        conditions: quoteForm.conditions,
+        deliveryDays: Number(quoteForm.deliveryDays),
+        documentRef: quoteForm.documentRef || null
+      });
+      await reloadProjects();
+      setQuoteForm(createEmptyQuoteForm());
+      setQuoteFormProjectId(null);
+      setStatus({ type: 'success', message: 'Cotización registrada correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingQuote(false);
+    }
+  }
+
+  function openSelectionForm(project) {
+    setSelectionProjectId(project.id);
+    setSelectionForm({
+      quoteId: project.selectedQuoteId ? String(project.selectedQuoteId) : '',
+      justification: project.selectionJustification || ''
+    });
+  }
+
+  async function submitSelection(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !selectionProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingSelection(true);
+
+    try {
+      await selectProjectQuote(activeBuildingId, selectionProjectId, {
+        quoteId: Number(selectionForm.quoteId),
+        justification: selectionForm.justification
+      });
+      await reloadProjects();
+      setSelectionProjectId(null);
+      setStatus({ type: 'success', message: 'Cotización seleccionada correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingSelection(false);
+    }
+  }
+
+  function openProgressForm(project) {
+    setProgressFormProjectId(project.id);
+    setProgressForm({
+      ...createEmptyProgressForm(),
+      quoteId: project.selectedQuoteId ? String(project.selectedQuoteId) : ''
+    });
+  }
+
+  function updateProgressField(event) {
+    const { name, value } = event.target;
+    setProgressForm({ ...progressForm, [name]: value });
+  }
+
+  async function submitProgress(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !progressFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingProgress(true);
+
+    try {
+      await registerProjectProgress(activeBuildingId, progressFormProjectId, {
+        quoteId: Number(progressForm.quoteId),
+        progressDate: progressForm.progressDate,
+        percentage: Number(progressForm.percentage),
+        executedCost: Number(progressForm.executedCost),
+        observations: progressForm.observations,
+        evidenceRef: progressForm.evidenceRef || null
+      });
+      await reloadProjects();
+      setProgressForm(createEmptyProgressForm());
+      setProgressFormProjectId(null);
+      setStatus({ type: 'success', message: 'Avance registrado correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingProgress(false);
+    }
+  }
+
+  function updateCloseField(event) {
+    const { name, value } = event.target;
+    setCloseForm({ ...closeForm, [name]: value });
+  }
+
+  async function submitClose(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !closeFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingClose(true);
+
+    try {
+      await closeProject(activeBuildingId, closeFormProjectId, {
+        closeDate: closeForm.closeDate,
+        totalCost: Number(closeForm.totalCost),
+        result: closeForm.result,
+        closingDocumentRef: closeForm.closingDocumentRef || null
+      });
+      await reloadProjects();
+      setCloseForm(createEmptyCloseForm());
+      setCloseFormProjectId(null);
+      setStatus({ type: 'success', message: 'Proyecto cerrado correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingClose(false);
+    }
+  }
+
   return (
     <div>
       <SectionHeader
         title="Proyectos"
-        subtitle="Registro de proyectos aprobados por edificio"
+        subtitle="Historial filtrable de proyectos por edificio"
         action={
           canCreate ? (
             <ActionButton onClick={() => setIsFormOpen(true)} disabled={!activeBuildingId}>
@@ -144,6 +373,59 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
         <p className="mb-4 text-sm text-slate-400">
           Selecciona un edificio para ver sus proyectos.
         </p>
+      )}
+
+      {activeBuildingId && (
+        <div className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Estado</span>
+            <select
+              value={filters.status}
+              onChange={(event) => setFilters({ ...filters, status: event.target.value })}
+              className={inputClassName}
+            >
+              <option value="">Todos</option>
+              {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Tipo</span>
+            <select
+              value={filters.projectType}
+              onChange={(event) => setFilters({ ...filters, projectType: event.target.value })}
+              className={inputClassName}
+            >
+              <option value="">Todos</option>
+              {PROJECT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Desde</span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })}
+              className={inputClassName}
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-bold text-slate-500">Hasta</span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })}
+              className={inputClassName}
+            />
+          </label>
+        </div>
       )}
 
       {isFormOpen && (
@@ -303,6 +585,603 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                     {formatDateDisplay(project.endDate)}
                   </p>
                 </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Avance</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {Number(project.currentPercentage || 0)}%
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Ejecutado</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {formatCurrency(project.currentExecutedCost || 0)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">
+                    Cotizaciones ({(project.quotes ?? []).length})
+                  </h4>
+                  {canAddQuote && (
+                    <button
+                      type="button"
+                      onClick={() => openQuoteForm(project.id)}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Registrar cotización
+                    </button>
+                  )}
+                </div>
+
+                {(project.quotes ?? []).length === 0 && quoteFormProjectId !== project.id && (
+                  <p className="text-xs text-slate-400">
+                    Aún no hay cotizaciones en este proyecto.
+                  </p>
+                )}
+
+                {(project.quotes ?? []).length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="w-full min-w-[480px] text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50">
+                          <th className="px-3 py-2 font-bold uppercase tracking-wider text-slate-400">
+                            Criterio
+                          </th>
+                          {(project.quotes ?? []).map((quote) => (
+                            <th key={quote.id} className="px-3 py-2 font-bold text-slate-600">
+                              {quote.supplier?.name || 'Proveedor'}
+                              {Number(project.selectedQuoteId) === Number(quote.id) ? (
+                                <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  Seleccionada
+                                </span>
+                              ) : null}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Valor</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-price`} className="px-3 py-2 font-semibold">
+                              {formatCurrency(quote.amount)}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Alcance</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-scope`} className="px-3 py-2 text-slate-600">
+                              {quote.scope}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Tiempo</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-time`} className="px-3 py-2 text-slate-600">
+                              {quote.deliveryDays ? `${quote.deliveryDays} días` : 'Sin registrar'}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Condiciones</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-conditions`} className="px-3 py-2 text-slate-600">
+                              {quote.conditions || 'Sin registrar'}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Vigencia</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-valid`} className="px-3 py-2 text-slate-600">
+                              {formatDateDisplay(quote.validUntil)}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {canAddQuote && (project.quotes ?? []).length >= 2 && (
+                  <div className="mt-3">
+                    {project.selectedQuoteId && selectionProjectId !== project.id && (
+                      <p className="mb-2 text-xs text-slate-500">
+                        Selección justificada: {project.selectionJustification}
+                      </p>
+                    )}
+                    {selectionProjectId !== project.id ? (
+                      <button
+                        type="button"
+                        onClick={() => openSelectionForm(project)}
+                        className="text-xs font-semibold text-blue-600 hover:underline"
+                      >
+                        {project.selectedQuoteId
+                          ? 'Cambiar cotización seleccionada'
+                          : 'Seleccionar cotización'}
+                      </button>
+                    ) : (
+                      <form onSubmit={submitSelection} className="grid gap-3 sm:grid-cols-2">
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Cotización *
+                          </span>
+                          <select
+                            value={selectionForm.quoteId}
+                            onChange={(event) =>
+                              setSelectionForm({ ...selectionForm, quoteId: event.target.value })
+                            }
+                            required
+                            className={inputClassName}
+                          >
+                            <option value="">Selecciona una cotización</option>
+                            {(project.quotes ?? []).map((quote) => (
+                              <option key={quote.id} value={quote.id}>
+                                {quote.supplier?.name || 'Proveedor'} · {formatCurrency(quote.amount)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="sm:col-span-2">
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Justificación *
+                          </span>
+                          <textarea
+                            value={selectionForm.justification}
+                            onChange={(event) =>
+                              setSelectionForm({
+                                ...selectionForm,
+                                justification: event.target.value
+                              })
+                            }
+                            required
+                            rows={2}
+                            className={inputClassName}
+                          />
+                        </label>
+                        <div className="flex gap-2 sm:col-span-2">
+                          <ActionButton type="submit" disabled={isSavingSelection}>
+                            <Save size={14} /> Guardar selección
+                          </ActionButton>
+                          <button
+                            type="button"
+                            onClick={() => setSelectionProjectId(null)}
+                            className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {quoteFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitQuote}
+                    className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Proveedor *
+                      </span>
+                      <select
+                        name="supplierMode"
+                        value={quoteForm.supplierMode}
+                        onChange={updateQuoteField}
+                        className={inputClassName}
+                      >
+                        <option value="existing">Proveedor existente</option>
+                        <option value="new">Nuevo proveedor</option>
+                      </select>
+                    </label>
+                    {quoteForm.supplierMode === 'existing' ? (
+                      <label>
+                        <span className="mb-1 block text-xs font-bold text-slate-500">
+                          Seleccionar *
+                        </span>
+                        <select
+                          name="supplierId"
+                          value={quoteForm.supplierId}
+                          onChange={updateQuoteField}
+                          required
+                          className={inputClassName}
+                        >
+                          <option value="">Selecciona un proveedor</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <>
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Nombre *
+                          </span>
+                          <input
+                            name="supplierName"
+                            value={quoteForm.supplierName}
+                            onChange={updateQuoteField}
+                            required
+                            className={inputClassName}
+                          />
+                        </label>
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Identificación *
+                          </span>
+                          <input
+                            name="identification"
+                            value={quoteForm.identification}
+                            onChange={updateQuoteField}
+                            required
+                            className={inputClassName}
+                          />
+                        </label>
+                      </>
+                    )}
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Valor (COP) *
+                      </span>
+                      <input
+                        name="amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={quoteForm.amount}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Vigencia *
+                      </span>
+                      <input
+                        name="validUntil"
+                        type="date"
+                        value={quoteForm.validUntil}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Tiempo de ejecución (días) *
+                      </span>
+                      <input
+                        name="deliveryDays"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={quoteForm.deliveryDays}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Alcance *
+                      </span>
+                      <textarea
+                        name="scope"
+                        value={quoteForm.scope}
+                        onChange={updateQuoteField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Condiciones *
+                      </span>
+                      <textarea
+                        name="conditions"
+                        value={quoteForm.conditions}
+                        onChange={updateQuoteField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Documento
+                      </span>
+                      <input
+                        name="documentRef"
+                        value={quoteForm.documentRef}
+                        onChange={updateQuoteField}
+                        placeholder="Referencia o nombre del archivo"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingQuote}>
+                        <Save size={14} /> Guardar cotización
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setQuoteFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">
+                    Avances ({(project.progressEntries ?? []).length})
+                  </h4>
+                  {canAddQuote && isProjectOpen(project.status) && (
+                    <button
+                      type="button"
+                      onClick={() => openProgressForm(project)}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Registrar avance
+                    </button>
+                  )}
+                </div>
+
+                {(project.progressEntries ?? []).length === 0 &&
+                  progressFormProjectId !== project.id && (
+                    <p className="text-xs text-slate-400">Aún no hay avances en este proyecto.</p>
+                  )}
+
+                <div className="space-y-2">
+                  {(project.progressEntries ?? []).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">
+                            {entry.percentage}% · {formatCurrency(entry.executedCost)}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {formatDateDisplay(entry.progressDate)}
+                            {entry.supplierName ? ` · ${entry.supplierName}` : ''}
+                            {entry.evidenceRef ? ` · ${entry.evidenceRef}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-600">{entry.observations}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {progressFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitProgress}
+                    className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Cotización ejecutora *
+                      </span>
+                      <select
+                        name="quoteId"
+                        value={progressForm.quoteId}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      >
+                        <option value="">Selecciona una cotización</option>
+                        {(project.quotes ?? []).map((quote) => (
+                          <option key={quote.id} value={quote.id}>
+                            {quote.supplier?.name || 'Proveedor'} · {formatCurrency(quote.amount)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Fecha de avance *
+                      </span>
+                      <input
+                        name="progressDate"
+                        type="date"
+                        value={progressForm.progressDate}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Porcentaje *
+                      </span>
+                      <input
+                        name="percentage"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={progressForm.percentage}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Costo ejecutado (COP) *
+                      </span>
+                      <input
+                        name="executedCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={progressForm.executedCost}
+                        onChange={updateProgressField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Observaciones *
+                      </span>
+                      <textarea
+                        name="observations"
+                        value={progressForm.observations}
+                        onChange={updateProgressField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Evidencia
+                      </span>
+                      <input
+                        name="evidenceRef"
+                        value={progressForm.evidenceRef}
+                        onChange={updateProgressField}
+                        placeholder="Referencia o nombre del archivo"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingProgress}>
+                        <Save size={14} /> Guardar avance
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setProgressFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">Cierre</h4>
+                  {canAddQuote && isProjectOpen(project.status) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCloseFormProjectId(project.id);
+                        setCloseForm({
+                          ...createEmptyCloseForm(),
+                          totalCost: project.currentExecutedCost || ''
+                        });
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Cerrar proyecto
+                    </button>
+                  )}
+                </div>
+
+                {project.status === 'finalizado' && (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                    <p className="text-sm font-semibold text-emerald-800">
+                      Cerrado el {formatDateDisplay(project.closeDate)} ·{' '}
+                      {formatCurrency(project.totalCost)}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">{project.result}</p>
+                    {project.closingDocumentRef && (
+                      <p className="mt-1 text-xs text-emerald-600">{project.closingDocumentRef}</p>
+                    )}
+                  </div>
+                )}
+
+                {closeFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitClose}
+                    className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Fecha de cierre *
+                      </span>
+                      <input
+                        name="closeDate"
+                        type="date"
+                        value={closeForm.closeDate}
+                        onChange={updateCloseField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Costo total (COP) *
+                      </span>
+                      <input
+                        name="totalCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={closeForm.totalCost}
+                        onChange={updateCloseField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Resultado *
+                      </span>
+                      <textarea
+                        name="result"
+                        value={closeForm.result}
+                        onChange={updateCloseField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Documento de cierre
+                      </span>
+                      <input
+                        name="closingDocumentRef"
+                        value={closeForm.closingDocumentRef}
+                        onChange={updateCloseField}
+                        placeholder="Acta, informe o referencia"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingClose}>
+                        <Save size={14} /> Guardar cierre
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setCloseFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           ))}
