@@ -392,6 +392,16 @@ export function registerProjectQuote(buildingId, projectId, quote) {
   });
 }
 
+export function selectProjectQuote(buildingId, projectId, selection) {
+  return apiRequest(
+    `/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes/selection`,
+    {
+      method: 'POST',
+      body: JSON.stringify(selection)
+    }
+  );
+}
+
 export function listAuditLogs(query = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {

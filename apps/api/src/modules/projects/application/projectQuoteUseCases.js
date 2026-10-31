@@ -75,11 +75,22 @@ function validateQuoteInput(input) {
       ? null
       : requiredText(input.documentRef, 'El documento', 255);
 
+  const deliveryDays = Number(input.deliveryDays);
+  if (!Number.isInteger(deliveryDays) || deliveryDays <= 0 || deliveryDays > 3650) {
+    throw new AppError(
+      'El tiempo de ejecución debe ser un número entero de días mayor que cero.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+
   return {
     supplierId,
     amount: normalizeAmount(input.amount),
     validUntil: input.validUntil,
     scope: requiredText(input.scope, 'El alcance', 5000),
+    conditions: requiredText(input.conditions, 'Las condiciones', 5000),
+    deliveryDays,
     documentRef
   };
 }
@@ -145,6 +156,60 @@ export function createProjectQuoteUseCases(
       }
 
       return saved;
+    },
+
+    async select(buildingId, projectId, input, userId = null) {
+      const project = await getProjectInBuilding(buildingId, projectId);
+      const quotes = await quoteRepository.findByProject(projectId);
+      if (quotes.length < 2) {
+        throw new AppError(
+          'Se necesitan al menos dos cotizaciones para comparar y seleccionar.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      const quoteId = Number(input.quoteId);
+      const selected = quotes.find((item) => Number(item.id) === quoteId);
+      if (!selected) {
+        throw new AppError(
+          'La cotización no pertenece a este proyecto.',
+          404,
+          'QUOTE_NOT_FOUND'
+        );
+      }
+
+      const justification = requiredText(
+        input.justification,
+        'La justificación de la selección',
+        5000
+      );
+      const updated = await projectRepository.updateSelection(projectId, {
+        selectedQuoteId: selected.id,
+        selectionJustification: justification,
+        updatedBy: userId
+      });
+
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'update',
+          module: 'projects',
+          entity: 'project',
+          entityId: Number(projectId),
+          buildingId: Number(buildingId),
+          metadata: {
+            projectName: project.name,
+            selectedQuoteId: selected.id,
+            supplierId: selected.supplierId,
+            amount: selected.amount,
+            deliveryDays: selected.deliveryDays,
+            justification
+          }
+        });
+      }
+
+      return updated;
     }
   };
 }

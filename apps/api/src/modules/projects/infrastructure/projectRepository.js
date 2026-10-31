@@ -34,6 +34,8 @@ function mapProject(project) {
     responsible: data.responsible,
     approvalReference: data.approvalReference,
     status: data.status,
+    selectedQuoteId: data.selectedQuoteId ?? null,
+    selectionJustification: data.selectionJustification ?? null,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
@@ -79,5 +81,17 @@ export class ProjectRepository {
     });
 
     return projects.map(mapProject);
+  }
+
+  async updateSelection(id, selection) {
+    await Project.update(
+      {
+        selectedQuoteId: selection.selectedQuoteId,
+        selectionJustification: selection.selectionJustification,
+        updatedBy: selection.updatedBy
+      },
+      { where: { id: Number(id) } }
+    );
+    return this.findById(id);
   }
 }

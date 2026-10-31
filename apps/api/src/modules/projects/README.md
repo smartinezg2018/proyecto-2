@@ -12,6 +12,7 @@ Base: `/api/v1/projects`
 | GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista los proyectos del edificio       |
 | POST   | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.update` | Registra una cotización (HU-059) |
 | GET    | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.view`   | Lista las cotizaciones del proyecto |
+| POST   | `/buildings/:buildingId/projects/:projectId/quotes/selection` | `projects.update` | Selecciona una cotización (HU-060) |
 
 Cuerpo de registro (HU-058):
 
@@ -42,10 +43,14 @@ Cuerpo de cotización (HU-059):
   "amount": 58500000,
   "validUntil": "2026-11-30",
   "scope": "Impermeabilización completa de la cubierta.",
+  "conditions": "Pago 40% anticipo y 60% contra entrega. Garantía de 2 años.",
+  "deliveryDays": 60,
   "documentRef": "cotizacion-cubierta.pdf"
 }
 ```
 
 - `amount` es numérico, no negativo, con máximo dos decimales.
 - `validUntil` es una fecha de calendario YYYY-MM-DD.
+- `conditions` y `deliveryDays` permiten comparar cotizaciones (HU-060).
 - Varias cotizaciones pueden asociarse al mismo proyecto.
+- La selección requiere al menos dos cotizaciones y una justificación.

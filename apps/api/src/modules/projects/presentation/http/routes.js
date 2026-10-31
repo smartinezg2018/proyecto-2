@@ -10,7 +10,11 @@ import { createProjectUseCases } from '../../application/projectUseCases.js';
 import { createProjectQuoteUseCases } from '../../application/projectQuoteUseCases.js';
 import { ProjectRepository } from '../../infrastructure/projectRepository.js';
 import { ProjectQuoteRepository } from '../../infrastructure/projectQuoteRepository.js';
-import { registerProjectSchema, registerProjectQuoteSchema } from './projectSchemas.js';
+import {
+  registerProjectSchema,
+  registerProjectQuoteSchema,
+  selectProjectQuoteSchema
+} from './projectSchemas.js';
 
 export const projectRoutes = Router();
 const projectRepository = new ProjectRepository();
@@ -92,5 +96,22 @@ projectRoutes.post(
       request.user.id
     );
     response.status(201).json({ data: quote, meta: { requestId: request.id } });
+  })
+);
+
+projectRoutes.post(
+  '/buildings/:buildingId/projects/:projectId/quotes/selection',
+  requireAuth,
+  requirePermission('projects.update'),
+  ensureBuildingAccess,
+  validateBody(selectProjectQuoteSchema),
+  asyncHandler(async (request, response) => {
+    const project = await projectQuoteUseCases.select(
+      request.params.buildingId,
+      request.params.projectId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: project, meta: { requestId: request.id } });
   })
 );

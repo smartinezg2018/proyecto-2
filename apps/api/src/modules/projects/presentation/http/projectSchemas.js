@@ -37,5 +37,20 @@ export const registerProjectQuoteSchema = z.object({
     .max(9999999999999.99),
   validUntil: dateSchema,
   scope: z.string().trim().min(1, 'El alcance es obligatorio.').max(5000),
+  conditions: z.string().trim().min(1, 'Las condiciones son obligatorias.').max(5000),
+  deliveryDays: z
+    .number()
+    .int()
+    .positive('El tiempo de ejecución debe ser un número entero de días mayor que cero.')
+    .max(3650),
   documentRef: z.string().trim().max(255).optional().nullable()
+});
+
+export const selectProjectQuoteSchema = z.object({
+  quoteId: z.number().int().positive('La cotización es obligatoria.'),
+  justification: z
+    .string()
+    .trim()
+    .min(1, 'La justificación de la selección es obligatoria.')
+    .max(5000)
 });

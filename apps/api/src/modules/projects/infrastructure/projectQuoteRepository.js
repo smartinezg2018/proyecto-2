@@ -19,6 +19,11 @@ export function mapProjectQuote(quote) {
     amount: Number(data.amount),
     validUntil: formatDate(data.validUntil),
     scope: data.scope,
+    conditions: data.conditions,
+    deliveryDays:
+      data.deliveryDays === null || data.deliveryDays === undefined
+        ? null
+        : Number(data.deliveryDays),
     documentRef: data.documentRef,
     supplier: data.supplier
       ? {
