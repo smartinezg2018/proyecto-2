@@ -7,6 +7,8 @@ const validInput = {
   amount: 58500000,
   validUntil: '2026-11-30',
   scope: 'Impermeabilización completa de la cubierta, incluyendo desmonte y pruebas de estanqueidad.',
+  conditions: 'Pago 40% anticipo y 60% contra entrega. Garantía de 2 años.',
+  deliveryDays: 60,
   documentRef: 'cotizacion-cubierta.pdf'
 };
 
@@ -31,6 +33,14 @@ function setup() {
     {
       async findById(id) {
         return projects.find((item) => String(item.id) === String(id)) ?? null;
+      },
+      async updateSelection(id, selection) {
+        const project = projects.find((item) => String(item.id) === String(id));
+        if (!project) return null;
+        project.selectedQuoteId = selection.selectedQuoteId;
+        project.selectionJustification = selection.selectionJustification;
+        project.updatedBy = selection.updatedBy;
+        return project;
       }
     },
     {
@@ -140,6 +150,59 @@ test('HU-059: rechaza alcance vacío', async () => {
   const { useCases } = setup();
 
   await assert.rejects(() => useCases.register(1, 1, { ...validInput, scope: '   ' }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+});
+
+test('HU-060: selecciona una cotización y guarda la justificación', async () => {
+  const { useCases, quotes, auditEntries } = setup();
+  await useCases.register(1, 1, { ...validInput, amount: 58500000, deliveryDays: 60 });
+  await useCases.register(1, 1, { ...validInput, amount: 61200000, deliveryDays: 45 });
+
+  const updated = await useCases.select(
+    1,
+    1,
+    {
+      quoteId: quotes[0].id,
+      justification: 'Mejor relación precio-garantía para el alcance aprobado.'
+    },
+    7
+  );
+
+  assert.equal(updated.selectedQuoteId, quotes[0].id);
+  assert.equal(
+    updated.selectionJustification,
+    'Mejor relación precio-garantía para el alcance aprobado.'
+  );
+  const selectionAudit = auditEntries.find((entry) => entry.entity === 'project');
+  assert.equal(selectionAudit.action, 'update');
+  assert.equal(selectionAudit.metadata.selectedQuoteId, quotes[0].id);
+});
+
+test('HU-060: rechaza seleccionar si hay menos de dos cotizaciones', async () => {
+  const { useCases } = setup();
+  await useCases.register(1, 1, validInput);
+
+  await assert.rejects(
+    () => useCases.select(1, 1, { quoteId: 1, justification: 'Única opción disponible.' }),
+    {
+      statusCode: 400,
+      message: 'Se necesitan al menos dos cotizaciones para comparar y seleccionar.'
+    }
+  );
+});
+
+test('HU-060: rechaza una cotización ajena o una justificación vacía', async () => {
+  const { useCases } = setup();
+  await useCases.register(1, 1, validInput);
+  await useCases.register(1, 1, { ...validInput, amount: 50000000 });
+
+  await assert.rejects(
+    () => useCases.select(1, 1, { quoteId: 99, justification: 'No corresponde a este proyecto.' }),
+    { statusCode: 404, code: 'QUOTE_NOT_FOUND' }
+  );
+  await assert.rejects(() => useCases.select(1, 1, { quoteId: 1, justification: '   ' }), {
     statusCode: 400,
     code: 'VALIDATION_ERROR'
   });

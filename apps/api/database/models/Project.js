@@ -50,6 +50,8 @@ export const Project = sequelize.define(
       allowNull: false,
       defaultValue: 'aprobado'
     },
+    selectedQuoteId: DataTypes.BIGINT.UNSIGNED,
+    selectionJustification: DataTypes.TEXT,
     createdBy: DataTypes.BIGINT.UNSIGNED,
     updatedBy: DataTypes.BIGINT.UNSIGNED
   },

@@ -6,7 +6,8 @@ import {
   getBuildingProjects,
   getSuppliers,
   registerProject,
-  registerProjectQuote
+  registerProjectQuote,
+  selectProjectQuote
 } from '../../services/api.js';
 import { hasPermission } from '../../app/permissions.js';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
@@ -75,6 +76,8 @@ function createEmptyQuoteForm() {
     amount: '',
     validUntil: '',
     scope: '',
+    conditions: '',
+    deliveryDays: '',
     documentRef: ''
   };
 }
@@ -91,6 +94,9 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const [quoteFormProjectId, setQuoteFormProjectId] = useState(null);
   const [quoteForm, setQuoteForm] = useState(createEmptyQuoteForm);
   const [isSavingQuote, setIsSavingQuote] = useState(false);
+  const [selectionProjectId, setSelectionProjectId] = useState(null);
+  const [selectionForm, setSelectionForm] = useState({ quoteId: '', justification: '' });
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
 
   useEffect(() => {
@@ -185,6 +191,8 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
         amount: Number(quoteForm.amount),
         validUntil: quoteForm.validUntil,
         scope: quoteForm.scope,
+        conditions: quoteForm.conditions,
+        deliveryDays: Number(quoteForm.deliveryDays),
         documentRef: quoteForm.documentRef || null
       });
       await reloadProjects();
@@ -195,6 +203,35 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsSavingQuote(false);
+    }
+  }
+
+  function openSelectionForm(project) {
+    setSelectionProjectId(project.id);
+    setSelectionForm({
+      quoteId: project.selectedQuoteId ? String(project.selectedQuoteId) : '',
+      justification: project.selectionJustification || ''
+    });
+  }
+
+  async function submitSelection(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !selectionProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingSelection(true);
+
+    try {
+      await selectProjectQuote(activeBuildingId, selectionProjectId, {
+        quoteId: Number(selectionForm.quoteId),
+        justification: selectionForm.justification
+      });
+      await reloadProjects();
+      setSelectionProjectId(null);
+      setStatus({ type: 'success', message: 'Cotización seleccionada correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingSelection(false);
     }
   }
 
@@ -410,29 +447,141 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                 )}
 
                 {(project.quotes ?? []).length > 0 && (
-                  <div className="space-y-2">
-                    {(project.quotes ?? []).map((quote) => (
-                      <div
-                        key={quote.id}
-                        className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="w-full min-w-[480px] text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50">
+                          <th className="px-3 py-2 font-bold uppercase tracking-wider text-slate-400">
+                            Criterio
+                          </th>
+                          {(project.quotes ?? []).map((quote) => (
+                            <th key={quote.id} className="px-3 py-2 font-bold text-slate-600">
                               {quote.supplier?.name || 'Proveedor'}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              Vigencia {formatDateDisplay(quote.validUntil)}
-                              {quote.documentRef ? ` · ${quote.documentRef}` : ''}
-                            </p>
-                          </div>
-                          <p className="text-sm font-bold text-slate-800">
-                            {formatCurrency(quote.amount)}
-                          </p>
+                              {Number(project.selectedQuoteId) === Number(quote.id) ? (
+                                <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  Seleccionada
+                                </span>
+                              ) : null}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Valor</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-price`} className="px-3 py-2 font-semibold">
+                              {formatCurrency(quote.amount)}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Alcance</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-scope`} className="px-3 py-2 text-slate-600">
+                              {quote.scope}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Tiempo</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-time`} className="px-3 py-2 text-slate-600">
+                              {quote.deliveryDays ? `${quote.deliveryDays} días` : 'Sin registrar'}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Condiciones</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-conditions`} className="px-3 py-2 text-slate-600">
+                              {quote.conditions || 'Sin registrar'}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-2 font-semibold text-slate-600">Vigencia</td>
+                          {(project.quotes ?? []).map((quote) => (
+                            <td key={`${quote.id}-valid`} className="px-3 py-2 text-slate-600">
+                              {formatDateDisplay(quote.validUntil)}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {canAddQuote && (project.quotes ?? []).length >= 2 && (
+                  <div className="mt-3">
+                    {project.selectedQuoteId && selectionProjectId !== project.id && (
+                      <p className="mb-2 text-xs text-slate-500">
+                        Selección justificada: {project.selectionJustification}
+                      </p>
+                    )}
+                    {selectionProjectId !== project.id ? (
+                      <button
+                        type="button"
+                        onClick={() => openSelectionForm(project)}
+                        className="text-xs font-semibold text-blue-600 hover:underline"
+                      >
+                        {project.selectedQuoteId
+                          ? 'Cambiar cotización seleccionada'
+                          : 'Seleccionar cotización'}
+                      </button>
+                    ) : (
+                      <form onSubmit={submitSelection} className="grid gap-3 sm:grid-cols-2">
+                        <label>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Cotización *
+                          </span>
+                          <select
+                            value={selectionForm.quoteId}
+                            onChange={(event) =>
+                              setSelectionForm({ ...selectionForm, quoteId: event.target.value })
+                            }
+                            required
+                            className={inputClassName}
+                          >
+                            <option value="">Selecciona una cotización</option>
+                            {(project.quotes ?? []).map((quote) => (
+                              <option key={quote.id} value={quote.id}>
+                                {quote.supplier?.name || 'Proveedor'} · {formatCurrency(quote.amount)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="sm:col-span-2">
+                          <span className="mb-1 block text-xs font-bold text-slate-500">
+                            Justificación *
+                          </span>
+                          <textarea
+                            value={selectionForm.justification}
+                            onChange={(event) =>
+                              setSelectionForm({
+                                ...selectionForm,
+                                justification: event.target.value
+                              })
+                            }
+                            required
+                            rows={2}
+                            className={inputClassName}
+                          />
+                        </label>
+                        <div className="flex gap-2 sm:col-span-2">
+                          <ActionButton type="submit" disabled={isSavingSelection}>
+                            <Save size={14} /> Guardar selección
+                          </ActionButton>
+                          <button
+                            type="button"
+                            onClick={() => setSelectionProjectId(null)}
+                            className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                          >
+                            Cancelar
+                          </button>
                         </div>
-                        <p className="mt-1 text-xs text-slate-600">{quote.scope}</p>
-                      </div>
-                    ))}
+                      </form>
+                    )}
                   </div>
                 )}
 
@@ -531,6 +680,21 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                         className={inputClassName}
                       />
                     </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Tiempo de ejecución (días) *
+                      </span>
+                      <input
+                        name="deliveryDays"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={quoteForm.deliveryDays}
+                        onChange={updateQuoteField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
                     <label className="sm:col-span-2">
                       <span className="mb-1 block text-xs font-bold text-slate-500">
                         Alcance *
@@ -538,6 +702,19 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       <textarea
                         name="scope"
                         value={quoteForm.scope}
+                        onChange={updateQuoteField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Condiciones *
+                      </span>
+                      <textarea
+                        name="conditions"
+                        value={quoteForm.conditions}
                         onChange={updateQuoteField}
                         required
                         rows={2}
