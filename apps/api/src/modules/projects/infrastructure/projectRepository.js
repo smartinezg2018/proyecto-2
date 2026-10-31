@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import { Project } from '../../../../database/models/index.js';
 import { mapProjectProgress } from './projectProgressRepository.js';
 import { mapProjectQuote } from './projectQuoteRepository.js';
@@ -77,9 +78,26 @@ export class ProjectRepository {
     return mapProject(project);
   }
 
-  async findByBuilding(buildingId) {
+  async findByBuilding(buildingId, filters = {}) {
+    const where = { buildingId: Number(buildingId) };
+    if (filters.status) {
+      where.status = filters.status;
+    }
+    if (filters.projectType) {
+      where.projectType = filters.projectType;
+    }
+    if (filters.dateFrom || filters.dateTo) {
+      where.startDate = {};
+      if (filters.dateFrom) {
+        where.startDate[Op.gte] = filters.dateFrom;
+      }
+      if (filters.dateTo) {
+        where.startDate[Op.lte] = filters.dateTo;
+      }
+    }
+
     const projects = await Project.findAll({
-      where: { buildingId: Number(buildingId) },
+      where,
       include: [
         {
           association: 'quotes',

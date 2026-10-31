@@ -25,9 +25,13 @@ function setup() {
         projects.push(saved);
         return saved;
       },
-      async findByBuilding(buildingId) {
+      async findByBuilding(buildingId, filters = {}) {
         return projects
           .filter((item) => String(item.buildingId) === String(buildingId))
+          .filter((item) => !filters.status || item.status === filters.status)
+          .filter((item) => !filters.projectType || item.projectType === filters.projectType)
+          .filter((item) => !filters.dateFrom || item.startDate >= filters.dateFrom)
+          .filter((item) => !filters.dateTo || item.startDate <= filters.dateTo)
           .sort((left, right) => String(right.startDate).localeCompare(left.startDate));
       }
     },
@@ -147,5 +151,61 @@ test('HU-058: rechaza fechas inválidas o invertidas', async () => {
       statusCode: 400,
       message: 'La fecha de fin no puede ser anterior a la fecha de inicio.'
     }
+  );
+});
+
+test('HU-062: filtra el historial por estado, tipo y fecha de inicio', async () => {
+  const { useCases, projects } = setup();
+  await useCases.register(1, {
+    ...validInput,
+    name: 'Cubierta',
+    projectType: 'obra',
+    startDate: '2026-01-10'
+  });
+  await useCases.register(1, {
+    ...validInput,
+    name: 'Mejora de iluminación',
+    projectType: 'mejora',
+    startDate: '2026-06-15',
+    endDate: '2026-08-15'
+  });
+  projects[0].status = 'finalizado';
+
+  const byStatus = await useCases.listByBuilding(1, { status: 'finalizado' });
+  assert.deepEqual(
+    byStatus.map((item) => item.name),
+    ['Cubierta']
+  );
+
+  const byType = await useCases.listByBuilding(1, { projectType: 'mejora' });
+  assert.deepEqual(
+    byType.map((item) => item.name),
+    ['Mejora de iluminación']
+  );
+
+  const byDate = await useCases.listByBuilding(1, {
+    dateFrom: '2026-06-01',
+    dateTo: '2026-12-31'
+  });
+  assert.deepEqual(
+    byDate.map((item) => item.name),
+    ['Mejora de iluminación']
+  );
+});
+
+test('HU-062: rechaza un estado, tipo o rango de fechas inválido', async () => {
+  const { useCases } = setup();
+
+  await assert.rejects(() => useCases.listByBuilding(1, { status: 'otro' }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+  await assert.rejects(() => useCases.listByBuilding(1, { projectType: 'remodelacion' }), {
+    statusCode: 400,
+    code: 'VALIDATION_ERROR'
+  });
+  await assert.rejects(
+    () => useCases.listByBuilding(1, { dateFrom: '2026-12-01', dateTo: '2026-01-01' }),
+    { statusCode: 400, code: 'VALIDATION_ERROR' }
   );
 });

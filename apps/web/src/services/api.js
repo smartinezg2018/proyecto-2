@@ -370,8 +370,15 @@ export function assignUserBuildings(userId, buildingIds) {
   });
 }
 
-export function getBuildingProjects(buildingId) {
-  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects`);
+export function getBuildingProjects(buildingId, filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value));
+    }
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects${suffix}`);
 }
 
 export function registerProject(buildingId, project) {

@@ -9,7 +9,7 @@ Base: `/api/v1/projects`
 | Metodo | Ruta                              | Permiso           | Descripcion                            |
 | ------ | --------------------------------- | ----------------- | -------------------------------------- |
 | POST   | `/buildings/:buildingId/projects` | `projects.create` | Registra un proyecto aprobado (HU-058) |
-| GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista los proyectos del edificio       |
+| GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista y filtra el historial (HU-062)   |
 | POST   | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.update` | Registra una cotización (HU-059) |
 | GET    | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.view`   | Lista las cotizaciones del proyecto |
 | POST   | `/buildings/:buildingId/projects/:projectId/quotes/selection` | `projects.update` | Selecciona una cotización (HU-060) |
@@ -56,5 +56,6 @@ Cuerpo de cotización (HU-059):
 - `conditions` y `deliveryDays` permiten comparar cotizaciones (HU-060).
 - Varias cotizaciones pueden asociarse al mismo proyecto.
 - La selección requiere al menos dos cotizaciones y una justificación.
+- El listado acepta `status`, `projectType`, `dateFrom` y `dateTo` sobre la fecha de inicio (HU-062).
 - El primer avance pasa el proyecto de `aprobado` a `en_ejecucion`.
 - Cada avance guarda la cotización y el proveedor que lo ejecutó, para que un cambio posterior de cotización no borre ese historial.
