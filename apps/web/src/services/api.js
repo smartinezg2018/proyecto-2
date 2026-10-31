@@ -370,6 +370,17 @@ export function assignUserBuildings(userId, buildingIds) {
   });
 }
 
+export function getBuildingProjects(buildingId) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects`);
+}
+
+export function registerProject(buildingId, project) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects`, {
+    method: 'POST',
+    body: JSON.stringify(project)
+  });
+}
+
 export function listAuditLogs(query = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {

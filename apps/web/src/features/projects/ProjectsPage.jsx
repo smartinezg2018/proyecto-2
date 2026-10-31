@@ -1,161 +1,323 @@
-import { useState } from 'react';
-import { Plus, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Save, X } from 'lucide-react';
 
-import { PROJECTS, formatCompactCurrency as fmtM } from '../fixtures.js';
-import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
-import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
-import { ActionButton as Btn } from '../../components/ActionButton.jsx';
+import { getBuildingProjects, registerProject } from '../../services/api.js';
+import { hasPermission } from '../../app/permissions.js';
+import { StatusBadge } from '../../components/StatusBadge.jsx';
+import { SectionHeader } from '../../components/SectionHeader.jsx';
+import { ActionButton } from '../../components/ActionButton.jsx';
 
-export function ModuleProyectos() {
-  const [selected, setSelected] = useState(null);
+const PROJECT_TYPE_OPTIONS = [
+  { value: 'obra', label: 'Obra' },
+  { value: 'mejora', label: 'Mejora' },
+  { value: 'mantenimiento', label: 'Mantenimiento' },
+  { value: 'otro', label: 'Otro' }
+];
+
+const PROJECT_TYPE_LABELS = Object.fromEntries(
+  PROJECT_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
+
+const PROJECT_STATUS_LABELS = {
+  aprobado: 'Aprobado',
+  en_ejecucion: 'En ejecución',
+  finalizado: 'Finalizado',
+  cancelado: 'Cancelado'
+};
+
+const inputClassName =
+  'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500';
+
+function formatDateDisplay(value) {
+  if (!value) return '—';
+  const text = String(value);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  }
+  return '—';
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined) return 'Sin registrar';
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 2
+  }).format(Number(value));
+}
+
+function createEmptyForm() {
+  return {
+    name: '',
+    objective: '',
+    projectType: 'obra',
+    budget: '',
+    startDate: '',
+    endDate: '',
+    responsible: '',
+    approvalReference: ''
+  };
+}
+
+export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
+  const canCreate = hasPermission(permissions, 'projects.create');
+  const [projects, setProjects] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [form, setForm] = useState(createEmptyForm);
+  const [status, setStatus] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    if (!activeBuildingId) {
+      setProjects([]);
+      return;
+    }
+
+    setIsLoading(true);
+    getBuildingProjects(activeBuildingId)
+      .then((response) => setProjects(response.data ?? []))
+      .catch((error) => setStatus({ type: 'error', message: error.message }))
+      .finally(() => setIsLoading(false));
+  }, [activeBuildingId]);
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm({ ...form, [name]: value });
+  }
+
+  async function submitForm(event) {
+    event.preventDefault();
+    if (!activeBuildingId) return;
+    setStatus({ type: '', message: '' });
+    setIsSaving(true);
+
+    try {
+      await registerProject(activeBuildingId, {
+        name: form.name,
+        objective: form.objective,
+        projectType: form.projectType,
+        budget: Number(form.budget),
+        startDate: form.startDate,
+        endDate: form.endDate,
+        responsible: form.responsible,
+        approvalReference: form.approvalReference
+      });
+      const response = await getBuildingProjects(activeBuildingId);
+      setProjects(response.data ?? []);
+      setForm(createEmptyForm());
+      setIsFormOpen(false);
+      setStatus({ type: 'success', message: 'Proyecto registrado correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <div>
-      <SectionHead
+      <SectionHeader
         title="Proyectos"
-        subtitle="Proyectos aprobados en asamblea y su estado de ejecuci�n"
+        subtitle="Registro de proyectos aprobados por edificio"
         action={
-          <Btn>
-            <Plus size={14} /> Nuevo Proyecto
-          </Btn>
+          canCreate ? (
+            <ActionButton onClick={() => setIsFormOpen(true)} disabled={!activeBuildingId}>
+              <Plus size={14} /> Nuevo proyecto
+            </ActionButton>
+          ) : null
         }
       />
 
-      {/* Project cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {PROJECTS.map((p) => {
-          const isSelected = selected === p.id;
-          const over = p.spent > p.budget;
-          return (
-            <div
-              key={p.id}
-              onClick={() => setSelected(isSelected ? null : p.id)}
-              className={`bg-white rounded-xl border p-5 cursor-pointer transition-all hover:shadow-md ${isSelected ? 'border-blue-400 ring-2 ring-blue-100 shadow-md' : 'border-slate-200/80'}`}
+      {status.message && (
+        <p
+          className={`mb-4 rounded-lg px-4 py-3 text-sm ${
+            status.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          {status.message}
+        </p>
+      )}
+
+      {!activeBuildingId && (
+        <p className="mb-4 text-sm text-slate-400">
+          Selecciona un edificio para ver sus proyectos.
+        </p>
+      )}
+
+      {isFormOpen && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Registrar proyecto</h3>
+            <button
+              type="button"
+              onClick={() => setIsFormOpen(false)}
+              className="rounded-md p-2 text-slate-400 hover:bg-slate-100"
+              title="Cerrar"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 pr-3">
-                  <p className="text-sm font-bold text-slate-900 leading-snug">{p.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{p.approved}</p>
+              <X size={16} />
+            </button>
+          </div>
+          <form onSubmit={submitForm} className="grid gap-4 sm:grid-cols-3">
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-xs font-bold text-slate-500">Nombre *</span>
+              <input
+                name="name"
+                value={form.name}
+                onChange={updateField}
+                required
+                className={inputClassName}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>
+              <select
+                name="projectType"
+                value={form.projectType}
+                onChange={updateField}
+                className={inputClassName}
+              >
+                {PROJECT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="sm:col-span-3">
+              <span className="mb-1 block text-xs font-bold text-slate-500">Objetivo *</span>
+              <textarea
+                name="objective"
+                value={form.objective}
+                onChange={updateField}
+                required
+                rows={3}
+                className={inputClassName}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">
+                Presupuesto (COP) *
+              </span>
+              <input
+                name="budget"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.budget}
+                onChange={updateField}
+                required
+                className={inputClassName}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Fecha de inicio *</span>
+              <input
+                name="startDate"
+                type="date"
+                value={form.startDate}
+                onChange={updateField}
+                required
+                className={inputClassName}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Fecha de fin *</span>
+              <input
+                name="endDate"
+                type="date"
+                value={form.endDate}
+                onChange={updateField}
+                required
+                className={inputClassName}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Responsable *</span>
+              <input
+                name="responsible"
+                value={form.responsible}
+                onChange={updateField}
+                required
+                className={inputClassName}
+              />
+            </label>
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-xs font-bold text-slate-500">
+                Referencia de aprobación *
+              </span>
+              <input
+                name="approvalReference"
+                value={form.approvalReference}
+                onChange={updateField}
+                required
+                placeholder="Acta de asamblea, resolución..."
+                className={inputClassName}
+              />
+            </label>
+            <div className="sm:col-span-3">
+              <ActionButton type="submit" disabled={isSaving}>
+                <Save size={14} /> Guardar proyecto
+              </ActionButton>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {!isLoading &&
+          projects.map((project) => (
+            <div key={project.id} className="rounded-xl border border-slate-200/80 bg-white p-5">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{project.name}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {PROJECT_TYPE_LABELS[project.projectType] || project.projectType} ·{' '}
+                    {project.approvalReference}
+                  </p>
                 </div>
-                <Badge label={p.status} />
+                <StatusBadge label={PROJECT_STATUS_LABELS[project.status] || project.status} />
               </div>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-slate-50 rounded-lg p-2.5">
-                  <p className="text-xs text-slate-400 mb-0.5">Presupuesto</p>
-                  <p className="text-base font-bold text-slate-800">{fmtM(p.budget)}</p>
+              <p className="mb-4 text-sm text-slate-600">{project.objective}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Presupuesto</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {formatCurrency(project.budget)}
+                  </p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-2.5">
-                  <p className="text-xs text-slate-400 mb-0.5">Ejecutado</p>
-                  <p className={`text-base font-bold ${over ? 'text-red-600' : 'text-slate-800'}`}>
-                    {fmtM(p.spent)}
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Responsable</p>
+                  <p className="text-sm font-bold text-slate-800">{project.responsible}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Inicio</p>
+                  <p className="font-mono text-sm font-bold text-slate-800">
+                    {formatDateDisplay(project.startDate)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5">
+                  <p className="mb-0.5 text-xs text-slate-400">Fin</p>
+                  <p className="font-mono text-sm font-bold text-slate-800">
+                    {formatDateDisplay(project.endDate)}
                   </p>
                 </div>
               </div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-semibold">Avance de obra</span>
-                <span className="text-xs font-bold text-slate-700">{p.progress}%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${p.status === 'Finalizado' ? 'bg-emerald-500' : p.status === 'En Curso' ? 'bg-blue-500' : 'bg-slate-300'}`}
-                  style={{ width: `${p.progress}%` }}
-                />
-              </div>
-              <div className="mt-3 flex items-center gap-1 text-xs text-slate-400">
-                <Calendar size={11} />
-                <span>
-                  Fecha l�mite:{' '}
-                  <span style={{ fontFamily: "'DM Mono', monospace" }}>{p.deadline}</span>
-                </span>
-              </div>
-              {isSelected && (
-                <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
-                  <button className="text-xs text-blue-600 font-semibold hover:underline">
-                    Ver hitos
-                  </button>
-                  <span className="text-slate-200">�</span>
-                  <button className="text-xs text-blue-600 font-semibold hover:underline">
-                    Actualizar avance
-                  </button>
-                  {p.status === 'En Curso' && (
-                    <>
-                      <span className="text-slate-200">�</span>
-                      <button className="text-xs text-emerald-600 font-semibold hover:underline">
-                        Finalizar y rendir cuentas
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
-          );
-        })}
+          ))}
       </div>
 
-      {/* Cotizaciones table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-700">Cuadro Comparativo de Cotizaciones</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Reparaci�n Cubierta Torre B � 3 propuestas evaluadas
-            </p>
-          </div>
-          <Btn variant="secondary">
-            <Plus size={13} /> Agregar Propuesta
-          </Btn>
-        </div>
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3">
-                Criterio
-              </th>
-              {[
-                { name: 'Constructora Andina SAS', rec: false },
-                { name: 'T�cnicos del Norte Ltda.', rec: true },
-                { name: 'BuildPro Colombia', rec: false }
-              ].map((p) => (
-                <th
-                  key={p.name}
-                  className={`px-4 py-3 text-xs font-bold uppercase tracking-wider ${p.rec ? 'text-emerald-700 bg-emerald-50' : 'text-slate-400'}`}
-                >
-                  <div className="flex items-center gap-2">
-                    {p.name}
-                    {p.rec && (
-                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold normal-case tracking-normal">
-                        Recomendada
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {[
-              ['Valor Total', '$58.500.000', '$61.000.000', '$72.000.000'],
-              ['Plazo de Ejecuci�n', '90 d�as', '75 d�as', '120 d�as'],
-              ['Garant�a de Obra', '12 meses', '24 meses', '18 meses'],
-              ['Experiencia en PH', '8 a�os', '15 a�os', '5 a�os'],
-              ['Materiales incluidos', 'Parcial', 'Total', 'Total'],
-              ['Referencias verificadas', '2', '5', '1']
-            ].map(([criterio, ...vals]) => (
-              <tr key={criterio} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-600">{criterio}</td>
-                {vals.map((v, i) => (
-                  <td
-                    key={i}
-                    className={`px-4 py-3 text-sm ${i === 1 ? 'bg-emerald-50/40 font-bold text-slate-800' : 'text-slate-600'}`}
-                  >
-                    {v}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {!isLoading && activeBuildingId && projects.length === 0 && (
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400">
+          No hay proyectos registrados en este edificio.
+        </p>
+      )}
+      {isLoading && (
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400">
+          Cargando proyectos...
+        </p>
+      )}
     </div>
   );
 }

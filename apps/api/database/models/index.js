@@ -13,6 +13,7 @@ import { UnitResponsible } from './UnitResponsible.js';
 import { Invoice } from './Invoice.js';
 import { InvoiceItem } from './InvoiceItem.js';
 import { ChargeSchedule } from './ChargeSchedule.js';
+import { Project } from './Project.js';
 
 Unit.hasOne(UnitResponsible, { foreignKey: 'unitId', as: 'responsibleAssignment' });
 UnitResponsible.belongsTo(Unit, { foreignKey: 'unitId' });
@@ -66,5 +67,6 @@ export {
   UnitResponsible,
   Invoice,
   InvoiceItem,
-  ChargeSchedule
+  ChargeSchedule,
+  Project
 };
