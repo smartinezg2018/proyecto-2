@@ -403,6 +403,13 @@ export function getProjectProgress(buildingId, projectId) {
   return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`);
 }
 
+export function closeProject(buildingId, projectId, closure) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/close`, {
+    method: 'POST',
+    body: JSON.stringify(closure)
+  });
+}
+
 export function registerProjectProgress(buildingId, projectId, progress) {
   return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/progress`, {
     method: 'POST',

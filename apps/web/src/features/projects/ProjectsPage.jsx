@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Save, X } from 'lucide-react';
 
 import {
+  closeProject,
   createSupplier,
   getBuildingProjects,
   getSuppliers,
@@ -107,6 +108,15 @@ function isProjectOpen(status) {
   return status !== 'finalizado' && status !== 'cancelado';
 }
 
+function createEmptyCloseForm() {
+  return {
+    closeDate: '',
+    totalCost: '',
+    result: '',
+    closingDocumentRef: ''
+  };
+}
+
 export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const canCreate = hasPermission(permissions, 'projects.create');
   const canAddQuote = hasPermission(permissions, 'projects.update');
@@ -126,6 +136,9 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
   const [progressFormProjectId, setProgressFormProjectId] = useState(null);
   const [progressForm, setProgressForm] = useState(createEmptyProgressForm);
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [closeFormProjectId, setCloseFormProjectId] = useState(null);
+  const [closeForm, setCloseForm] = useState(createEmptyCloseForm);
+  const [isSavingClose, setIsSavingClose] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
 
   useEffect(() => {
@@ -300,6 +313,35 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
       setStatus({ type: 'error', message: error.message });
     } finally {
       setIsSavingProgress(false);
+    }
+  }
+
+  function updateCloseField(event) {
+    const { name, value } = event.target;
+    setCloseForm({ ...closeForm, [name]: value });
+  }
+
+  async function submitClose(event) {
+    event.preventDefault();
+    if (!activeBuildingId || !closeFormProjectId) return;
+    setStatus({ type: '', message: '' });
+    setIsSavingClose(true);
+
+    try {
+      await closeProject(activeBuildingId, closeFormProjectId, {
+        closeDate: closeForm.closeDate,
+        totalCost: Number(closeForm.totalCost),
+        result: closeForm.result,
+        closingDocumentRef: closeForm.closingDocumentRef || null
+      });
+      await reloadProjects();
+      setCloseForm(createEmptyCloseForm());
+      setCloseFormProjectId(null);
+      setStatus({ type: 'success', message: 'Proyecto cerrado correctamente.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setIsSavingClose(false);
     }
   }
 
@@ -1026,6 +1068,113 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       <button
                         type="button"
                         onClick={() => setProgressFormProjectId(null)}
+                        className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-bold text-slate-700">Cierre</h4>
+                  {canAddQuote && isProjectOpen(project.status) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCloseFormProjectId(project.id);
+                        setCloseForm({
+                          ...createEmptyCloseForm(),
+                          totalCost: project.currentExecutedCost || ''
+                        });
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Cerrar proyecto
+                    </button>
+                  )}
+                </div>
+
+                {project.status === 'finalizado' && (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                    <p className="text-sm font-semibold text-emerald-800">
+                      Cerrado el {formatDateDisplay(project.closeDate)} ·{' '}
+                      {formatCurrency(project.totalCost)}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">{project.result}</p>
+                    {project.closingDocumentRef && (
+                      <p className="mt-1 text-xs text-emerald-600">{project.closingDocumentRef}</p>
+                    )}
+                  </div>
+                )}
+
+                {closeFormProjectId === project.id && (
+                  <form
+                    onSubmit={submitClose}
+                    className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2"
+                  >
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Fecha de cierre *
+                      </span>
+                      <input
+                        name="closeDate"
+                        type="date"
+                        value={closeForm.closeDate}
+                        onChange={updateCloseField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Costo total (COP) *
+                      </span>
+                      <input
+                        name="totalCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={closeForm.totalCost}
+                        onChange={updateCloseField}
+                        required
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Resultado *
+                      </span>
+                      <textarea
+                        name="result"
+                        value={closeForm.result}
+                        onChange={updateCloseField}
+                        required
+                        rows={2}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-bold text-slate-500">
+                        Documento de cierre
+                      </span>
+                      <input
+                        name="closingDocumentRef"
+                        value={closeForm.closingDocumentRef}
+                        onChange={updateCloseField}
+                        placeholder="Acta, informe o referencia"
+                        className={inputClassName}
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <ActionButton type="submit" disabled={isSavingClose}>
+                        <Save size={14} /> Guardar cierre
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={() => setCloseFormProjectId(null)}
                         className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
                       >
                         Cancelar
