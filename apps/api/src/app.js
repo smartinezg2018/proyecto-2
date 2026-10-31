@@ -9,6 +9,7 @@ import { authRoutes } from './modules/auth/presentation/http/routes.js';
 import { maintenanceRoutes } from './modules/maintenance/presentation/http/routes.js';
 import { insuranceRoutes } from './modules/insurance/presentation/http/routes.js';
 import { billingRoutes } from './modules/billing/presentation/http/routes.js';
+import { projectRoutes } from './modules/projects/presentation/http/routes.js';
 
 export const app = express();
 
@@ -26,4 +27,5 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/insurance', insuranceRoutes);
 app.use('/api/v1/billing', billingRoutes);
+app.use('/api/v1/projects', projectRoutes);
 app.use(errorHandler);
