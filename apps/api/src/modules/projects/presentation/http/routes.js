@@ -8,11 +8,14 @@ import { requirePermission } from '../../../auth/presentation/http/middleware/re
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { createProjectUseCases } from '../../application/projectUseCases.js';
 import { createProjectQuoteUseCases } from '../../application/projectQuoteUseCases.js';
+import { createProjectProgressUseCases } from '../../application/projectProgressUseCases.js';
 import { ProjectRepository } from '../../infrastructure/projectRepository.js';
 import { ProjectQuoteRepository } from '../../infrastructure/projectQuoteRepository.js';
+import { ProjectProgressRepository } from '../../infrastructure/projectProgressRepository.js';
 import {
   registerProjectSchema,
   registerProjectQuoteSchema,
+  registerProjectProgressSchema,
   selectProjectQuoteSchema
 } from './projectSchemas.js';
 
@@ -30,6 +33,13 @@ const projectQuoteUseCases = createProjectQuoteUseCases(
   projectRepository,
   buildingRepository,
   new SupplierRepository(),
+  auditRepository
+);
+const projectProgressUseCases = createProjectProgressUseCases(
+  new ProjectProgressRepository(),
+  projectRepository,
+  buildingRepository,
+  new ProjectQuoteRepository(),
   auditRepository
 );
 const asyncHandler = (handler) => (request, response, next) =>
@@ -113,5 +123,39 @@ projectRoutes.post(
       request.user.id
     );
     response.json({ data: project, meta: { requestId: request.id } });
+  })
+);
+
+projectRoutes.get(
+  '/buildings/:buildingId/projects/:projectId/progress',
+  requireAuth,
+  requirePermission('projects.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const progress = await projectProgressUseCases.list(
+      request.params.buildingId,
+      request.params.projectId
+    );
+    response.json({
+      data: progress,
+      meta: { requestId: request.id, page: 1, pageSize: progress.length }
+    });
+  })
+);
+
+projectRoutes.post(
+  '/buildings/:buildingId/projects/:projectId/progress',
+  requireAuth,
+  requirePermission('projects.update'),
+  ensureBuildingAccess,
+  validateBody(registerProjectProgressSchema),
+  asyncHandler(async (request, response) => {
+    const progress = await projectProgressUseCases.register(
+      request.params.buildingId,
+      request.params.projectId,
+      request.body,
+      request.user.id
+    );
+    response.status(201).json({ data: progress, meta: { requestId: request.id } });
   })
 );

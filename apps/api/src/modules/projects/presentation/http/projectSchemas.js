@@ -46,6 +46,21 @@ export const registerProjectQuoteSchema = z.object({
   documentRef: z.string().trim().max(255).optional().nullable()
 });
 
+export const registerProjectProgressSchema = z.object({
+  quoteId: z.number().int().positive('Debe indicar con qué cotización se ejecutó el avance.'),
+  progressDate: dateSchema,
+  percentage: z
+    .number()
+    .min(0, 'El porcentaje de avance debe estar entre 0 y 100.')
+    .max(100, 'El porcentaje de avance debe estar entre 0 y 100.'),
+  executedCost: z
+    .number()
+    .nonnegative('El costo ejecutado no puede ser negativo.')
+    .max(9999999999999.99),
+  observations: z.string().trim().min(1, 'Las observaciones son obligatorias.').max(5000),
+  evidenceRef: z.string().trim().max(255).optional().nullable()
+});
+
 export const selectProjectQuoteSchema = z.object({
   quoteId: z.number().int().positive('La cotización es obligatoria.'),
   justification: z
