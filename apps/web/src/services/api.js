@@ -381,6 +381,17 @@ export function registerProject(buildingId, project) {
   });
 }
 
+export function getProjectQuotes(buildingId, projectId) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes`);
+}
+
+export function registerProjectQuote(buildingId, projectId, quote) {
+  return apiRequest(`/api/v1/projects/buildings/${buildingId}/projects/${projectId}/quotes`, {
+    method: 'POST',
+    body: JSON.stringify(quote)
+  });
+}
+
 export function listAuditLogs(query = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {

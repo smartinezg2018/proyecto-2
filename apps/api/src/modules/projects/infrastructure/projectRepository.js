@@ -1,4 +1,5 @@
 import { Project } from '../../../../database/models/index.js';
+import { mapProjectQuote } from './projectQuoteRepository.js';
 
 function formatDate(value) {
   if (!value) {
@@ -36,7 +37,8 @@ function mapProject(project) {
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
     createdAt: data.createdAt,
-    updatedAt: data.updatedAt
+    updatedAt: data.updatedAt,
+    quotes: (data.quotes ?? []).map(mapProjectQuote)
   };
 }
 
@@ -68,9 +70,11 @@ export class ProjectRepository {
   async findByBuilding(buildingId) {
     const projects = await Project.findAll({
       where: { buildingId: Number(buildingId) },
+      include: [{ association: 'quotes', include: [{ association: 'supplier' }] }],
       order: [
         ['startDate', 'DESC'],
-        ['id', 'DESC']
+        ['id', 'DESC'],
+        [{ association: 'quotes' }, 'id', 'ASC']
       ]
     });
 

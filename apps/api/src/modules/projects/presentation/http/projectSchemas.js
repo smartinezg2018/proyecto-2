@@ -28,3 +28,14 @@ export const registerProjectSchema = z
     message: 'La fecha de fin no puede ser anterior a la fecha de inicio.',
     path: ['endDate']
   });
+
+export const registerProjectQuoteSchema = z.object({
+  supplierId: z.number().int().positive('El proveedor es obligatorio.'),
+  amount: z
+    .number()
+    .nonnegative('El valor de la cotización no puede ser negativo.')
+    .max(9999999999999.99),
+  validUntil: dateSchema,
+  scope: z.string().trim().min(1, 'El alcance es obligatorio.').max(5000),
+  documentRef: z.string().trim().max(255).optional().nullable()
+});
