@@ -513,28 +513,34 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  {['Apartamento', 'Capital', 'Intereses', 'Pagos', 'Saldo total', 'Estado'].map(
-                    (heading) => (
-                      <th
-                        key={heading}
-                        className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3"
-                      >
-                        {heading}
-                      </th>
-                    )
-                  )}
+                  {[
+                    'Apartamento',
+                    'Capital',
+                    'Otros conceptos',
+                    'Intereses',
+                    'Pagos',
+                    'Saldo total',
+                    'Estado'
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3"
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
                       Consultando cartera…
                     </td>
                   </tr>
                 ) : portfolio.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
                       No hay apartamentos que coincidan con los filtros.
                     </td>
                   </tr>
@@ -546,6 +552,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
                         {row.unitNumber}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{fmt(row.capital)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.otherConcepts)}</td>
                       <td className="px-4 py-3 text-sm text-amber-700">{fmt(row.interests)}</td>
                       <td className="px-4 py-3 text-sm text-emerald-700">{fmt(row.payments)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-red-600">
@@ -729,7 +736,12 @@ function InvoiceDetail({ detail }) {
             ) : (
               detail.items.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm text-slate-600">
-                  <span>{item.concept}</span>
+                  <span>
+                    {item.concept}{' '}
+                    <span className="text-xs text-slate-400">
+                      ({item.itemType === 'other' ? 'Otro concepto' : 'Capital'})
+                    </span>
+                  </span>
                   <strong>{fmt(item.amount)}</strong>
                 </div>
               ))

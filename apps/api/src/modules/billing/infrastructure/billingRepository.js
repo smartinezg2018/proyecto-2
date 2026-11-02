@@ -52,6 +52,7 @@ function mapInvoice(invoice) {
     items: (data.items || []).map((item) => ({
       id: item.id,
       concept: item.concept,
+      itemType: item.itemType,
       amount: Number(item.amount)
     })),
     total: Number(data.total),
@@ -89,11 +90,17 @@ export class BillingRepository {
   async findInvoicesForInterest({ buildingId, calculationDate }) {
     const rows = await sequelize.query(
       `SELECT i.id,
-              i.total,
+              COALESCE(item_totals.capital, i.total) AS capital,
               i.due_date AS dueDate,
               p.payment_date AS paymentDate,
               pa.amount AS paymentAmount
        FROM invoices i
+       LEFT JOIN (
+         SELECT invoice_id,
+                SUM(CASE WHEN item_type = 'capital' THEN amount ELSE 0 END) AS capital
+         FROM invoice_items
+         GROUP BY invoice_id
+       ) item_totals ON item_totals.invoice_id = i.id
        LEFT JOIN payment_allocations pa ON pa.invoice_id = i.id
        LEFT JOIN payments p
          ON p.id = pa.payment_id
@@ -111,7 +118,7 @@ export class BillingRepository {
       if (!invoices.has(row.id)) {
         invoices.set(row.id, {
           id: Number(row.id),
-          total: Number(row.total),
+          capital: Number(row.capital),
           dueDate: row.dueDate,
           payments: []
         });
@@ -163,7 +170,14 @@ export class BillingRepository {
 
   async findPortfolio({ buildingId, unitId = null, period = null, status = null, today }) {
     const rows = await sequelize.query(
-      `WITH interest_totals AS (
+      `WITH item_totals AS (
+         SELECT invoice_id,
+                SUM(CASE WHEN item_type = 'capital' THEN amount ELSE 0 END) AS capital,
+                SUM(CASE WHEN item_type = 'other' THEN amount ELSE 0 END) AS otherConcepts
+         FROM invoice_items
+         GROUP BY invoice_id
+       ),
+       interest_totals AS (
          SELECT invoice_id, SUM(amount) AS interests
          FROM late_interests
          WHERE status <> 'reversado'
@@ -182,16 +196,20 @@ export class BillingRepository {
        ),
        invoice_balances AS (
          SELECT i.unit_id AS unitId,
-                i.total AS capital,
+                COALESCE(item_totals.capital, i.total) AS capital,
+                COALESCE(item_totals.otherConcepts, 0) AS otherConcepts,
                 COALESCE(interest_totals.interests, 0) AS interests,
                 COALESCE(payment_totals.payments, 0) AS payments,
                 GREATEST(
-                  i.total + COALESCE(interest_totals.interests, 0)
+                  COALESCE(item_totals.capital, i.total)
+                    + COALESCE(item_totals.otherConcepts, 0)
+                    + COALESCE(interest_totals.interests, 0)
                     - COALESCE(payment_totals.payments, 0),
                   0
                 ) AS balance,
                 i.due_date AS dueDate
          FROM invoices i
+         LEFT JOIN item_totals ON item_totals.invoice_id = i.id
          LEFT JOIN interest_totals ON interest_totals.invoice_id = i.id
          LEFT JOIN payment_totals ON payment_totals.invoice_id = i.id
          WHERE i.building_id = :buildingId
@@ -202,6 +220,7 @@ export class BillingRepository {
                 u.number AS unitNumber,
                 u.tower,
                 COALESCE(SUM(invoice_balances.capital), 0) AS capital,
+                COALESCE(SUM(invoice_balances.otherConcepts), 0) AS otherConcepts,
                 COALESCE(SUM(invoice_balances.interests), 0) AS interests,
                 COALESCE(SUM(invoice_balances.payments), 0) AS payments,
                 COALESCE(SUM(invoice_balances.balance), 0) AS totalBalance,
@@ -222,7 +241,7 @@ export class BillingRepository {
            AND (:unitId IS NULL OR u.id = :unitId)
          GROUP BY u.id, u.number, u.tower
        )
-       SELECT unitId, unitNumber, tower, capital, interests, payments, totalBalance,
+       SELECT unitId, unitNumber, tower, capital, otherConcepts, interests, payments, totalBalance,
               portfolioStatus AS status
        FROM portfolio
        WHERE (:status IS NULL OR portfolioStatus = :status)
@@ -238,6 +257,7 @@ export class BillingRepository {
       unitNumber: row.unitNumber,
       tower: row.tower,
       capital: Number(row.capital),
+      otherConcepts: Number(row.otherConcepts),
       interests: Number(row.interests),
       payments: Number(row.payments),
       totalBalance: Number(row.totalBalance),
@@ -352,7 +372,7 @@ export class BillingRepository {
 
     const [items, payments, interests] = await Promise.all([
       sequelize.query(
-        `SELECT id, concept, amount
+        `SELECT id, concept, item_type AS itemType, amount
          FROM invoice_items
          WHERE invoice_id = :invoiceId
          ORDER BY id ASC`,
@@ -440,7 +460,10 @@ export class BillingRepository {
           },
           { transaction }
         );
-        await InvoiceItem.create({ invoiceId: invoice.id, concept, amount }, { transaction });
+        await InvoiceItem.create(
+          { invoiceId: invoice.id, concept, itemType: 'capital', amount },
+          { transaction }
+        );
         created.push(invoice.id);
       }
       return created;
@@ -454,7 +477,7 @@ export class BillingRepository {
       where: { id: ids },
       include: [
         { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
-        { model: InvoiceItem, as: 'items', attributes: ['id', 'concept', 'amount'] }
+        { model: InvoiceItem, as: 'items', attributes: ['id', 'concept', 'itemType', 'amount'] }
       ],
       order: [['id', 'ASC']]
     });
@@ -465,7 +488,7 @@ export class BillingRepository {
     const invoice = await Invoice.findByPk(invoiceId, {
       include: [
         { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
-        { model: InvoiceItem, as: 'items', attributes: ['id', 'concept', 'amount'] }
+        { model: InvoiceItem, as: 'items', attributes: ['id', 'concept', 'itemType', 'amount'] }
       ]
     });
     return invoice ? mapInvoice(invoice) : null;

@@ -37,6 +37,42 @@ test('HU-049 / CP-049-02: recalcula por valor y fecha de pagos sin capitalizar i
   assert.equal(result.amount, 2825);
 });
 
+test('HU-050 / CP-050-01: calcula mora solo sobre el capital vencido', () => {
+  const result = calculateLateInterest(
+    {
+      id: 3,
+      capital: 500000,
+      otherConcepts: 100000,
+      interests: 25000,
+      dueDate: '2026-10-01',
+      payments: []
+    },
+    36.5,
+    '2026-10-11'
+  );
+
+  assert.equal(result.capitalBalance, 500000);
+  assert.equal(result.amount, 5000);
+});
+
+test('HU-050 / CP-050-02: el pago reduce primero el capital sin volverlo negativo', () => {
+  const result = calculateLateInterest(
+    {
+      id: 4,
+      capital: 500000,
+      otherConcepts: 100000,
+      interests: 25000,
+      dueDate: '2026-10-01',
+      payments: [{ paymentDate: '2026-10-06', amount: 600000 }]
+    },
+    36.5,
+    '2026-10-11'
+  );
+
+  assert.equal(result.capitalBalance, 0);
+  assert.equal(result.amount, 2500);
+});
+
 test('HU-046 pasa los filtros y la fecha de Colombia al consultar cartera', async () => {
   let received;
   const useCases = createBillingUseCases(

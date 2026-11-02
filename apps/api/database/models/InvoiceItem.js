@@ -7,6 +7,11 @@ export const InvoiceItem = sequelize.define(
     id: { type: DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
     invoiceId: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false },
     concept: { type: DataTypes.STRING(255), allowNull: false },
+    itemType: {
+      type: DataTypes.ENUM('capital', 'other'),
+      allowNull: false,
+      defaultValue: 'capital'
+    },
     amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false }
   },
   { tableName: 'invoice_items', updatedAt: false }
