@@ -122,6 +122,17 @@ export function getInvoiceDetail(buildingId, invoiceId) {
   return apiRequest(`/api/v1/billing/buildings/${buildingId}/invoices/${invoiceId}`);
 }
 
+export function getInterestSettings(buildingId) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/interest-settings`);
+}
+
+export function saveInterestSettings(buildingId, annualRate) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/interest-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ annualRate })
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

@@ -9,7 +9,63 @@ function todayInColombia(now = new Date()) {
   }).format(now);
 }
 
+function daysBetween(from, to) {
+  return Math.max(
+    0,
+    Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+  );
+}
+
+export function calculateLateInterest(invoice, annualRate, calculationDate) {
+  const overdueDays = daysBetween(invoice.dueDate, calculationDate);
+  let balance = Number(invoice.total);
+  let weightedCapitalDays = 0;
+  let cursor = invoice.dueDate;
+
+  for (const payment of invoice.payments) {
+    if (payment.paymentDate <= invoice.dueDate) {
+      balance = Math.max(balance - Number(payment.amount), 0);
+      continue;
+    }
+    if (payment.paymentDate > calculationDate) break;
+
+    weightedCapitalDays += balance * daysBetween(cursor, payment.paymentDate);
+    balance = Math.max(balance - Number(payment.amount), 0);
+    cursor = payment.paymentDate;
+  }
+  weightedCapitalDays += balance * daysBetween(cursor, calculationDate);
+
+  return {
+    invoiceId: invoice.id,
+    overdueDays,
+    capitalBalance: balance,
+    amount:
+      Math.round((weightedCapitalDays * (Number(annualRate) / 100 / 365) + Number.EPSILON) * 100) /
+      100
+  };
+}
+
 export function createBillingUseCases(repository, clock = todayInColombia) {
+  async function recalculateLateInterests(buildingId, createdBy) {
+    const numericBuildingId = Number(buildingId);
+    const calculationDate = clock();
+    const settings = await repository.findInterestSettings(numericBuildingId);
+    const invoices = await repository.findInvoicesForInterest({
+      buildingId: numericBuildingId,
+      calculationDate
+    });
+    const calculations = invoices.map((invoice) =>
+      calculateLateInterest(invoice, settings.annualRate, calculationDate)
+    );
+    await repository.replaceLateInterests({ calculations, calculationDate, createdBy });
+    return {
+      calculationDate,
+      annualRate: settings.annualRate,
+      processed: calculations.length,
+      invoices: calculations
+    };
+  }
+
   return {
     async listPortfolio(buildingId, filters = {}) {
       return repository.findPortfolio({
@@ -36,6 +92,22 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
       }
       return invoice;
     },
+
+    async getInterestSettings(buildingId) {
+      return repository.findInterestSettings(Number(buildingId));
+    },
+
+    async saveInterestSettings(buildingId, annualRate, updatedBy) {
+      const settings = await repository.upsertInterestSettings({
+        buildingId: Number(buildingId),
+        annualRate: Number(annualRate),
+        updatedBy
+      });
+      const calculation = await recalculateLateInterests(buildingId, updatedBy);
+      return { settings, calculation };
+    },
+
+    recalculateLateInterests,
 
     async generateOrdinaryInvoices(input, createdBy) {
       const uniqueUnitIds = [...new Set(input.unitIds)];
@@ -118,7 +190,10 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
       if (mode !== 'auto' && mode !== 'manual') {
         throw new AppError('El modo de aplicación no es válido.', 400, 'VALIDATION_ERROR');
       }
-      if (mode === 'manual' && (!Array.isArray(input.allocations) || input.allocations.length === 0)) {
+      if (
+        mode === 'manual' &&
+        (!Array.isArray(input.allocations) || input.allocations.length === 0)
+      ) {
         throw new AppError(
           'Debe indicar al menos una factura para la aplicación manual.',
           400,

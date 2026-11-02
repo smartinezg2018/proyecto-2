@@ -14,7 +14,8 @@ import {
   invoiceIdSchema,
   registerPaymentSchema,
   applyPaymentSchema,
-  paymentIdSchema
+  paymentIdSchema,
+  interestSettingsSchema
 } from './billingSchemas.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
 
@@ -97,6 +98,47 @@ billingRoutes.get(
       parsedInvoiceId.data
     );
     response.json({ data: invoice, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/interest-settings',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const settings = await useCases.getInterestSettings(request.params.buildingId);
+    response.json({ data: settings, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.put(
+  '/buildings/:buildingId/interest-settings',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(interestSettingsSchema),
+  asyncHandler(async (request, response) => {
+    const result = await useCases.saveInterestSettings(
+      request.params.buildingId,
+      request.body.annualRate,
+      request.user.id
+    );
+    response.json({ data: result, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/interests/recalculate',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const calculation = await useCases.recalculateLateInterests(
+      request.params.buildingId,
+      request.user.id
+    );
+    response.json({ data: calculation, meta: { requestId: request.id } });
   })
 );
 
@@ -202,10 +244,7 @@ billingRoutes.get(
     if (!parsedPaymentId.success) {
       throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
     }
-    const receipt = await useCases.getCashReceipt(
-      request.params.buildingId,
-      parsedPaymentId.data
-    );
+    const receipt = await useCases.getCashReceipt(request.params.buildingId, parsedPaymentId.data);
     if (request.query.format === 'json') {
       response.json({ data: receipt, meta: { requestId: request.id } });
       return;
@@ -217,19 +256,21 @@ billingRoutes.get(
           `<li>Factura ${invoice.invoiceId}${invoice.period ? ` (${escapeHtml(invoice.period)})` : ''}: aplicado $${Number(invoice.appliedAmount).toFixed(2)} — saldo $${Number(invoice.balance ?? 0).toFixed(2)}</li>`
       )
       .join('');
-    response.type('html').send(
-      `<article><h1>Recibo de caja N° ${receipt.receiptNumber}</h1><p>Apartamento: ${escapeHtml(
-        receipt.unit?.number ?? ''
-      )}</p><p>Fecha: ${escapeHtml(receipt.payment.paymentDate)}</p><p>Valor: $${Number(
-        receipt.payment.amount
-      ).toFixed(2)}</p><p>Medio: ${escapeHtml(
-        receipt.payment.paymentMethod
-      )}</p><p>Referencia: ${escapeHtml(
-        receipt.payment.reference
-      )}</p><ul>${invoiceLines}</ul><p>Saldo a favor: $${Number(receipt.creditBalance).toFixed(
-        2
-      )}</p></article>`
-    );
+    response
+      .type('html')
+      .send(
+        `<article><h1>Recibo de caja N° ${receipt.receiptNumber}</h1><p>Apartamento: ${escapeHtml(
+          receipt.unit?.number ?? ''
+        )}</p><p>Fecha: ${escapeHtml(receipt.payment.paymentDate)}</p><p>Valor: $${Number(
+          receipt.payment.amount
+        ).toFixed(2)}</p><p>Medio: ${escapeHtml(
+          receipt.payment.paymentMethod
+        )}</p><p>Referencia: ${escapeHtml(
+          receipt.payment.reference
+        )}</p><ul>${invoiceLines}</ul><p>Saldo a favor: $${Number(receipt.creditBalance).toFixed(
+          2
+        )}</p></article>`
+      );
   })
 );
 
