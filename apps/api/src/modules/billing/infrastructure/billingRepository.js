@@ -60,6 +60,107 @@ function mapInvoice(invoice) {
 }
 
 export class BillingRepository {
+  async findInterestSettings(buildingId) {
+    const rows = await sequelize.query(
+      `SELECT building_id AS buildingId, annual_rate AS annualRate
+       FROM billing_interest_settings
+       WHERE building_id = :buildingId`,
+      { replacements: { buildingId }, type: QueryTypes.SELECT }
+    );
+    return {
+      buildingId: Number(buildingId),
+      annualRate: Number(rows[0]?.annualRate ?? 0)
+    };
+  }
+
+  async upsertInterestSettings({ buildingId, annualRate, updatedBy }) {
+    await sequelize.query(
+      `INSERT INTO billing_interest_settings (building_id, annual_rate, updated_by)
+       VALUES (:buildingId, :annualRate, :updatedBy)
+       ON DUPLICATE KEY UPDATE annual_rate = VALUES(annual_rate), updated_by = VALUES(updated_by)`,
+      {
+        replacements: { buildingId, annualRate, updatedBy },
+        type: QueryTypes.INSERT
+      }
+    );
+    return this.findInterestSettings(buildingId);
+  }
+
+  async findInvoicesForInterest({ buildingId, calculationDate }) {
+    const rows = await sequelize.query(
+      `SELECT i.id,
+              i.total,
+              i.due_date AS dueDate,
+              p.payment_date AS paymentDate,
+              pa.amount AS paymentAmount
+       FROM invoices i
+       LEFT JOIN payment_allocations pa ON pa.invoice_id = i.id
+       LEFT JOIN payments p
+         ON p.id = pa.payment_id
+        AND p.status <> 'reversado'
+        AND p.building_id = i.building_id
+        AND p.unit_id = i.unit_id
+       WHERE i.building_id = :buildingId
+         AND i.due_date < :calculationDate
+       ORDER BY i.id ASC, p.payment_date ASC, p.id ASC`,
+      { replacements: { buildingId, calculationDate }, type: QueryTypes.SELECT }
+    );
+
+    const invoices = new Map();
+    for (const row of rows) {
+      if (!invoices.has(row.id)) {
+        invoices.set(row.id, {
+          id: Number(row.id),
+          total: Number(row.total),
+          dueDate: row.dueDate,
+          payments: []
+        });
+      }
+      if (row.paymentDate != null) {
+        invoices.get(row.id).payments.push({
+          paymentDate: row.paymentDate,
+          amount: Number(row.paymentAmount)
+        });
+      }
+    }
+    return [...invoices.values()];
+  }
+
+  async replaceLateInterests({ calculations, calculationDate, createdBy }) {
+    if (calculations.length === 0) return;
+
+    await sequelize.transaction(async (transaction) => {
+      for (const calculation of calculations) {
+        await sequelize.query(
+          `UPDATE late_interests
+           SET status = 'reversado'
+           WHERE invoice_id = :invoiceId AND status <> 'reversado'`,
+          {
+            replacements: { invoiceId: calculation.invoiceId },
+            type: QueryTypes.UPDATE,
+            transaction
+          }
+        );
+        await sequelize.query(
+          `INSERT INTO late_interests
+             (invoice_id, calculation_date, amount, status, created_by)
+           VALUES (:invoiceId, :calculationDate, :amount, 'pendiente', :createdBy)
+           ON DUPLICATE KEY UPDATE amount = VALUES(amount), status = 'pendiente', created_by = VALUES(created_by)`,
+          {
+            replacements: {
+              invoiceId: calculation.invoiceId,
+              calculationDate,
+              amount: calculation.amount,
+              createdBy
+            },
+            type: QueryTypes.INSERT,
+            transaction
+          }
+        );
+      }
+    });
+  }
+
   async findPortfolio({ buildingId, unitId = null, period = null, status = null, today }) {
     const rows = await sequelize.query(
       `WITH interest_totals AS (
@@ -858,9 +959,7 @@ export class BillingRepository {
     return sequelize.transaction(async (transaction) => {
       const payment = await Payment.findOne({
         where: { id: paymentId, buildingId },
-        include: [
-          { model: PaymentAllocation, as: 'allocations', attributes: ['invoiceId'] }
-        ],
+        include: [{ model: PaymentAllocation, as: 'allocations', attributes: ['invoiceId'] }],
         transaction
       });
       if (!payment) {

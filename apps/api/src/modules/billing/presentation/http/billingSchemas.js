@@ -86,3 +86,7 @@ export const applyPaymentSchema = z
   });
 
 export const paymentIdSchema = z.coerce.number().int().positive();
+
+export const interestSettingsSchema = z.object({
+  annualRate: z.coerce.number().min(0).max(100)
+});

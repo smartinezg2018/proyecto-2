@@ -4,10 +4,12 @@ import { formatCurrency as fmt, formatCompactCurrency as fmtM } from '../fixture
 import {
   getInvoiceDetail,
   getInvoiceHistory,
+  getInterestSettings,
   getPortfolio,
   getUnits,
   applyPayment,
-  registerPayment
+  registerPayment,
+  saveInterestSettings
 } from '../../services/api.js';
 import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
 import { MetricCard } from '../../components/MetricCard.jsx';
@@ -35,7 +37,7 @@ const STATUS_LABELS = new Map([
   ['reversado', 'Reversado']
 ]);
 
-export function ModuleFacturacion({ activeBuildingId }) {
+export function ModuleFacturacion({ activeBuildingId, canManageInterest = false }) {
   const [tab, setTab] = useState('cartera');
   const [portfolio, setPortfolio] = useState([]);
   const [units, setUnits] = useState([]);
@@ -54,6 +56,11 @@ export function ModuleFacturacion({ activeBuildingId }) {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const [paymentError, setPaymentError] = useState('');
+  const [annualRate, setAnnualRate] = useState('0');
+  const [interestSaving, setInterestSaving] = useState(false);
+  const [interestMessage, setInterestMessage] = useState('');
+  const [interestError, setInterestError] = useState('');
+  const [portfolioRefresh, setPortfolioRefresh] = useState(0);
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -65,17 +72,22 @@ export function ModuleFacturacion({ activeBuildingId }) {
     setPaymentForm(EMPTY_PAYMENT_FORM);
     setPaymentMessage('');
     setPaymentError('');
+    setAnnualRate('0');
+    setInterestMessage('');
+    setInterestError('');
     if (!activeBuildingId) return undefined;
 
     let cancelled = false;
-    getUnits(activeBuildingId)
-      .then((response) => {
-        if (!cancelled) {
-          setUnits((response.data ?? []).filter((unit) => unit.kind === 'apartamento'));
-        }
+    Promise.all([getUnits(activeBuildingId), getInterestSettings(activeBuildingId)])
+      .then(([unitsResponse, settingsResponse]) => {
+        if (cancelled) return;
+        setUnits((unitsResponse.data ?? []).filter((unit) => unit.kind === 'apartamento'));
+        setAnnualRate(String(settingsResponse.data?.annualRate ?? 0));
       })
-      .catch(() => {
-        if (!cancelled) setUnits([]);
+      .catch((requestError) => {
+        if (cancelled) return;
+        setUnits([]);
+        setInterestError(requestError.message || 'No fue posible consultar la tasa de mora.');
       });
     return () => {
       cancelled = true;
@@ -108,7 +120,7 @@ export function ModuleFacturacion({ activeBuildingId }) {
     return () => {
       cancelled = true;
     };
-  }, [activeBuildingId, filters]);
+  }, [activeBuildingId, filters, portfolioRefresh]);
 
   useEffect(() => {
     setInvoiceDetail(null);
@@ -226,6 +238,24 @@ export function ModuleFacturacion({ activeBuildingId }) {
       setPaymentError(requestError.message || 'No fue posible registrar el pago.');
     } finally {
       setPaymentSaving(false);
+    }
+  }
+
+  async function handleSaveInterestRate() {
+    setInterestSaving(true);
+    setInterestMessage('');
+    setInterestError('');
+    try {
+      const response = await saveInterestSettings(activeBuildingId, Number(annualRate));
+      setAnnualRate(String(response.data.settings.annualRate));
+      setInterestMessage(
+        `Cálculo actualizado para ${response.data.calculation.processed} facturas.`
+      );
+      setPortfolioRefresh((current) => current + 1);
+    } catch (requestError) {
+      setInterestError(requestError.message || 'No fue posible recalcular los intereses.');
+    } finally {
+      setInterestSaving(false);
     }
   }
 
@@ -392,6 +422,31 @@ export function ModuleFacturacion({ activeBuildingId }) {
 
       {tab === 'cartera' ? (
         <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
+            <label className="text-xs font-semibold text-slate-500">
+              Tasa anual de mora (%)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={annualRate}
+                onChange={(event) => setAnnualRate(event.target.value)}
+                disabled={!activeBuildingId || !canManageInterest || interestSaving}
+                className="mt-1 block w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              />
+            </label>
+            {canManageInterest && (
+              <Btn
+                onClick={handleSaveInterestRate}
+                disabled={!activeBuildingId || annualRate === '' || interestSaving}
+              >
+                {interestSaving ? 'Calculando…' : 'Guardar y recalcular'}
+              </Btn>
+            )}
+            {interestMessage && <p className="pb-2 text-xs text-emerald-600">{interestMessage}</p>}
+            {interestError && <p className="pb-2 text-xs text-red-600">{interestError}</p>}
+          </div>
           <div className="grid grid-cols-1 gap-3 border-b border-slate-100 bg-slate-50 p-4 md:grid-cols-4">
             <label className="text-xs font-semibold text-slate-500">
               Apartamento

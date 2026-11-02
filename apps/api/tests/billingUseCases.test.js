@@ -1,6 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createBillingUseCases } from '../src/modules/billing/application/billingUseCases.js';
+import {
+  calculateLateInterest,
+  createBillingUseCases
+} from '../src/modules/billing/application/billingUseCases.js';
+
+test('HU-049 / CP-049-01: calcula interés diario y días de mora', () => {
+  const result = calculateLateInterest(
+    { id: 1, total: 365000, dueDate: '2026-10-01', payments: [] },
+    36.5,
+    '2026-10-11'
+  );
+
+  assert.deepEqual(result, {
+    invoiceId: 1,
+    overdueDays: 10,
+    capitalBalance: 365000,
+    amount: 3650
+  });
+});
+
+test('HU-049 / CP-049-02: recalcula por valor y fecha de pagos sin capitalizar intereses', () => {
+  const result = calculateLateInterest(
+    {
+      id: 2,
+      total: 365000,
+      dueDate: '2026-10-01',
+      payments: [{ paymentDate: '2026-10-06', amount: 165000 }]
+    },
+    36.5,
+    '2026-10-11'
+  );
+
+  assert.equal(result.overdueDays, 10);
+  assert.equal(result.capitalBalance, 200000);
+  assert.equal(result.amount, 2825);
+});
 
 test('HU-046 pasa los filtros y la fecha de Colombia al consultar cartera', async () => {
   let received;
@@ -205,17 +240,18 @@ test('HU-044 aplica un pago en modo automático', async () => {
     buildingId: 4,
     paymentId: 21,
     mode: 'auto',
-    allocations: []
+    allocations: [],
+    updatedBy: null
   });
 });
 
 test('HU-044 exige facturas en la aplicación manual', async () => {
   const useCases = createBillingUseCases({ applyPayment: async () => ({}) });
 
-  await assert.rejects(
-    () => useCases.applyPayment(4, 21, { mode: 'manual', allocations: [] }),
-    { code: 'VALIDATION_ERROR', statusCode: 400 }
-  );
+  await assert.rejects(() => useCases.applyPayment(4, 21, { mode: 'manual', allocations: [] }), {
+    code: 'VALIDATION_ERROR',
+    statusCode: 400
+  });
 });
 
 test('HU-045 sincroniza estados de factura tras un cambio de pago', async () => {

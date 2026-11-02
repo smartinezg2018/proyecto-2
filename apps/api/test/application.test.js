@@ -1213,6 +1213,138 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     }
   );
 
+  let interestInvoiceId;
+  await check(
+    'CP-049-01',
+    'HU-049: configurar tasa y calcular días e interés de mora',
+    async () => {
+      const [invoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2024-08', '2024-08-10', 'pendiente', 'HU049-001', 365000, ?, ?)`,
+        [building1.id, unit2.id, admin.user.id, admin.user.id]
+      );
+      interestInvoiceId = invoice.insertId;
+
+      const response = await request(
+        `/api/v1/billing/buildings/${building1.id}/interest-settings`,
+        {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { annualRate: 36.5 }
+        }
+      );
+      expectStatus(response, 200);
+      assert.equal(response.payload.data.settings.annualRate, 36.5);
+      const calculation = response.payload.data.calculation.invoices.find(
+        (item) => item.invoiceId === interestInvoiceId
+      );
+      assert.ok(calculation.overdueDays > 0);
+      assert.ok(calculation.amount > 0);
+
+      const settings = await request(
+        `/api/v1/billing/buildings/${building1.id}/interest-settings`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(settings, 200);
+      assert.equal(settings.payload.data.annualRate, 36.5);
+
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/interest-settings`, {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { annualRate: -1 }
+        }),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/interest-settings`, {
+          method: 'PUT',
+          cookie: admin.cookie,
+          body: { annualRate: 100.01 }
+        }),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/interests/recalculate`, {
+          method: 'POST',
+          cookie: operator.cookie
+        }),
+        403
+      );
+    }
+  );
+
+  await check(
+    'CP-049-02',
+    'HU-049: recalcular cuando cambia el saldo o la fecha del pago',
+    async () => {
+      const [invoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2024-09', '2024-09-10', 'parcialmente_pagada', 'HU049-002', 365000, ?, ?)`,
+        [building1.id, unit1.id, admin.user.id, admin.user.id]
+      );
+      const [payment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2024-09-15', 165000, 'transferencia', 'HU049-PAGO-001', 'aplicado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 165000)',
+        [payment.insertId, invoice.insertId]
+      );
+      const [reversedPayment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2024-09-12', 50000, 'efectivo', 'HU049-PAGO-REV', 'reversado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 50000)',
+        [reversedPayment.insertId, invoice.insertId]
+      );
+
+      const first = await request(
+        `/api/v1/billing/buildings/${building1.id}/interests/recalculate`,
+        { method: 'POST', cookie: admin.cookie }
+      );
+      expectStatus(first, 200);
+      const firstCalculation = first.payload.data.invoices.find(
+        (item) => item.invoiceId === invoice.insertId
+      );
+      assert.equal(firstCalculation.capitalBalance, 200000);
+
+      await database.query(
+        `UPDATE payments SET payment_date = '2024-09-20', amount = 265000 WHERE id = ?`,
+        [payment.insertId]
+      );
+      await database.query('UPDATE payment_allocations SET amount = 265000 WHERE payment_id = ?', [
+        payment.insertId
+      ]);
+
+      const second = await request(
+        `/api/v1/billing/buildings/${building1.id}/interests/recalculate`,
+        { method: 'POST', cookie: admin.cookie }
+      );
+      expectStatus(second, 200);
+      const secondCalculation = second.payload.data.invoices.find(
+        (item) => item.invoiceId === invoice.insertId
+      );
+      assert.equal(secondCalculation.capitalBalance, 100000);
+      assert.notEqual(secondCalculation.amount, firstCalculation.amount);
+
+      const [activeInterests] = await database.query(
+        `SELECT amount FROM late_interests
+         WHERE invoice_id = ? AND status <> 'reversado'`,
+        [invoice.insertId]
+      );
+      assert.equal(activeInterests.length, 1);
+      assert.equal(Number(activeInterests[0].amount), secondCalculation.amount);
+    }
+  );
+
   await pendingCheck(
     'CP-034-01',
     'HU-034: asociar varios activos y mostrarlos en el detalle',
