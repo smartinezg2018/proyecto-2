@@ -6,7 +6,8 @@ const validInput = {
   supplierId: 2,
   amount: 58500000,
   validUntil: '2026-11-30',
-  scope: 'Impermeabilización completa de la cubierta, incluyendo desmonte y pruebas de estanqueidad.',
+  scope:
+    'Impermeabilización completa de la cubierta, incluyendo desmonte y pruebas de estanqueidad.',
   conditions: 'Pago 40% anticipo y 60% contra entrega. Garantía de 2 años.',
   deliveryDays: 60,
   documentRef: 'cotizacion-cubierta.pdf'

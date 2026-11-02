@@ -29,7 +29,7 @@ const PROJECT_TYPE_LABELS = Object.fromEntries(
 
 const PROJECT_STATUS_LABELS = {
   aprobado: 'Aprobado',
-  en_ejecucion: 'En ejecución',
+  ['en_ejecucion']: 'En ejecución',
   finalizado: 'Finalizado',
   cancelado: 'Cancelado'
 };
@@ -721,7 +721,8 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                             <option value="">Selecciona una cotización</option>
                             {(project.quotes ?? []).map((quote) => (
                               <option key={quote.id} value={quote.id}>
-                                {quote.supplier?.name || 'Proveedor'} · {formatCurrency(quote.amount)}
+                                {quote.supplier?.name || 'Proveedor'} ·{' '}
+                                {formatCurrency(quote.amount)}
                               </option>
                             ))}
                           </select>
@@ -871,9 +872,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       />
                     </label>
                     <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-bold text-slate-500">
-                        Alcance *
-                      </span>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">Alcance *</span>
                       <textarea
                         name="scope"
                         value={quoteForm.scope}
@@ -897,9 +896,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       />
                     </label>
                     <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-bold text-slate-500">
-                        Documento
-                      </span>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">Documento</span>
                       <input
                         name="documentRef"
                         value={quoteForm.documentRef}
@@ -1050,9 +1047,7 @@ export function ModuleProyectos({ permissions = [], activeBuildingId = null }) {
                       />
                     </label>
                     <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-bold text-slate-500">
-                        Evidencia
-                      </span>
+                      <span className="mb-1 block text-xs font-bold text-slate-500">Evidencia</span>
                       <input
                         name="evidenceRef"
                         value={progressForm.evidenceRef}

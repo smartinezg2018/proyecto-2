@@ -68,6 +68,15 @@ export function getPaymentSlip(invoiceId) {
   });
 }
 
+export function getPortfolio(buildingId, filters = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== '' && value !== null && value !== undefined) query.set(key, value);
+  }
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/portfolio${suffix}`);
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

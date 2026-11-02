@@ -8,8 +8,10 @@ import { createBillingUseCases } from '../../application/billingUseCases.js';
 import {
   generateExtraordinaryChargesSchema,
   generateRetroactiveChargesSchema,
-  generateOrdinaryInvoicesSchema
+  generateOrdinaryInvoicesSchema,
+  listPortfolioQuerySchema
 } from './billingSchemas.js';
+import { AppError } from '../../../../shared/errors/AppError.js';
 
 export const billingRoutes = Router();
 const useCases = createBillingUseCases(new BillingRepository());
@@ -20,7 +22,9 @@ async function ensureInvoiceBuildingAccess(request, response, next) {
   try {
     const invoice = await new BillingRepository().findPaymentSlip(request.params.invoiceId);
     if (!invoice) {
-      response.status(404).json({ error: { code: 'INVOICE_NOT_FOUND', message: 'La factura no existe.' } });
+      response
+        .status(404)
+        .json({ error: { code: 'INVOICE_NOT_FOUND', message: 'La factura no existe.' } });
       return;
     }
     request.params.buildingId = String(invoice.buildingId);
@@ -29,6 +33,21 @@ async function ensureInvoiceBuildingAccess(request, response, next) {
     next(error);
   }
 }
+
+billingRoutes.get(
+  '/buildings/:buildingId/portfolio',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsed = listPortfolioQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError('Los filtros de cartera no son válidos.', 400, 'VALIDATION_ERROR');
+    }
+    const portfolio = await useCases.listPortfolio(request.params.buildingId, parsed.data);
+    response.json({ data: portfolio, meta: { requestId: request.id } });
+  })
+);
 
 billingRoutes.post(
   '/buildings/:buildingId/invoices/ordinary',
@@ -57,9 +76,9 @@ billingRoutes.post(
           .send(
             `<article><h1>Colilla de pago</h1><p>Apartamento: ${escapeHtml(
               invoice.unit.number
-            )}</p><p>Vencimiento: ${escapeHtml(invoice.dueDate)}</p><ul>${lines}</ul><strong>Total: $${
-              invoice.total.toFixed(2)
-            }</strong><p>Referencia de pago: ${escapeHtml(invoice.paymentReference)}</p></article>`
+            )}</p><p>Vencimiento: ${escapeHtml(invoice.dueDate)}</p><ul>${lines}</ul><strong>Total: $${invoice.total.toFixed(
+              2
+            )}</strong><p>Referencia de pago: ${escapeHtml(invoice.paymentReference)}</p></article>`
           );
       })
     );

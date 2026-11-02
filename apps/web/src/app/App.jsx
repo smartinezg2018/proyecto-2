@@ -179,7 +179,7 @@ export default function App() {
       case 'seguros':
         return <ModuleSeguros activeBuildingId={activeBuildingId} permissions={permissions} />;
       case 'facturacion':
-        return <ModuleFacturacion />;
+        return <ModuleFacturacion activeBuildingId={activeBuildingId} />;
       case 'presupuesto':
         return <ModulePresupuesto />;
       case 'proyectos':

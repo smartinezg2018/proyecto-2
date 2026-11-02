@@ -459,9 +459,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
           </select>
         </label>
         <label>
-          <span className="mb-1 block text-xs font-bold text-slate-500">
-            Historial por activo
-          </span>
+          <span className="mb-1 block text-xs font-bold text-slate-500">Historial por activo</span>
           <select
             value={assetFilter}
             onChange={(event) => setAssetFilter(event.target.value)}
@@ -538,7 +536,9 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                     : ''}{' '}
                   · ejecución {formatDateDisplay(alert.targetDate)}
                   {alert.responsible ? ` · ${alert.responsible}` : ''}
-                  {alert.frequency ? ` · ${FREQUENCY_LABELS[alert.frequency] || alert.frequency}` : ''}
+                  {alert.frequency
+                    ? ` · ${FREQUENCY_LABELS[alert.frequency] || alert.frequency}`
+                    : ''}
                   {alert.failure ? ` · ${alert.failure}` : ''}
                 </span>
                 <span className="flex gap-3">
@@ -740,9 +740,7 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
                 </>
               ) : (
                 <label className="sm:col-span-3">
-                  <span className="mb-1 block text-xs font-bold text-slate-500">
-                    Descripción *
-                  </span>
+                  <span className="mb-1 block text-xs font-bold text-slate-500">Descripción *</span>
                   <textarea
                     name="description"
                     value={form.description}
@@ -991,8 +989,15 @@ export function ModuleMantenimientos({ permissions = [], activeBuildingId = null
         <table className="w-full text-left">
           <thead>
             <tr className="bg-blue-600">
-              {['Fecha de ejecución', 'Activo', 'Tipo', 'Programación', 'Estado', 'Costo', 'Descripción'].map(
-                (heading) => (
+              {[
+                'Fecha de ejecución',
+                'Activo',
+                'Tipo',
+                'Programación',
+                'Estado',
+                'Costo',
+                'Descripción'
+              ].map((heading) => (
                 <th
                   key={heading}
                   className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-white"
