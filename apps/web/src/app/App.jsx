@@ -186,7 +186,12 @@ export default function App() {
           />
         );
       case 'presupuesto':
-        return <ModulePresupuesto />;
+        return (
+          <ModulePresupuesto
+            activeBuildingId={activeBuildingId}
+            canUpdateBudget={hasPermission(permissions, 'budget.update')}
+          />
+        );
       case 'proyectos':
         return <ModuleProyectos permissions={permissions} activeBuildingId={activeBuildingId} />;
       case 'usuarios':

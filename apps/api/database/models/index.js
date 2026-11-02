@@ -19,6 +19,9 @@ import { CashReceipt } from './CashReceipt.js';
 import { Project } from './Project.js';
 import { ProjectQuote } from './ProjectQuote.js';
 import { ProjectProgress } from './ProjectProgress.js';
+import { AnnualBudget } from './AnnualBudget.js';
+import { BudgetLine } from './BudgetLine.js';
+import { BudgetExecution } from './BudgetExecution.js';
 
 Unit.hasOne(UnitResponsible, { foreignKey: 'unitId', as: 'responsibleAssignment' });
 UnitResponsible.belongsTo(Unit, { foreignKey: 'unitId' });
@@ -70,6 +73,10 @@ ProjectQuote.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
 Supplier.hasMany(ProjectQuote, { foreignKey: 'supplierId', as: 'projectQuotes' });
 Project.hasMany(ProjectProgress, { foreignKey: 'projectId', as: 'progressEntries' });
 ProjectProgress.belongsTo(Project, { foreignKey: 'projectId' });
+AnnualBudget.hasMany(BudgetLine, { foreignKey: 'budgetId', as: 'lines' });
+BudgetLine.belongsTo(AnnualBudget, { foreignKey: 'budgetId', as: 'budget' });
+BudgetLine.hasMany(BudgetExecution, { foreignKey: 'budgetLineId', as: 'executions' });
+BudgetExecution.belongsTo(BudgetLine, { foreignKey: 'budgetLineId', as: 'line' });
 
 export {
   Asset,
@@ -92,5 +99,8 @@ export {
   CashReceipt,
   Project,
   ProjectQuote,
-  ProjectProgress
+  ProjectProgress,
+  AnnualBudget,
+  BudgetLine,
+  BudgetExecution
 };
