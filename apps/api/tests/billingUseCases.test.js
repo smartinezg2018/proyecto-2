@@ -189,3 +189,31 @@ test('HU-043 rechaza un valor de pago inválido', async () => {
     { code: 'VALIDATION_ERROR', statusCode: 400 }
   );
 });
+
+test('HU-044 aplica un pago en modo automático', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async applyPayment(input) {
+      received = input;
+      return { id: input.paymentId, status: 'aplicado', creditBalance: 50000, allocations: [] };
+    }
+  });
+
+  const payment = await useCases.applyPayment(4, 21, { mode: 'auto' });
+  assert.equal(payment.status, 'aplicado');
+  assert.deepEqual(received, {
+    buildingId: 4,
+    paymentId: 21,
+    mode: 'auto',
+    allocations: []
+  });
+});
+
+test('HU-044 exige facturas en la aplicación manual', async () => {
+  const useCases = createBillingUseCases({ applyPayment: async () => ({}) });
+
+  await assert.rejects(
+    () => useCases.applyPayment(4, 21, { mode: 'manual', allocations: [] }),
+    { code: 'VALIDATION_ERROR', statusCode: 400 }
+  );
+});

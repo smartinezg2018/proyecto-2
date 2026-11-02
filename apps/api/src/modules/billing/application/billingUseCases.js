@@ -111,6 +111,27 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         reference: String(input.reference).trim(),
         createdBy
       });
+    },
+
+    async applyPayment(buildingId, paymentId, input) {
+      const mode = input.mode;
+      if (mode !== 'auto' && mode !== 'manual') {
+        throw new AppError('El modo de aplicación no es válido.', 400, 'VALIDATION_ERROR');
+      }
+      if (mode === 'manual' && (!Array.isArray(input.allocations) || input.allocations.length === 0)) {
+        throw new AppError(
+          'Debe indicar al menos una factura para la aplicación manual.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      return repository.applyPayment({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId),
+        mode,
+        allocations: mode === 'manual' ? input.allocations : []
+      });
     }
   };
 }

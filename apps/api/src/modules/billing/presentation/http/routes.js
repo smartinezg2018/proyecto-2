@@ -12,7 +12,9 @@ import {
   listPortfolioQuerySchema,
   listInvoiceHistoryQuerySchema,
   invoiceIdSchema,
-  registerPaymentSchema
+  registerPaymentSchema,
+  applyPaymentSchema,
+  paymentIdSchema
 } from './billingSchemas.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
 
@@ -147,6 +149,26 @@ billingRoutes.post(
       request.user.id
     );
     response.status(201).json({ data: payment, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/payments/:paymentId/apply',
+  requireAuth,
+  requirePermission('billing.payment.apply'),
+  ensureBuildingAccess,
+  validateBody(applyPaymentSchema),
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const payment = await useCases.applyPayment(
+      request.params.buildingId,
+      parsedPaymentId.data,
+      request.body
+    );
+    response.json({ data: payment, meta: { requestId: request.id } });
   })
 );
 
