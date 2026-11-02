@@ -77,6 +77,18 @@ export function getPortfolio(buildingId, filters = {}) {
   return apiRequest(`/api/v1/billing/buildings/${buildingId}/portfolio${suffix}`);
 }
 
+export function getInvoiceHistory(buildingId, filters) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== '' && value !== null && value !== undefined) query.set(key, value);
+  }
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/invoices?${query.toString()}`);
+}
+
+export function getInvoiceDetail(buildingId, invoiceId) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/invoices/${invoiceId}`);
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

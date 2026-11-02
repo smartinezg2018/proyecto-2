@@ -39,3 +39,11 @@ export const listPortfolioQuerySchema = z.object({
   period: periodSchema.optional(),
   status: z.enum(['al_dia', 'pendiente', 'en_mora']).optional()
 });
+
+export const listInvoiceHistoryQuerySchema = z.object({
+  unitId: z.coerce.number().int().positive(),
+  period: periodSchema.optional(),
+  status: z.enum(['pendiente', 'parcialmente_pagada', 'pagada']).optional()
+});
+
+export const invoiceIdSchema = z.coerce.number().int().positive();

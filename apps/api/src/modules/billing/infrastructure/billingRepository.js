@@ -108,6 +108,166 @@ export class BillingRepository {
     }));
   }
 
+  async findInvoiceHistory({ buildingId, unitId, period = null, status = null }) {
+    const rows = await sequelize.query(
+      `WITH interest_totals AS (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ),
+       payment_totals AS (
+         SELECT pa.invoice_id, SUM(pa.amount) AS appliedPayments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         INNER JOIN invoices payment_invoice
+           ON payment_invoice.id = pa.invoice_id
+          AND payment_invoice.building_id = p.building_id
+          AND payment_invoice.unit_id = p.unit_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       )
+       SELECT i.id,
+              i.unit_id AS unitId,
+              u.number AS unitNumber,
+              u.tower,
+              i.period,
+              i.due_date AS dueDate,
+              i.status,
+              i.payment_reference AS paymentReference,
+              i.total,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.appliedPayments, 0) AS appliedPayments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.appliedPayments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       INNER JOIN units u
+         ON u.id = i.unit_id
+        AND u.building_id = i.building_id
+       LEFT JOIN interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.building_id = :buildingId
+         AND i.unit_id = :unitId
+         AND (:period IS NULL OR i.period = :period)
+         AND (:status IS NULL OR i.status = :status)
+       ORDER BY i.period DESC, i.id DESC`,
+      {
+        replacements: { buildingId: Number(buildingId), unitId, period, status },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    return rows.map(mapInvoiceSummary);
+  }
+
+  async findInvoiceDetail({ buildingId, invoiceId }) {
+    const rows = await sequelize.query(
+      `WITH interest_totals AS (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ),
+       payment_totals AS (
+         SELECT pa.invoice_id, SUM(pa.amount) AS appliedPayments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         INNER JOIN invoices payment_invoice
+           ON payment_invoice.id = pa.invoice_id
+          AND payment_invoice.building_id = p.building_id
+          AND payment_invoice.unit_id = p.unit_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       )
+       SELECT i.id,
+              i.unit_id AS unitId,
+              u.number AS unitNumber,
+              u.tower,
+              i.period,
+              i.due_date AS dueDate,
+              i.status,
+              i.payment_reference AS paymentReference,
+              i.total,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.appliedPayments, 0) AS appliedPayments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.appliedPayments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       INNER JOIN units u
+         ON u.id = i.unit_id
+        AND u.building_id = i.building_id
+       LEFT JOIN interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.building_id = :buildingId
+         AND i.id = :invoiceId`,
+      {
+        replacements: { buildingId: Number(buildingId), invoiceId: Number(invoiceId) },
+        type: QueryTypes.SELECT
+      }
+    );
+    if (rows.length === 0) return null;
+
+    const [items, payments, interests] = await Promise.all([
+      sequelize.query(
+        `SELECT id, concept, amount
+         FROM invoice_items
+         WHERE invoice_id = :invoiceId
+         ORDER BY id ASC`,
+        { replacements: { invoiceId: Number(invoiceId) }, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT p.id,
+                p.payment_date AS paymentDate,
+                p.payment_method AS paymentMethod,
+                p.reference,
+                p.status,
+                pa.amount
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         WHERE pa.invoice_id = :invoiceId
+           AND p.building_id = :buildingId
+           AND p.unit_id = :unitId
+         ORDER BY p.payment_date DESC, p.id DESC`,
+        {
+          replacements: {
+            invoiceId: Number(invoiceId),
+            buildingId: Number(buildingId),
+            unitId: Number(rows[0].unitId)
+          },
+          type: QueryTypes.SELECT
+        }
+      ),
+      sequelize.query(
+        `SELECT id, calculation_date AS calculationDate, amount, status
+         FROM late_interests
+         WHERE invoice_id = :invoiceId
+         ORDER BY calculation_date DESC, id DESC`,
+        { replacements: { invoiceId: Number(invoiceId) }, type: QueryTypes.SELECT }
+      )
+    ]);
+
+    return {
+      ...mapInvoiceSummary(rows[0]),
+      items: items.map((item) => ({ ...item, id: Number(item.id), amount: Number(item.amount) })),
+      payments: payments.map((payment) => ({
+        ...payment,
+        id: Number(payment.id),
+        amount: Number(payment.amount)
+      })),
+      interestEntries: interests.map((interest) => ({
+        ...interest,
+        id: Number(interest.id),
+        amount: Number(interest.amount)
+      }))
+    };
+  }
+
   async createOrdinaryInvoices({
     buildingId,
     period,
@@ -254,6 +414,23 @@ export class BillingRepository {
     await ChargeSchedule.bulkCreate(schedules);
     return schedules;
   }
+}
+
+function mapInvoiceSummary(row) {
+  return {
+    id: Number(row.id),
+    unitId: Number(row.unitId),
+    unitNumber: row.unitNumber,
+    tower: row.tower,
+    period: row.period,
+    dueDate: row.dueDate,
+    status: row.status,
+    paymentReference: row.paymentReference,
+    total: Number(row.total),
+    interests: Number(row.interests),
+    appliedPayments: Number(row.appliedPayments),
+    balance: Number(row.balance)
+  };
 }
 
 function addMonths(period, months) {
