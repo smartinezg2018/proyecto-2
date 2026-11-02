@@ -133,6 +133,19 @@ export function saveInterestSettings(buildingId, annualRate) {
   });
 }
 
+export function getPreviousBudgetExecution(buildingId, year) {
+  return apiRequest(
+    `/api/v1/budget/buildings/${buildingId}/executions/summary?year=${encodeURIComponent(year)}`
+  );
+}
+
+export function createBudgetFromExecution(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/from-execution`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

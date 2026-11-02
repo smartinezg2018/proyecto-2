@@ -5,8 +5,9 @@ import { BUDGET_ITEMS, formatCompactCurrency as fmtM } from '../fixtures.js';
 import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
+import { HistoricalBudgetSection } from './HistoricalBudgetSection.jsx';
 
-export function ModulePresupuesto() {
+export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false }) {
   const [method, setMethod] = useState('Hist�rica');
   const totalP = BUDGET_ITEMS.reduce((s, b) => s + b.projected, 0);
   const totalE = BUDGET_ITEMS.reduce((s, b) => s + b.executed, 0);
@@ -28,6 +29,11 @@ export function ModulePresupuesto() {
             <Plus size={14} /> Registrar Ejecuci�n
           </Btn>
         }
+      />
+
+      <HistoricalBudgetSection
+        activeBuildingId={activeBuildingId}
+        canUpdateBudget={canUpdateBudget}
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">

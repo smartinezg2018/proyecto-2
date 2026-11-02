@@ -1474,6 +1474,155 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     }
   );
 
+  let budgetSourceLines;
+  let otherBuildingBudgetLineId;
+  await check(
+    'CP-052-01',
+    'HU-052: consultar ejecución anterior agregada por partida',
+    async () => {
+      const [budget] = await database.query(
+        `INSERT INTO annual_budgets
+          (building_id, year, version, status, created_by, updated_by)
+         VALUES (?, 2025, 1, 'cerrado', ?, ?)`,
+        [building1.id, admin.user.id, admin.user.id]
+      );
+      await database.query(
+        `INSERT INTO budget_lines (budget_id, code, name, classification, amount)
+         VALUES (?, 'ASE', 'Aseo', 'gasto', 45000000),
+                (?, 'CUO', 'Cuotas ordinarias', 'ingreso', 280000000),
+                (?, 'VIG', 'Vigilancia', 'gasto', 120000000)`,
+        [budget.insertId, budget.insertId, budget.insertId]
+      );
+      [budgetSourceLines] = await database.query(
+        'SELECT id, code FROM budget_lines WHERE budget_id = ? ORDER BY code ASC',
+        [budget.insertId]
+      );
+      const lineByCode = new Map(budgetSourceLines.map((line) => [line.code, line.id]));
+      await database.query(
+        `INSERT INTO budget_executions (budget_line_id, execution_date, amount, description, created_by)
+         VALUES (?, '2025-03-15', 20000000, 'Primer trimestre', ?),
+                (?, '2025-09-15', 23000000, 'Segundo semestre', ?),
+                (?, '2025-12-01', 275000000, 'Recaudo anual', ?)`,
+        [
+          lineByCode.get('ASE'),
+          admin.user.id,
+          lineByCode.get('ASE'),
+          admin.user.id,
+          lineByCode.get('CUO'),
+          admin.user.id
+        ]
+      );
+
+      const [otherBudget] = await database.query(
+        `INSERT INTO annual_budgets
+          (building_id, year, version, status, created_by, updated_by)
+         VALUES (?, 2025, 1, 'cerrado', ?, ?)`,
+        [building2.id, admin.user.id, admin.user.id]
+      );
+      const [otherLine] = await database.query(
+        `INSERT INTO budget_lines (budget_id, code, name, classification, amount)
+         VALUES (?, 'OTR', 'Partida ajena', 'gasto', 999999999)`,
+        [otherBudget.insertId]
+      );
+      otherBuildingBudgetLineId = otherLine.insertId;
+
+      const response = await request(
+        `/api/v1/budget/buildings/${building1.id}/executions/summary?year=2025`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(response, 200);
+      assert.equal(response.payload.data.totalBudgeted, 445000000);
+      assert.equal(response.payload.data.totalExecuted, 318000000);
+      assert.deepEqual(
+        response.payload.data.lines.map((line) => [line.code, line.executedAmount]),
+        [
+          ['ASE', 43000000],
+          ['CUO', 275000000],
+          ['VIG', 0]
+        ]
+      );
+
+      expectStatus(
+        await request(`/api/v1/budget/buildings/${building1.id}/executions/summary?year=invalido`, {
+          cookie: admin.cookie
+        }),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/budget/buildings/${building1.id}/executions/summary?year=2025`, {
+          cookie: operator.cookie
+        }),
+        403
+      );
+    }
+  );
+
+  await check(
+    'CP-052-02',
+    'HU-052: copiar bases editadas sin sobrescribir un borrador existente',
+    async () => {
+      const amountByCode = new Map([
+        ['ASE', 44000000],
+        ['CUO', 276000000],
+        ['VIG', 118500000]
+      ]);
+      const payload = {
+        sourceYear: 2025,
+        targetYear: 2026,
+        lines: budgetSourceLines.map((line) => ({
+          sourceLineId: line.id,
+          amount: amountByCode.get(line.code)
+        }))
+      };
+      const response = await request(
+        `/api/v1/budget/buildings/${building1.id}/budgets/from-execution`,
+        { method: 'POST', cookie: admin.cookie, body: payload }
+      );
+      expectStatus(response, 201);
+      assert.equal(response.payload.data.status, 'borrador');
+      assert.equal(response.payload.data.sourceYear, 2025);
+      assert.deepEqual(
+        response.payload.data.lines.map((line) => [line.code, line.classification, line.amount]),
+        [
+          ['ASE', 'gasto', 44000000],
+          ['CUO', 'ingreso', 276000000],
+          ['VIG', 'gasto', 118500000]
+        ]
+      );
+
+      expectStatus(
+        await request(`/api/v1/budget/buildings/${building1.id}/budgets/from-execution`, {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: payload
+        }),
+        409
+      );
+      expectStatus(
+        await request(`/api/v1/budget/buildings/${building1.id}/budgets/from-execution`, {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: { ...payload, targetYear: 2027 }
+        }),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/budget/buildings/${building1.id}/budgets/from-execution`, {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: {
+            ...payload,
+            lines: [
+              ...payload.lines.slice(0, -1),
+              { sourceLineId: otherBuildingBudgetLineId, amount: 1 }
+            ]
+          }
+        }),
+        400
+      );
+    }
+  );
+
   await pendingCheck(
     'CP-034-01',
     'HU-034: asociar varios activos y mostrarlos en el detalle',
