@@ -963,6 +963,7 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
           unitNumber: unit1.number,
           tower: unit1.tower,
           capital: 500000,
+          otherConcepts: 0,
           interests: 15000,
           payments: 300000,
           totalBalance: 215000,
@@ -1342,6 +1343,134 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
       );
       assert.equal(activeInterests.length, 1);
       assert.equal(Number(activeInterests[0].amount), secondCalculation.amount);
+    }
+  );
+
+  await check(
+    'CP-050-01',
+    'HU-050: separar capital, intereses y otros conceptos en la cartera',
+    async () => {
+      const [invoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2024-10', '2024-10-10', 'parcialmente_pagada', 'HU050-001', 600000, ?, ?)`,
+        [building1.id, unit2.id, admin.user.id, admin.user.id]
+      );
+      await database.query(
+        `INSERT INTO invoice_items (invoice_id, concept, item_type, amount)
+         VALUES (?, 'Administración', 'capital', 500000),
+                (?, 'Uso de salón', 'other', 100000)`,
+        [invoice.insertId, invoice.insertId]
+      );
+      await database.query(
+        `INSERT INTO late_interests (invoice_id, calculation_date, amount, status, created_by)
+         VALUES (?, '2024-11-01', 15000, 'pendiente', ?)`,
+        [invoice.insertId, admin.user.id]
+      );
+      const [payment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2024-10-15', 200000, 'transferencia', 'HU050-PAGO-001', 'aplicado', ?)`,
+        [building1.id, unit2.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 200000)',
+        [payment.insertId, invoice.insertId]
+      );
+
+      const portfolio = await request(
+        `/api/v1/billing/buildings/${building1.id}/portfolio?unitId=${unit2.id}&period=2024-10`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(portfolio, 200);
+      assert.deepEqual(portfolio.payload.data, [
+        {
+          unitId: unit2.id,
+          unitNumber: unit2.number,
+          tower: unit2.tower,
+          capital: 500000,
+          otherConcepts: 100000,
+          interests: 15000,
+          payments: 200000,
+          totalBalance: 415000,
+          status: 'en_mora'
+        }
+      ]);
+
+      const detail = await request(
+        `/api/v1/billing/buildings/${building1.id}/invoices/${invoice.insertId}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(detail, 200);
+      assert.deepEqual(
+        detail.payload.data.items.map((item) => item.itemType),
+        ['capital', 'other']
+      );
+    }
+  );
+
+  await check(
+    'CP-050-02',
+    'HU-050: excluir intereses y otros conceptos de la base del nuevo cálculo',
+    async () => {
+      const [invoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2024-11', '2024-11-10', 'parcialmente_pagada', 'HU050-002', 600000, ?, ?)`,
+        [building1.id, unit1.id, admin.user.id, admin.user.id]
+      );
+      await database.query(
+        `INSERT INTO invoice_items (invoice_id, concept, item_type, amount)
+         VALUES (?, 'Administración', 'capital', 500000),
+                (?, 'Multa', 'other', 100000)`,
+        [invoice.insertId, invoice.insertId]
+      );
+      await database.query(
+        `INSERT INTO late_interests (invoice_id, calculation_date, amount, status, created_by)
+         VALUES (?, '2024-11-11', 999999, 'pendiente', ?)`,
+        [invoice.insertId, admin.user.id]
+      );
+      const [payment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2024-11-15', 600000, 'transferencia', 'HU050-PAGO-002', 'aplicado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 600000)',
+        [payment.insertId, invoice.insertId]
+      );
+      const [reversedPayment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2024-11-11', 500000, 'efectivo', 'HU050-PAGO-REV', 'reversado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 500000)',
+        [reversedPayment.insertId, invoice.insertId]
+      );
+
+      const response = await request(
+        `/api/v1/billing/buildings/${building1.id}/interests/recalculate`,
+        { method: 'POST', cookie: admin.cookie }
+      );
+      expectStatus(response, 200);
+      const calculation = response.payload.data.invoices.find(
+        (item) => item.invoiceId === invoice.insertId
+      );
+      assert.equal(calculation.capitalBalance, 0);
+      assert.equal(calculation.amount, 2500);
+
+      const [activeInterests] = await database.query(
+        `SELECT amount FROM late_interests
+         WHERE invoice_id = ? AND status <> 'reversado'`,
+        [invoice.insertId]
+      );
+      assert.deepEqual(
+        activeInterests.map((item) => Number(item.amount)),
+        [2500]
+      );
     }
   );
 

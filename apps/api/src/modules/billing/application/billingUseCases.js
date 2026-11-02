@@ -18,7 +18,7 @@ function daysBetween(from, to) {
 
 export function calculateLateInterest(invoice, annualRate, calculationDate) {
   const overdueDays = daysBetween(invoice.dueDate, calculationDate);
-  let balance = Number(invoice.total);
+  let balance = Number(invoice.capital ?? invoice.total);
   let weightedCapitalDays = 0;
   let cursor = invoice.dueDate;
 
