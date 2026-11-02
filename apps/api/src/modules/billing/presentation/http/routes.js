@@ -192,6 +192,47 @@ billingRoutes.post(
   })
 );
 
+billingRoutes.get(
+  '/buildings/:buildingId/payments/:paymentId/cash-receipt',
+  requireAuth,
+  requirePermission('billing.receipt.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const receipt = await useCases.getCashReceipt(
+      request.params.buildingId,
+      parsedPaymentId.data
+    );
+    if (request.query.format === 'json') {
+      response.json({ data: receipt, meta: { requestId: request.id } });
+      return;
+    }
+
+    const invoiceLines = receipt.invoices
+      .map(
+        (invoice) =>
+          `<li>Factura ${invoice.invoiceId}${invoice.period ? ` (${escapeHtml(invoice.period)})` : ''}: aplicado $${Number(invoice.appliedAmount).toFixed(2)} — saldo $${Number(invoice.balance ?? 0).toFixed(2)}</li>`
+      )
+      .join('');
+    response.type('html').send(
+      `<article><h1>Recibo de caja N° ${receipt.receiptNumber}</h1><p>Apartamento: ${escapeHtml(
+        receipt.unit?.number ?? ''
+      )}</p><p>Fecha: ${escapeHtml(receipt.payment.paymentDate)}</p><p>Valor: $${Number(
+        receipt.payment.amount
+      ).toFixed(2)}</p><p>Medio: ${escapeHtml(
+        receipt.payment.paymentMethod
+      )}</p><p>Referencia: ${escapeHtml(
+        receipt.payment.reference
+      )}</p><ul>${invoiceLines}</ul><p>Saldo a favor: $${Number(receipt.creditBalance).toFixed(
+        2
+      )}</p></article>`
+    );
+  })
+);
+
 billingRoutes.post(
   '/buildings/:buildingId/charges/extraordinary',
   requireAuth,

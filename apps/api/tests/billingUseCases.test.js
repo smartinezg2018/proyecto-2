@@ -251,3 +251,33 @@ test('HU-045 pasa el usuario al aplicar un pago para actualizar facturas', async
   assert.equal(payment.invoiceStatuses[0].status, 'pagada');
   assert.equal(received.updatedBy, 9);
 });
+
+test('HU-048 obtiene el recibo de caja de un pago aplicado', async () => {
+  const useCases = createBillingUseCases({
+    async findCashReceiptDetail() {
+      return {
+        receiptNumber: 12,
+        payment: { id: 21, amount: 250000 },
+        invoices: [{ invoiceId: 8, appliedAmount: 200000, balance: 0 }],
+        creditBalance: 50000
+      };
+    }
+  });
+
+  const receipt = await useCases.getCashReceipt(4, 21);
+  assert.equal(receipt.receiptNumber, 12);
+  assert.equal(receipt.creditBalance, 50000);
+});
+
+test('HU-048 rechaza cuando no existe recibo de caja', async () => {
+  const useCases = createBillingUseCases({
+    async findCashReceiptDetail() {
+      return null;
+    }
+  });
+
+  await assert.rejects(() => useCases.getCashReceipt(4, 99), {
+    code: 'CASH_RECEIPT_NOT_FOUND',
+    statusCode: 404
+  });
+});

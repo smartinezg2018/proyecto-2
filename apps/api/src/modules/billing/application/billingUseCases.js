@@ -141,6 +141,21 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         paymentId: Number(paymentId),
         updatedBy
       });
+    },
+
+    async getCashReceipt(buildingId, paymentId) {
+      const receipt = await repository.findCashReceiptDetail({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId)
+      });
+      if (!receipt) {
+        throw new AppError(
+          'No existe un recibo de caja para el pago indicado.',
+          404,
+          'CASH_RECEIPT_NOT_FOUND'
+        );
+      }
+      return receipt;
     }
   };
 }

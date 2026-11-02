@@ -214,6 +214,9 @@ export function ModuleFacturacion({ activeBuildingId }) {
         message += ` Aplicado a ${applied.data.allocations.length} factura(s); saldo a favor ${fmt(
           applied.data.creditBalance
         )}.`;
+        if (applied.data.cashReceipt?.receiptNumber) {
+          message += ` Recibo de caja N° ${applied.data.cashReceipt.receiptNumber}.`;
+        }
       }
       setPaymentMessage(message);
       setPaymentForm(EMPTY_PAYMENT_FORM);

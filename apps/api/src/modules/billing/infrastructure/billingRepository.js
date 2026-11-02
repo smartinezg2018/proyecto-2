@@ -1,5 +1,6 @@
 import { sequelize } from '../../../../database/connection.js';
 import {
+  CashReceipt,
   ChargeSchedule,
   Invoice,
   InvoiceItem,
@@ -675,6 +676,13 @@ export class BillingRepository {
         transaction
       });
 
+      const cashReceipt = await this.createCashReceiptForPayment({
+        buildingId,
+        paymentId: payment.id,
+        createdBy: updatedBy,
+        transaction
+      });
+
       const updated = await Payment.findByPk(payment.id, {
         include: [
           { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
@@ -684,9 +692,100 @@ export class BillingRepository {
       });
       return {
         ...mapPayment(updated),
-        invoiceStatuses
+        invoiceStatuses,
+        cashReceipt
       };
     });
+  }
+
+  async createCashReceiptForPayment({ buildingId, paymentId, createdBy = null, transaction }) {
+    const existing = await CashReceipt.findOne({
+      where: { paymentId, buildingId },
+      transaction
+    });
+    if (existing) {
+      return {
+        id: Number(existing.id),
+        buildingId: Number(existing.buildingId),
+        paymentId: Number(existing.paymentId),
+        receiptNumber: Number(existing.receiptNumber)
+      };
+    }
+
+    const rows = await sequelize.query(
+      `SELECT COALESCE(MAX(receipt_number), 0) + 1 AS nextNumber
+       FROM cash_receipts
+       WHERE building_id = :buildingId
+       FOR UPDATE`,
+      {
+        replacements: { buildingId: Number(buildingId) },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+    const receiptNumber = Number(rows[0]?.nextNumber || 1);
+    const created = await CashReceipt.create(
+      {
+        buildingId,
+        paymentId,
+        receiptNumber,
+        createdBy
+      },
+      { transaction }
+    );
+    return {
+      id: Number(created.id),
+      buildingId: Number(created.buildingId),
+      paymentId: Number(created.paymentId),
+      receiptNumber: Number(created.receiptNumber)
+    };
+  }
+
+  async findCashReceiptDetail({ buildingId, paymentId }) {
+    const payment = await Payment.findOne({
+      where: { id: paymentId, buildingId },
+      include: [
+        { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+        { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] },
+        { model: CashReceipt, as: 'cashReceipt' }
+      ]
+    });
+    if (!payment) return null;
+    if (payment.status !== 'aplicado' && payment.status !== 'registrado') {
+      return null;
+    }
+    if (!payment.cashReceipt) return null;
+
+    const invoiceIds = (payment.allocations || []).map((item) => Number(item.invoiceId));
+    let invoices = [];
+    if (invoiceIds.length > 0) {
+      const balances = await this.findOpenInvoiceBalances({
+        buildingId,
+        unitId: payment.unitId,
+        invoiceIds
+      });
+      const balanceById = new Map(balances.map((item) => [item.invoiceId, item]));
+      invoices = payment.allocations.map((allocation) => {
+        const invoiceId = Number(allocation.invoiceId);
+        const balance = balanceById.get(invoiceId);
+        return {
+          invoiceId,
+          period: balance?.period ?? null,
+          appliedAmount: Number(allocation.amount),
+          balance: balance ? Number(balance.balance) : null
+        };
+      });
+    }
+
+    const mapped = mapPayment(payment);
+    return {
+      receiptNumber: Number(payment.cashReceipt.receiptNumber),
+      receiptId: Number(payment.cashReceipt.id),
+      payment: mapped,
+      unit: mapped.unit,
+      invoices,
+      creditBalance: mapped.creditBalance
+    };
   }
 
   resolveInvoiceStatus({ balance, appliedPayments }) {
