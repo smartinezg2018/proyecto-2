@@ -47,3 +47,18 @@ export const listInvoiceHistoryQuerySchema = z.object({
 });
 
 export const invoiceIdSchema = z.coerce.number().int().positive();
+
+export const registerPaymentSchema = z.object({
+  unitId: z.coerce.number().int().positive(),
+  paymentDate: dateSchema,
+  amount: z.coerce.number().positive(),
+  paymentMethod: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .refine((value) => ['efectivo', 'transferencia', 'cheque', 'pse', 'otro'].includes(value), {
+      message: 'El medio de pago no es válido.'
+    }),
+  reference: z.string().trim().min(1).max(100)
+});
