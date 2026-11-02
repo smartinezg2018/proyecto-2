@@ -1,7 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Plus, AlertTriangle, TrendingUp, FileText } from 'lucide-react';
 import { formatCurrency as fmt, formatCompactCurrency as fmtM } from '../fixtures.js';
-import { getInvoiceDetail, getInvoiceHistory, getPortfolio, getUnits } from '../../services/api.js';
+import {
+  getInvoiceDetail,
+  getInvoiceHistory,
+  getPortfolio,
+  getUnits,
+  applyPayment,
+  registerPayment
+} from '../../services/api.js';
 import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
 import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
@@ -9,6 +16,14 @@ import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 
 const EMPTY_FILTERS = { unitId: '', period: '', status: '' };
 const EMPTY_HISTORY_FILTERS = { unitId: '', period: '', status: '' };
+const EMPTY_PAYMENT_FORM = {
+  unitId: '',
+  paymentDate: '',
+  amount: '',
+  paymentMethod: 'transferencia',
+  reference: '',
+  applyAuto: true
+};
 const STATUS_LABELS = new Map([
   ['al_dia', 'Al día'],
   ['pendiente', 'Pendiente'],
@@ -34,6 +49,11 @@ export function ModuleFacturacion({ activeBuildingId }) {
   const [invoiceDetail, setInvoiceDetail] = useState(null);
   const [detailLoadingId, setDetailLoadingId] = useState(null);
   const [detailError, setDetailError] = useState('');
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(EMPTY_PAYMENT_FORM);
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState('');
+  const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -41,6 +61,10 @@ export function ModuleFacturacion({ activeBuildingId }) {
     setUnits([]);
     setInvoiceHistory([]);
     setInvoiceDetail(null);
+    setShowPaymentForm(false);
+    setPaymentForm(EMPTY_PAYMENT_FORM);
+    setPaymentMessage('');
+    setPaymentError('');
     if (!activeBuildingId) return undefined;
 
     let cancelled = false;
@@ -161,6 +185,50 @@ export function ModuleFacturacion({ activeBuildingId }) {
     }
   }
 
+  function updatePaymentForm(event) {
+    const { name, value, type, checked } = event.target;
+    setPaymentForm((current) => ({
+      ...current,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  }
+
+  async function submitPayment(event) {
+    event.preventDefault();
+    if (!activeBuildingId) return;
+
+    setPaymentSaving(true);
+    setPaymentMessage('');
+    setPaymentError('');
+    try {
+      const response = await registerPayment(activeBuildingId, {
+        unitId: Number(paymentForm.unitId),
+        paymentDate: paymentForm.paymentDate,
+        amount: Number(paymentForm.amount),
+        paymentMethod: paymentForm.paymentMethod,
+        reference: paymentForm.reference.trim()
+      });
+      let message = `Pago ${response.data.reference} registrado por ${fmt(response.data.amount)}.`;
+      if (paymentForm.applyAuto) {
+        const applied = await applyPayment(activeBuildingId, response.data.id, { mode: 'auto' });
+        message += ` Aplicado a ${applied.data.allocations.length} factura(s); saldo a favor ${fmt(
+          applied.data.creditBalance
+        )}.`;
+        if (applied.data.cashReceipt?.receiptNumber) {
+          message += ` Recibo de caja N° ${applied.data.cashReceipt.receiptNumber}.`;
+        }
+      }
+      setPaymentMessage(message);
+      setPaymentForm(EMPTY_PAYMENT_FORM);
+      setShowPaymentForm(false);
+      setFilters((current) => ({ ...current }));
+    } catch (requestError) {
+      setPaymentError(requestError.message || 'No fue posible registrar el pago.');
+    } finally {
+      setPaymentSaving(false);
+    }
+  }
+
   return (
     <div>
       <SectionHead
@@ -171,12 +239,117 @@ export function ModuleFacturacion({ activeBuildingId }) {
             <Btn variant="secondary">
               <FileText size={13} /> Generar Factura
             </Btn>
-            <Btn>
+            <Btn onClick={() => setShowPaymentForm((current) => !current)}>
               <Plus size={13} /> Registrar Pago
             </Btn>
           </div>
         }
       />
+
+      {(paymentMessage || paymentError) && (
+        <p className={`mb-4 text-sm ${paymentError ? 'text-red-600' : 'text-emerald-700'}`}>
+          {paymentError || paymentMessage}
+        </p>
+      )}
+
+      {showPaymentForm && (
+        <form
+          onSubmit={submitPayment}
+          className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-3 items-end border border-slate-200 rounded-lg p-4 bg-white"
+        >
+          <label className="text-sm text-slate-600">
+            Apartamento
+            <select
+              name="unitId"
+              value={paymentForm.unitId}
+              onChange={updatePaymentForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            >
+              <option value="">Seleccione</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.tower ? `${unit.tower} - ${unit.number}` : unit.number}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">
+            Fecha
+            <input
+              type="date"
+              name="paymentDate"
+              value={paymentForm.paymentDate}
+              onChange={updatePaymentForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="text-sm text-slate-600">
+            Valor
+            <input
+              type="number"
+              name="amount"
+              min="0.01"
+              step="0.01"
+              value={paymentForm.amount}
+              onChange={updatePaymentForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="text-sm text-slate-600">
+            Medio
+            <select
+              name="paymentMethod"
+              value={paymentForm.paymentMethod}
+              onChange={updatePaymentForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            >
+              <option value="transferencia">Transferencia</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="cheque">Cheque</option>
+              <option value="pse">PSE</option>
+              <option value="otro">Otro</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">
+            Referencia
+            <input
+              type="text"
+              name="reference"
+              value={paymentForm.reference}
+              onChange={updatePaymentForm}
+              required
+              maxLength={100}
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="md:col-span-5 flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              name="applyAuto"
+              checked={paymentForm.applyAuto}
+              onChange={updatePaymentForm}
+            />
+            Aplicar automáticamente a facturas por antigüedad
+          </label>
+          <div className="md:col-span-5 flex justify-end gap-2">
+            <Btn
+              type="button"
+              variant="secondary"
+              onClick={() => setShowPaymentForm(false)}
+              disabled={paymentSaving}
+            >
+              Cancelar
+            </Btn>
+            <Btn type="submit" disabled={paymentSaving || !activeBuildingId}>
+              {paymentSaving ? 'Guardando...' : 'Guardar pago'}
+            </Btn>
+          </div>
+        </form>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <MetricCard

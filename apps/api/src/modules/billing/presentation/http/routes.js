@@ -11,7 +11,10 @@ import {
   generateOrdinaryInvoicesSchema,
   listPortfolioQuerySchema,
   listInvoiceHistoryQuerySchema,
-  invoiceIdSchema
+  invoiceIdSchema,
+  registerPaymentSchema,
+  applyPaymentSchema,
+  paymentIdSchema
 } from './billingSchemas.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
 
@@ -19,6 +22,15 @@ export const billingRoutes = Router();
 const useCases = createBillingUseCases(new BillingRepository());
 const asyncHandler = (handler) => (request, response, next) =>
   Promise.resolve(handler(request, response, next)).catch(next);
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 
 async function ensureInvoiceBuildingAccess(request, response, next) {
   try {
@@ -99,38 +111,125 @@ billingRoutes.post(
       { ...request.body, buildingId: Number(request.params.buildingId) },
       request.user.id
     );
-
-    billingRoutes.get(
-      '/invoices/:invoiceId/payment-slip',
-      requireAuth,
-      requirePermission('billing.invoice.view'),
-      ensureInvoiceBuildingAccess,
-      asyncHandler(async (request, response) => {
-        const invoice = await useCases.generatePaymentSlip(request.params.invoiceId);
-        const lines = invoice.items
-          .map((item) => `<li>${escapeHtml(item.concept)}: $${item.amount.toFixed(2)}</li>`)
-          .join('');
-        response
-          .type('html')
-          .send(
-            `<article><h1>Colilla de pago</h1><p>Apartamento: ${escapeHtml(
-              invoice.unit.number
-            )}</p><p>Vencimiento: ${escapeHtml(invoice.dueDate)}</p><ul>${lines}</ul><strong>Total: $${invoice.total.toFixed(
-              2
-            )}</strong><p>Referencia de pago: ${escapeHtml(invoice.paymentReference)}</p></article>`
-          );
-      })
-    );
-
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
     response.status(201).json({ data: invoices, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/invoices/:invoiceId/payment-slip',
+  requireAuth,
+  requirePermission('billing.invoice.view'),
+  ensureInvoiceBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const invoice = await useCases.generatePaymentSlip(request.params.invoiceId);
+    const lines = invoice.items
+      .map((item) => `<li>${escapeHtml(item.concept)}: $${item.amount.toFixed(2)}</li>`)
+      .join('');
+    response
+      .type('html')
+      .send(
+        `<article><h1>Colilla de pago</h1><p>Apartamento: ${escapeHtml(
+          invoice.unit.number
+        )}</p><p>Vencimiento: ${escapeHtml(invoice.dueDate)}</p><ul>${lines}</ul><strong>Total: $${invoice.total.toFixed(
+          2
+        )}</strong><p>Referencia de pago: ${escapeHtml(invoice.paymentReference)}</p></article>`
+      );
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/payments',
+  requireAuth,
+  requirePermission('billing.payment.create'),
+  ensureBuildingAccess,
+  validateBody(registerPaymentSchema),
+  asyncHandler(async (request, response) => {
+    const payment = await useCases.registerPayment(
+      { ...request.body, buildingId: Number(request.params.buildingId) },
+      request.user.id
+    );
+    response.status(201).json({ data: payment, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/payments/:paymentId/apply',
+  requireAuth,
+  requirePermission('billing.payment.apply'),
+  ensureBuildingAccess,
+  validateBody(applyPaymentSchema),
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const payment = await useCases.applyPayment(
+      request.params.buildingId,
+      parsedPaymentId.data,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: payment, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/payments/:paymentId/sync-invoice-statuses',
+  requireAuth,
+  requirePermission('billing.payment.apply'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const invoiceStatuses = await useCases.syncInvoiceStatusesAfterPaymentChange(
+      request.params.buildingId,
+      parsedPaymentId.data,
+      request.user.id
+    );
+    response.json({ data: invoiceStatuses, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/payments/:paymentId/cash-receipt',
+  requireAuth,
+  requirePermission('billing.receipt.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const receipt = await useCases.getCashReceipt(
+      request.params.buildingId,
+      parsedPaymentId.data
+    );
+    if (request.query.format === 'json') {
+      response.json({ data: receipt, meta: { requestId: request.id } });
+      return;
+    }
+
+    const invoiceLines = receipt.invoices
+      .map(
+        (invoice) =>
+          `<li>Factura ${invoice.invoiceId}${invoice.period ? ` (${escapeHtml(invoice.period)})` : ''}: aplicado $${Number(invoice.appliedAmount).toFixed(2)} — saldo $${Number(invoice.balance ?? 0).toFixed(2)}</li>`
+      )
+      .join('');
+    response.type('html').send(
+      `<article><h1>Recibo de caja N° ${receipt.receiptNumber}</h1><p>Apartamento: ${escapeHtml(
+        receipt.unit?.number ?? ''
+      )}</p><p>Fecha: ${escapeHtml(receipt.payment.paymentDate)}</p><p>Valor: $${Number(
+        receipt.payment.amount
+      ).toFixed(2)}</p><p>Medio: ${escapeHtml(
+        receipt.payment.paymentMethod
+      )}</p><p>Referencia: ${escapeHtml(
+        receipt.payment.reference
+      )}</p><ul>${invoiceLines}</ul><p>Saldo a favor: $${Number(receipt.creditBalance).toFixed(
+        2
+      )}</p></article>`
+    );
   })
 );
 

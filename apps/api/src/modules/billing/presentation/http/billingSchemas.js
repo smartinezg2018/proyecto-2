@@ -47,3 +47,42 @@ export const listInvoiceHistoryQuerySchema = z.object({
 });
 
 export const invoiceIdSchema = z.coerce.number().int().positive();
+
+export const registerPaymentSchema = z.object({
+  unitId: z.coerce.number().int().positive(),
+  paymentDate: dateSchema,
+  amount: z.coerce.number().positive(),
+  paymentMethod: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .refine((value) => ['efectivo', 'transferencia', 'cheque', 'pse', 'otro'].includes(value), {
+      message: 'El medio de pago no es válido.'
+    }),
+  reference: z.string().trim().min(1).max(100)
+});
+
+export const applyPaymentSchema = z
+  .object({
+    mode: z.enum(['auto', 'manual']),
+    allocations: z
+      .array(
+        z.object({
+          invoiceId: z.coerce.number().int().positive(),
+          amount: z.coerce.number().positive()
+        })
+      )
+      .optional()
+  })
+  .superRefine((value, context) => {
+    if (value.mode === 'manual' && (!value.allocations || value.allocations.length === 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Debe indicar al menos una factura para la aplicación manual.',
+        path: ['allocations']
+      });
+    }
+  });
+
+export const paymentIdSchema = z.coerce.number().int().positive();

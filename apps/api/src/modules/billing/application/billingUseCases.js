@@ -94,6 +94,68 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         throw new AppError('La factura no existe.', 404, 'INVOICE_NOT_FOUND');
       }
       return slip;
+    },
+
+    async registerPayment(input, createdBy) {
+      const amount = Number(input.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new AppError('El valor del pago debe ser mayor a cero.', 400, 'VALIDATION_ERROR');
+      }
+
+      return repository.createPayment({
+        buildingId: Number(input.buildingId),
+        unitId: Number(input.unitId),
+        paymentDate: input.paymentDate,
+        amount,
+        paymentMethod: String(input.paymentMethod).trim(),
+        reference: String(input.reference).trim(),
+        createdBy
+      });
+    },
+
+    async applyPayment(buildingId, paymentId, input, updatedBy = null) {
+      const mode = input.mode;
+      if (mode !== 'auto' && mode !== 'manual') {
+        throw new AppError('El modo de aplicación no es válido.', 400, 'VALIDATION_ERROR');
+      }
+      if (mode === 'manual' && (!Array.isArray(input.allocations) || input.allocations.length === 0)) {
+        throw new AppError(
+          'Debe indicar al menos una factura para la aplicación manual.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+
+      return repository.applyPayment({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId),
+        mode,
+        allocations: mode === 'manual' ? input.allocations : [],
+        updatedBy
+      });
+    },
+
+    async syncInvoiceStatusesAfterPaymentChange(buildingId, paymentId, updatedBy = null) {
+      return repository.syncInvoiceStatusesForPayment({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId),
+        updatedBy
+      });
+    },
+
+    async getCashReceipt(buildingId, paymentId) {
+      const receipt = await repository.findCashReceiptDetail({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId)
+      });
+      if (!receipt) {
+        throw new AppError(
+          'No existe un recibo de caja para el pago indicado.',
+          404,
+          'CASH_RECEIPT_NOT_FOUND'
+        );
+      }
+      return receipt;
     }
   };
 }

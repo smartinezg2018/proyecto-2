@@ -13,6 +13,9 @@ import { UnitResponsible } from './UnitResponsible.js';
 import { Invoice } from './Invoice.js';
 import { InvoiceItem } from './InvoiceItem.js';
 import { ChargeSchedule } from './ChargeSchedule.js';
+import { Payment } from './Payment.js';
+import { PaymentAllocation } from './PaymentAllocation.js';
+import { CashReceipt } from './CashReceipt.js';
 import { AnnualBudget } from './AnnualBudget.js';
 import { BudgetLine } from './BudgetLine.js';
 import { Project } from './Project.js';
@@ -55,6 +58,14 @@ Unit.hasMany(Invoice, { foreignKey: 'unitId', as: 'invoices' });
 ChargeSchedule.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
 Unit.hasMany(ChargeSchedule, { foreignKey: 'unitId', as: 'chargeSchedules' });
 ChargeSchedule.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+Payment.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
+Unit.hasMany(Payment, { foreignKey: 'unitId', as: 'payments' });
+Payment.hasMany(PaymentAllocation, { foreignKey: 'paymentId', as: 'allocations' });
+PaymentAllocation.belongsTo(Payment, { foreignKey: 'paymentId' });
+PaymentAllocation.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+Invoice.hasMany(PaymentAllocation, { foreignKey: 'invoiceId', as: 'allocations' });
+Payment.hasOne(CashReceipt, { foreignKey: 'paymentId', as: 'cashReceipt' });
+CashReceipt.belongsTo(Payment, { foreignKey: 'paymentId', as: 'payment' });
 AnnualBudget.hasMany(BudgetLine, { foreignKey: 'budgetId', as: 'lines' });
 BudgetLine.belongsTo(AnnualBudget, { foreignKey: 'budgetId' });
 Project.hasMany(ProjectQuote, { foreignKey: 'projectId', as: 'quotes' });
@@ -80,6 +91,9 @@ export {
   Invoice,
   InvoiceItem,
   ChargeSchedule,
+  Payment,
+  PaymentAllocation,
+  CashReceipt,
   AnnualBudget,
   BudgetLine,
   Project,

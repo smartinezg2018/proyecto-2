@@ -1,6 +1,42 @@
 import { sequelize } from '../../../../database/connection.js';
-import { ChargeSchedule, Invoice, InvoiceItem, Unit } from '../../../../database/models/index.js';
+import {
+  CashReceipt,
+  ChargeSchedule,
+  Invoice,
+  InvoiceItem,
+  Payment,
+  PaymentAllocation,
+  Unit
+} from '../../../../database/models/index.js';
 import { QueryTypes } from 'sequelize';
+
+function mapPayment(payment) {
+  const data = payment.get ? payment.get({ plain: true }) : payment;
+  return {
+    id: Number(data.id),
+    buildingId: Number(data.buildingId),
+    unitId: Number(data.unitId),
+    unit: data.unit
+      ? { id: Number(data.unit.id), number: data.unit.number, tower: data.unit.tower }
+      : null,
+    paymentDate: data.paymentDate,
+    amount: Number(data.amount),
+    paymentMethod: data.paymentMethod,
+    reference: data.reference,
+    status: data.status,
+    creditBalance: Number(data.creditBalance ?? 0),
+    allocations: (data.allocations || []).map((allocation) => ({
+      id: Number(allocation.id),
+      invoiceId: Number(allocation.invoiceId),
+      amount: Number(allocation.amount)
+    })),
+    createdBy: data.createdBy == null ? null : Number(data.createdBy)
+  };
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
 
 function mapInvoice(invoice) {
   const data = invoice.get({ plain: true });
@@ -413,6 +449,430 @@ export class BillingRepository {
     );
     await ChargeSchedule.bulkCreate(schedules);
     return schedules;
+  }
+
+  async createPayment({
+    buildingId,
+    unitId,
+    paymentDate,
+    amount,
+    paymentMethod,
+    reference,
+    createdBy
+  }) {
+    try {
+      const payment = await sequelize.transaction(async (transaction) => {
+        const unit = await Unit.findOne({
+          where: { id: unitId, buildingId, kind: 'apartamento' },
+          transaction
+        });
+        if (!unit) {
+          const error = new Error('El apartamento no pertenece al edificio indicado.');
+          error.code = 'UNIT_BUILDING_MISMATCH';
+          error.statusCode = 400;
+          throw error;
+        }
+
+        return Payment.create(
+          {
+            buildingId,
+            unitId,
+            paymentDate,
+            amount,
+            paymentMethod,
+            reference,
+            status: 'registrado',
+            createdBy
+          },
+          { transaction }
+        );
+      });
+
+      return this.findPaymentById(payment.id);
+    } catch (error) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        const duplicate = new Error('Ya existe un pago con la misma referencia en el edificio.');
+        duplicate.code = 'DUPLICATE_PAYMENT_REFERENCE';
+        duplicate.statusCode = 409;
+        throw duplicate;
+      }
+      throw error;
+    }
+  }
+
+  async findPaymentById(paymentId) {
+    const payment = await Payment.findByPk(paymentId, {
+      include: [
+        { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+        { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] }
+      ]
+    });
+    return payment ? mapPayment(payment) : null;
+  }
+
+  async findOpenInvoiceBalances({ buildingId, unitId, invoiceIds = null, transaction }) {
+    const rows = await sequelize.query(
+      `SELECT i.id AS invoiceId,
+              i.period,
+              i.due_date AS dueDate,
+              i.total AS capital,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.payments, 0) AS payments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.payments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ) interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN (
+         SELECT pa.invoice_id, SUM(pa.amount) AS payments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       ) payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.building_id = :buildingId
+         AND i.unit_id = :unitId
+         AND (:hasInvoiceIds = 0 OR i.id IN (:invoiceIds))
+       ORDER BY i.due_date ASC, i.id ASC`,
+      {
+        replacements: {
+          buildingId: Number(buildingId),
+          unitId: Number(unitId),
+          hasInvoiceIds: invoiceIds?.length ? 1 : 0,
+          invoiceIds: invoiceIds?.length ? invoiceIds : [0]
+        },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    return rows.map((row) => ({
+      invoiceId: Number(row.invoiceId),
+      period: row.period,
+      dueDate: row.dueDate,
+      capital: Number(row.capital),
+      interests: Number(row.interests),
+      payments: Number(row.payments),
+      balance: Number(row.balance)
+    }));
+  }
+
+  async applyPayment({ buildingId, paymentId, mode, allocations = [], updatedBy = null }) {
+    return sequelize.transaction(async (transaction) => {
+      const payment = await Payment.findOne({
+        where: { id: paymentId, buildingId },
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+      if (!payment) {
+        const error = new Error('El pago no existe en el edificio indicado.');
+        error.code = 'PAYMENT_NOT_FOUND';
+        error.statusCode = 404;
+        throw error;
+      }
+      if (payment.status !== 'registrado') {
+        const error = new Error('Solo se pueden aplicar pagos en estado registrado.');
+        error.code = 'PAYMENT_NOT_APPLICABLE';
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const available = roundMoney(payment.amount);
+      let planned = [];
+
+      if (mode === 'auto') {
+        const openInvoices = await this.findOpenInvoiceBalances({
+          buildingId,
+          unitId: payment.unitId,
+          transaction
+        });
+        let remaining = available;
+        for (const invoice of openInvoices) {
+          if (remaining <= 0) break;
+          const balance = roundMoney(invoice.balance);
+          if (balance <= 0) continue;
+          const applied = roundMoney(Math.min(remaining, balance));
+          planned.push({ invoiceId: invoice.invoiceId, amount: applied });
+          remaining = roundMoney(remaining - applied);
+        }
+      } else {
+        const invoiceIds = [...new Set(allocations.map((item) => Number(item.invoiceId)))];
+        if (invoiceIds.length !== allocations.length) {
+          const error = new Error('No puede repetir facturas en la misma aplicación.');
+          error.code = 'DUPLICATE_INVOICE_ALLOCATION';
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const openInvoices = await this.findOpenInvoiceBalances({
+          buildingId,
+          unitId: payment.unitId,
+          invoiceIds,
+          transaction
+        });
+        const balances = new Map(openInvoices.map((invoice) => [invoice.invoiceId, invoice]));
+
+        planned = allocations.map((item) => {
+          const invoiceId = Number(item.invoiceId);
+          const amount = roundMoney(item.amount);
+          const invoice = balances.get(invoiceId);
+          if (!invoice) {
+            const error = new Error(
+              'Una o más facturas no pertenecen al edificio y apartamento del pago.'
+            );
+            error.code = 'INVOICE_PAYMENT_MISMATCH';
+            error.statusCode = 400;
+            throw error;
+          }
+          if (amount <= 0) {
+            const error = new Error('Cada aplicación debe ser mayor a cero.');
+            error.code = 'VALIDATION_ERROR';
+            error.statusCode = 400;
+            throw error;
+          }
+          if (amount - roundMoney(invoice.balance) > 0.0001) {
+            const error = new Error('No puede aplicar un valor mayor al saldo de la factura.');
+            error.code = 'ALLOCATION_EXCEEDS_BALANCE';
+            error.statusCode = 400;
+            throw error;
+          }
+          return { invoiceId, amount };
+        });
+      }
+
+      const appliedTotal = roundMoney(planned.reduce((sum, item) => sum + item.amount, 0));
+      if (appliedTotal - available > 0.0001) {
+        const error = new Error('El valor aplicado supera el monto del pago.');
+        error.code = 'ALLOCATION_EXCEEDS_PAYMENT';
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (planned.length > 0) {
+        await PaymentAllocation.bulkCreate(
+          planned.map((item) => ({
+            paymentId: payment.id,
+            invoiceId: item.invoiceId,
+            amount: item.amount
+          })),
+          { transaction }
+        );
+      }
+
+      const creditBalance = roundMoney(available - appliedTotal);
+      await payment.update({ status: 'aplicado', creditBalance }, { transaction });
+
+      const affectedInvoiceIds = planned.map((item) => item.invoiceId);
+      const invoiceStatuses = await this.syncInvoiceStatuses({
+        invoiceIds: affectedInvoiceIds,
+        updatedBy,
+        transaction
+      });
+
+      const cashReceipt = await this.createCashReceiptForPayment({
+        buildingId,
+        paymentId: payment.id,
+        createdBy: updatedBy,
+        transaction
+      });
+
+      const updated = await Payment.findByPk(payment.id, {
+        include: [
+          { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+          { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] }
+        ],
+        transaction
+      });
+      return {
+        ...mapPayment(updated),
+        invoiceStatuses,
+        cashReceipt
+      };
+    });
+  }
+
+  async createCashReceiptForPayment({ buildingId, paymentId, createdBy = null, transaction }) {
+    const existing = await CashReceipt.findOne({
+      where: { paymentId, buildingId },
+      transaction
+    });
+    if (existing) {
+      return {
+        id: Number(existing.id),
+        buildingId: Number(existing.buildingId),
+        paymentId: Number(existing.paymentId),
+        receiptNumber: Number(existing.receiptNumber)
+      };
+    }
+
+    const rows = await sequelize.query(
+      `SELECT COALESCE(MAX(receipt_number), 0) + 1 AS nextNumber
+       FROM cash_receipts
+       WHERE building_id = :buildingId
+       FOR UPDATE`,
+      {
+        replacements: { buildingId: Number(buildingId) },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+    const receiptNumber = Number(rows[0]?.nextNumber || 1);
+    const created = await CashReceipt.create(
+      {
+        buildingId,
+        paymentId,
+        receiptNumber,
+        createdBy
+      },
+      { transaction }
+    );
+    return {
+      id: Number(created.id),
+      buildingId: Number(created.buildingId),
+      paymentId: Number(created.paymentId),
+      receiptNumber: Number(created.receiptNumber)
+    };
+  }
+
+  async findCashReceiptDetail({ buildingId, paymentId }) {
+    const payment = await Payment.findOne({
+      where: { id: paymentId, buildingId },
+      include: [
+        { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+        { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] },
+        { model: CashReceipt, as: 'cashReceipt' }
+      ]
+    });
+    if (!payment) return null;
+    if (payment.status !== 'aplicado' && payment.status !== 'registrado') {
+      return null;
+    }
+    if (!payment.cashReceipt) return null;
+
+    const invoiceIds = (payment.allocations || []).map((item) => Number(item.invoiceId));
+    let invoices = [];
+    if (invoiceIds.length > 0) {
+      const balances = await this.findOpenInvoiceBalances({
+        buildingId,
+        unitId: payment.unitId,
+        invoiceIds
+      });
+      const balanceById = new Map(balances.map((item) => [item.invoiceId, item]));
+      invoices = payment.allocations.map((allocation) => {
+        const invoiceId = Number(allocation.invoiceId);
+        const balance = balanceById.get(invoiceId);
+        return {
+          invoiceId,
+          period: balance?.period ?? null,
+          appliedAmount: Number(allocation.amount),
+          balance: balance ? Number(balance.balance) : null
+        };
+      });
+    }
+
+    const mapped = mapPayment(payment);
+    return {
+      receiptNumber: Number(payment.cashReceipt.receiptNumber),
+      receiptId: Number(payment.cashReceipt.id),
+      payment: mapped,
+      unit: mapped.unit,
+      invoices,
+      creditBalance: mapped.creditBalance
+    };
+  }
+
+  resolveInvoiceStatus({ balance, appliedPayments }) {
+    if (roundMoney(balance) <= 0) return 'pagada';
+    if (roundMoney(appliedPayments) > 0) return 'parcialmente_pagada';
+    return 'pendiente';
+  }
+
+  async syncInvoiceStatuses({ invoiceIds, updatedBy = null, transaction = null }) {
+    const uniqueIds = [...new Set((invoiceIds || []).map(Number).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const rows = await sequelize.query(
+      `SELECT i.id AS invoiceId,
+              i.status AS currentStatus,
+              i.total AS capital,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.payments, 0) AS payments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.payments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ) interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN (
+         SELECT pa.invoice_id, SUM(pa.amount) AS payments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       ) payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.id IN (:invoiceIds)`,
+      {
+        replacements: { invoiceIds: uniqueIds },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const updates = [];
+    for (const row of rows) {
+      const balance = roundMoney(row.balance);
+      const appliedPayments = roundMoney(row.payments);
+      const status = this.resolveInvoiceStatus({ balance, appliedPayments });
+      if (status !== row.currentStatus) {
+        await Invoice.update(
+          { status, updatedBy },
+          { where: { id: Number(row.invoiceId) }, transaction }
+        );
+      }
+      updates.push({
+        invoiceId: Number(row.invoiceId),
+        status,
+        balance,
+        appliedPayments,
+        capital: Number(row.capital),
+        interests: Number(row.interests)
+      });
+    }
+    return updates;
+  }
+
+  async syncInvoiceStatusesForPayment({ buildingId, paymentId, updatedBy = null }) {
+    return sequelize.transaction(async (transaction) => {
+      const payment = await Payment.findOne({
+        where: { id: paymentId, buildingId },
+        include: [
+          { model: PaymentAllocation, as: 'allocations', attributes: ['invoiceId'] }
+        ],
+        transaction
+      });
+      if (!payment) {
+        const error = new Error('El pago no existe en el edificio indicado.');
+        error.code = 'PAYMENT_NOT_FOUND';
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const invoiceIds = (payment.allocations || []).map((item) => Number(item.invoiceId));
+      return this.syncInvoiceStatuses({ invoiceIds, updatedBy, transaction });
+    });
   }
 }
 

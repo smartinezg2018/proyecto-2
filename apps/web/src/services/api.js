@@ -68,6 +68,39 @@ export function getPaymentSlip(invoiceId) {
   });
 }
 
+export function registerPayment(buildingId, payment) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/payments`, {
+    method: 'POST',
+    body: JSON.stringify(payment)
+  });
+}
+
+export function applyPayment(buildingId, paymentId, payload) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/payments/${paymentId}/apply`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getCashReceipt(buildingId, paymentId, format = 'json') {
+  const suffix = format === 'json' ? '?format=json' : '';
+  if (format === 'html') {
+    return fetch(
+      `/api/v1/billing/buildings/${buildingId}/payments/${paymentId}/cash-receipt${suffix}`,
+      { credentials: 'include' }
+    ).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error?.message || 'No fue posible obtener el recibo de caja.');
+      }
+      return response.blob();
+    });
+  }
+  return apiRequest(
+    `/api/v1/billing/buildings/${buildingId}/payments/${paymentId}/cash-receipt${suffix}`
+  );
+}
+
 export function getPortfolio(buildingId, filters = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
