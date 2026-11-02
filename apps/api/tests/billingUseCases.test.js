@@ -205,7 +205,8 @@ test('HU-044 aplica un pago en modo automático', async () => {
     buildingId: 4,
     paymentId: 21,
     mode: 'auto',
-    allocations: []
+    allocations: [],
+    updatedBy: null
   });
 });
 
