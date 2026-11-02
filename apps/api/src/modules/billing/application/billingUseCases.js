@@ -94,6 +94,23 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         throw new AppError('La factura no existe.', 404, 'INVOICE_NOT_FOUND');
       }
       return slip;
+    },
+
+    async registerPayment(input, createdBy) {
+      const amount = Number(input.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new AppError('El valor del pago debe ser mayor a cero.', 400, 'VALIDATION_ERROR');
+      }
+
+      return repository.createPayment({
+        buildingId: Number(input.buildingId),
+        unitId: Number(input.unitId),
+        paymentDate: input.paymentDate,
+        amount,
+        paymentMethod: String(input.paymentMethod).trim(),
+        reference: String(input.reference).trim(),
+        createdBy
+      });
     }
   };
 }

@@ -13,6 +13,7 @@ import { UnitResponsible } from './UnitResponsible.js';
 import { Invoice } from './Invoice.js';
 import { InvoiceItem } from './InvoiceItem.js';
 import { ChargeSchedule } from './ChargeSchedule.js';
+import { Payment } from './Payment.js';
 import { Project } from './Project.js';
 import { ProjectQuote } from './ProjectQuote.js';
 import { ProjectProgress } from './ProjectProgress.js';
@@ -53,6 +54,8 @@ Unit.hasMany(Invoice, { foreignKey: 'unitId', as: 'invoices' });
 ChargeSchedule.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
 Unit.hasMany(ChargeSchedule, { foreignKey: 'unitId', as: 'chargeSchedules' });
 ChargeSchedule.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+Payment.belongsTo(Unit, { foreignKey: 'unitId', as: 'unit' });
+Unit.hasMany(Payment, { foreignKey: 'unitId', as: 'payments' });
 Project.hasMany(ProjectQuote, { foreignKey: 'projectId', as: 'quotes' });
 ProjectQuote.belongsTo(Project, { foreignKey: 'projectId' });
 ProjectQuote.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
@@ -76,6 +79,7 @@ export {
   Invoice,
   InvoiceItem,
   ChargeSchedule,
+  Payment,
   Project,
   ProjectQuote,
   ProjectProgress

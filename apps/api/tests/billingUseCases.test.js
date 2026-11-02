@@ -139,3 +139,53 @@ test('programa cobros retroactivos en los periodos definidos', async () => {
   assert.equal(created.originPeriod, '2026-08');
   assert.equal(created.installments, 1);
 });
+
+test('HU-043 registra un pago asociado al edificio y apartamento', async () => {
+  let created;
+  const useCases = createBillingUseCases({
+    async createPayment(input) {
+      created = input;
+      return { id: 21, status: 'registrado', ...input };
+    }
+  });
+
+  const payment = await useCases.registerPayment(
+    {
+      buildingId: 4,
+      unitId: 10,
+      paymentDate: '2026-10-15',
+      amount: 250000,
+      paymentMethod: 'transferencia',
+      reference: 'TRX-043-001'
+    },
+    7
+  );
+
+  assert.equal(payment.id, 21);
+  assert.equal(created.buildingId, 4);
+  assert.equal(created.unitId, 10);
+  assert.equal(created.amount, 250000);
+  assert.equal(created.paymentMethod, 'transferencia');
+  assert.equal(created.reference, 'TRX-043-001');
+  assert.equal(created.createdBy, 7);
+});
+
+test('HU-043 rechaza un valor de pago inválido', async () => {
+  const useCases = createBillingUseCases({ createPayment: async () => ({}) });
+
+  await assert.rejects(
+    () =>
+      useCases.registerPayment(
+        {
+          buildingId: 4,
+          unitId: 10,
+          paymentDate: '2026-10-15',
+          amount: 0,
+          paymentMethod: 'efectivo',
+          reference: 'TRX-043-000'
+        },
+        7
+      ),
+    { code: 'VALIDATION_ERROR', statusCode: 400 }
+  );
+});

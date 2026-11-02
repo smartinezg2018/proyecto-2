@@ -1,6 +1,30 @@
 import { sequelize } from '../../../../database/connection.js';
-import { ChargeSchedule, Invoice, InvoiceItem, Unit } from '../../../../database/models/index.js';
+import {
+  ChargeSchedule,
+  Invoice,
+  InvoiceItem,
+  Payment,
+  Unit
+} from '../../../../database/models/index.js';
 import { QueryTypes } from 'sequelize';
+
+function mapPayment(payment) {
+  const data = payment.get ? payment.get({ plain: true }) : payment;
+  return {
+    id: Number(data.id),
+    buildingId: Number(data.buildingId),
+    unitId: Number(data.unitId),
+    unit: data.unit
+      ? { id: Number(data.unit.id), number: data.unit.number, tower: data.unit.tower }
+      : null,
+    paymentDate: data.paymentDate,
+    amount: Number(data.amount),
+    paymentMethod: data.paymentMethod,
+    reference: data.reference,
+    status: data.status,
+    createdBy: data.createdBy == null ? null : Number(data.createdBy)
+  };
+}
 
 function mapInvoice(invoice) {
   const data = invoice.get({ plain: true });
@@ -413,6 +437,62 @@ export class BillingRepository {
     );
     await ChargeSchedule.bulkCreate(schedules);
     return schedules;
+  }
+
+  async createPayment({
+    buildingId,
+    unitId,
+    paymentDate,
+    amount,
+    paymentMethod,
+    reference,
+    createdBy
+  }) {
+    try {
+      const payment = await sequelize.transaction(async (transaction) => {
+        const unit = await Unit.findOne({
+          where: { id: unitId, buildingId, kind: 'apartamento' },
+          transaction
+        });
+        if (!unit) {
+          const error = new Error('El apartamento no pertenece al edificio indicado.');
+          error.code = 'UNIT_BUILDING_MISMATCH';
+          error.statusCode = 400;
+          throw error;
+        }
+
+        return Payment.create(
+          {
+            buildingId,
+            unitId,
+            paymentDate,
+            amount,
+            paymentMethod,
+            reference,
+            status: 'registrado',
+            createdBy
+          },
+          { transaction }
+        );
+      });
+
+      return this.findPaymentById(payment.id);
+    } catch (error) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        const duplicate = new Error('Ya existe un pago con la misma referencia en el edificio.');
+        duplicate.code = 'DUPLICATE_PAYMENT_REFERENCE';
+        duplicate.statusCode = 409;
+        throw duplicate;
+      }
+      throw error;
+    }
+  }
+
+  async findPaymentById(paymentId) {
+    const payment = await Payment.findByPk(paymentId, {
+      include: [{ model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] }]
+    });
+    return payment ? mapPayment(payment) : null;
   }
 }
 

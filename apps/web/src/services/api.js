@@ -68,6 +68,13 @@ export function getPaymentSlip(invoiceId) {
   });
 }
 
+export function registerPayment(buildingId, payment) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/payments`, {
+    method: 'POST',
+    body: JSON.stringify(payment)
+  });
+}
+
 export function getPortfolio(buildingId, filters = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
