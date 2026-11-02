@@ -89,6 +89,31 @@ export function getInvoiceDetail(buildingId, invoiceId) {
   return apiRequest(`/api/v1/billing/buildings/${buildingId}/invoices/${invoiceId}`);
 }
 
+export function getDraftBudget(buildingId, year) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/draft?year=${year}`);
+}
+
+export function ensureDraftBudget(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/draft`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function previewBudgetIncrements(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/increments/preview`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function applyBudgetIncrements(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/increments/apply`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

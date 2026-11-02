@@ -33,6 +33,7 @@ const SEED_PROFILES = [
       'insurance.update',
       'billing.view',
       'budget.view',
+      'budget.update',
       'projects.view',
       'projects.create',
       'projects.update'

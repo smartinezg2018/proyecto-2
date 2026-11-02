@@ -1,31 +1,138 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Plus, TrendingUp, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { BUDGET_ITEMS, formatCompactCurrency as fmtM } from '../fixtures.js';
+import { BUDGET_ITEMS, formatCompactCurrency as fmtM, formatCurrency as fmt } from '../fixtures.js';
+import {
+  applyBudgetIncrements,
+  ensureDraftBudget,
+  getDraftBudget,
+  previewBudgetIncrements
+} from '../../services/api.js';
 import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 
-export function ModulePresupuesto() {
-  const [method, setMethod] = useState('Hist�rica');
+const CURRENT_YEAR = new Date().getFullYear();
+const DEFAULT_LINES = [
+  { code: 'VIG', name: 'Vigilancia', classification: 'gasto', amount: 120000000 },
+  { code: 'ASE', name: 'Aseo', classification: 'gasto', amount: 45000000 },
+  { code: 'MTO', name: 'Mantenimiento', classification: 'gasto', amount: 80000000 },
+  { code: 'CUO', name: 'Cuotas ordinarias', classification: 'ingreso', amount: 280000000 }
+];
+
+export function ModulePresupuesto({ activeBuildingId }) {
+  const [method, setMethod] = useState('Histórica');
+  const [budget, setBudget] = useState(null);
+  const [generalPercent, setGeneralPercent] = useState('5');
+  const [linePercents, setLinePercents] = useState({});
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
   const totalP = BUDGET_ITEMS.reduce((s, b) => s + b.projected, 0);
   const totalE = BUDGET_ITEMS.reduce((s, b) => s + b.executed, 0);
   const execPct = Math.round((totalE / totalP) * 100);
 
   const chartData = BUDGET_ITEMS.map((b) => ({
-    name: b.rubro.length > 20 ? b.rubro.substring(0, 20) + '�' : b.rubro,
+    name: b.rubro.length > 20 ? `${b.rubro.substring(0, 20)}…` : b.rubro,
     proyectado: b.projected / 1_000_000,
     ejecutado: b.executed / 1_000_000
   }));
 
+  useEffect(() => {
+    setBudget(null);
+    setPreview(null);
+    setMessage('');
+    setError('');
+    if (!activeBuildingId) return undefined;
+
+    let cancelled = false;
+    setLoading(true);
+    getDraftBudget(activeBuildingId, CURRENT_YEAR)
+      .then((response) => {
+        if (!cancelled) setBudget(response.data);
+      })
+      .catch(async () => {
+        try {
+          const created = await ensureDraftBudget(activeBuildingId, {
+            year: CURRENT_YEAR,
+            lines: DEFAULT_LINES
+          });
+          if (!cancelled) setBudget(created.data);
+        } catch (requestError) {
+          if (!cancelled) {
+            setError(requestError.message || 'No fue posible cargar el presupuesto.');
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBuildingId]);
+
+  const previewRows = useMemo(() => preview?.lines || [], [preview]);
+
+  async function handlePreview(event) {
+    event.preventDefault();
+    if (!activeBuildingId) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await previewBudgetIncrements(activeBuildingId, {
+        year: CURRENT_YEAR,
+        generalPercent: Number(generalPercent),
+        linePercents: Object.entries(linePercents)
+          .filter(([, value]) => value !== '' && value != null)
+          .map(([lineId, percent]) => ({ lineId: Number(lineId), percent: Number(percent) }))
+      });
+      setPreview(response.data);
+      setMessage('Vista previa calculada. Revise los valores antes de guardar.');
+    } catch (requestError) {
+      setPreview(null);
+      setError(requestError.message || 'No fue posible previsualizar los incrementos.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleApply() {
+    if (!activeBuildingId || !preview) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await applyBudgetIncrements(activeBuildingId, {
+        year: CURRENT_YEAR,
+        generalPercent: Number(generalPercent),
+        linePercents: Object.entries(linePercents)
+          .filter(([, value]) => value !== '' && value != null)
+          .map(([lineId, percent]) => ({ lineId: Number(lineId), percent: Number(percent) }))
+      });
+      setBudget(response.data);
+      setPreview(null);
+      setMessage('Incrementos aplicados al presupuesto en borrador.');
+    } catch (requestError) {
+      setError(requestError.message || 'No fue posible aplicar los incrementos.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <SectionHead
-        title="Presupuesto Anual 2026"
-        subtitle="Control de ejecuci�n presupuestal por categor�as y rubros"
+        title={`Presupuesto Anual ${CURRENT_YEAR}`}
+        subtitle="Control de ejecución presupuestal por categorías y rubros"
         action={
           <Btn>
-            <Plus size={14} /> Registrar Ejecuci�n
+            <Plus size={14} /> Registrar Ejecución
           </Btn>
         }
       />
@@ -54,10 +161,96 @@ export function ModulePresupuesto() {
         />
       </div>
 
-      {/* Methodology selector */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 mb-4">
+        <h3 className="text-sm font-bold text-slate-700 mb-3">Incrementos presupuestales (HU-053)</h3>
+        {!activeBuildingId ? (
+          <p className="text-sm text-slate-500">Seleccione un edificio para proyectar incrementos.</p>
+        ) : loading ? (
+          <p className="text-sm text-slate-500">Cargando presupuesto...</p>
+        ) : (
+          <form onSubmit={handlePreview} className="space-y-4">
+            <label className="block text-sm text-slate-600 max-w-xs">
+              Porcentaje general
+              <input
+                type="number"
+                step="0.01"
+                value={generalPercent}
+                onChange={(event) => setGeneralPercent(event.target.value)}
+                className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+              />
+            </label>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    {['Partida', 'Actual', '% individual', 'Proyectado'].map((header) => (
+                      <th
+                        key={header}
+                        className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 py-2"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(budget?.lines || []).map((line) => {
+                    const projected = previewRows.find((row) => row.lineId === line.id);
+                    return (
+                      <tr key={line.id} className="border-b border-slate-50">
+                        <td className="px-3 py-2 text-sm font-semibold text-slate-800">
+                          {line.code} — {line.name}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-slate-600">{fmt(line.amount)}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder={generalPercent}
+                            value={linePercents[line.id] ?? ''}
+                            onChange={(event) =>
+                              setLinePercents((current) => ({
+                                ...current,
+                                [line.id]: event.target.value
+                              }))
+                            }
+                            className="w-24 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-sm text-slate-800">
+                          {projected ? fmt(projected.projectedAmount) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {(message || error) && (
+              <p className={`text-sm ${error ? 'text-red-600' : 'text-emerald-700'}`}>
+                {error || message}
+              </p>
+            )}
+            {preview && (
+              <p className="text-sm text-slate-600">
+                Total actual {fmt(preview.totalCurrent)} → proyectado {fmt(preview.totalProjected)}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Btn type="submit" disabled={saving}>
+                {saving ? 'Calculando...' : 'Previsualizar'}
+              </Btn>
+              <Btn type="button" variant="secondary" onClick={handleApply} disabled={saving || !preview}>
+                Guardar incrementos
+              </Btn>
+            </div>
+          </form>
+        )}
+      </div>
+
       <div className="flex items-center gap-3 mb-4">
-        <span className="text-sm text-slate-500 font-semibold">Metodolog�a:</span>
-        {['Base 0', 'Mixta', 'Hist�rica'].map((m) => (
+        <span className="text-sm text-slate-500 font-semibold">Metodología:</span>
+        {['Base 0', 'Mixta', 'Histórica'].map((m) => (
           <button
             key={m}
             onClick={() => setMethod(m)}
@@ -68,7 +261,6 @@ export function ModulePresupuesto() {
         ))}
       </div>
 
-      {/* Chart */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-5 mb-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-slate-700">Proyectado vs Ejecutado por Rubro</h3>
@@ -105,12 +297,11 @@ export function ModulePresupuesto() {
         </ResponsiveContainer>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
         <table className="w-full text-left">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              {['Rubro', 'Categor�a', 'Proyectado', 'Ejecutado', 'Variaci�n', 'Progreso'].map(
+              {['Rubro', 'Categoría', 'Proyectado', 'Ejecutado', 'Variación', 'Progreso'].map(
                 (h) => (
                   <th
                     key={h}
