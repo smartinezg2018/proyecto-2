@@ -15,6 +15,7 @@ import { InvoiceItem } from './InvoiceItem.js';
 import { ChargeSchedule } from './ChargeSchedule.js';
 import { Payment } from './Payment.js';
 import { PaymentAllocation } from './PaymentAllocation.js';
+import { CashReceipt } from './CashReceipt.js';
 import { Project } from './Project.js';
 import { ProjectQuote } from './ProjectQuote.js';
 import { ProjectProgress } from './ProjectProgress.js';
@@ -61,6 +62,8 @@ Payment.hasMany(PaymentAllocation, { foreignKey: 'paymentId', as: 'allocations' 
 PaymentAllocation.belongsTo(Payment, { foreignKey: 'paymentId' });
 PaymentAllocation.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
 Invoice.hasMany(PaymentAllocation, { foreignKey: 'invoiceId', as: 'allocations' });
+Payment.hasOne(CashReceipt, { foreignKey: 'paymentId', as: 'cashReceipt' });
+CashReceipt.belongsTo(Payment, { foreignKey: 'paymentId', as: 'payment' });
 Project.hasMany(ProjectQuote, { foreignKey: 'projectId', as: 'quotes' });
 ProjectQuote.belongsTo(Project, { foreignKey: 'projectId' });
 ProjectQuote.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
@@ -86,6 +89,7 @@ export {
   ChargeSchedule,
   Payment,
   PaymentAllocation,
+  CashReceipt,
   Project,
   ProjectQuote,
   ProjectProgress

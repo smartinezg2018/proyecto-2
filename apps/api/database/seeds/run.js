@@ -34,6 +34,7 @@ const SEED_PROFILES = [
       'billing.view',
       'billing.payment.create',
       'billing.payment.apply',
+      'billing.receipt.view',
       'budget.view',
       'projects.view',
       'projects.create',
