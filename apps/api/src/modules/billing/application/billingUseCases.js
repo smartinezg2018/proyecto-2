@@ -19,6 +19,24 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
       });
     },
 
+    async listInvoiceHistory(buildingId, filters) {
+      return repository.findInvoiceHistory({
+        buildingId: Number(buildingId),
+        ...filters
+      });
+    },
+
+    async getInvoiceDetail(buildingId, invoiceId) {
+      const invoice = await repository.findInvoiceDetail({
+        buildingId: Number(buildingId),
+        invoiceId: Number(invoiceId)
+      });
+      if (!invoice) {
+        throw new AppError('La factura no existe.', 404, 'INVOICE_NOT_FOUND');
+      }
+      return invoice;
+    },
+
     async generateOrdinaryInvoices(input, createdBy) {
       const uniqueUnitIds = [...new Set(input.unitIds)];
       if (uniqueUnitIds.length !== input.unitIds.length) {

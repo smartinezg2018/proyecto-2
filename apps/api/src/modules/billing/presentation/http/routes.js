@@ -9,7 +9,9 @@ import {
   generateExtraordinaryChargesSchema,
   generateRetroactiveChargesSchema,
   generateOrdinaryInvoicesSchema,
-  listPortfolioQuerySchema
+  listPortfolioQuerySchema,
+  listInvoiceHistoryQuerySchema,
+  invoiceIdSchema
 } from './billingSchemas.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
 
@@ -46,6 +48,43 @@ billingRoutes.get(
     }
     const portfolio = await useCases.listPortfolio(request.params.buildingId, parsed.data);
     response.json({ data: portfolio, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/invoices',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsed = listInvoiceHistoryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError(
+        'Los filtros del historial de facturación no son válidos.',
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+    const invoices = await useCases.listInvoiceHistory(request.params.buildingId, parsed.data);
+    response.json({ data: invoices, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/invoices/:invoiceId',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedInvoiceId = invoiceIdSchema.safeParse(request.params.invoiceId);
+    if (!parsedInvoiceId.success) {
+      throw new AppError('La factura indicada no es válida.', 400, 'VALIDATION_ERROR');
+    }
+    const invoice = await useCases.getInvoiceDetail(
+      request.params.buildingId,
+      parsedInvoiceId.data
+    );
+    response.json({ data: invoice, meta: { requestId: request.id } });
   })
 );
 

@@ -1033,6 +1033,186 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     }
   );
 
+  let historyInvoiceId;
+  let invoiceWithoutPaymentsId;
+  await check(
+    'CP-047-01',
+    'HU-047: listar facturas por apartamento, periodo y estado',
+    async () => {
+      const [partialInvoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2025-02', '2025-02-15', 'parcialmente_pagada', 'HU047-001', 600000, ?, ?)`,
+        [building1.id, unit1.id, admin.user.id, admin.user.id]
+      );
+      historyInvoiceId = partialInvoice.insertId;
+      await database.query(
+        `INSERT INTO invoice_items (invoice_id, concept, amount)
+         VALUES (?, 'Administración', 500000), (?, 'Cuota extraordinaria', 100000)`,
+        [historyInvoiceId, historyInvoiceId]
+      );
+
+      const [paidInvoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2025-03', '2025-03-15', 'pagada', 'HU047-002', 450000, ?, ?)`,
+        [building1.id, unit1.id, admin.user.id, admin.user.id]
+      );
+      await database.query(
+        `INSERT INTO invoice_items (invoice_id, concept, amount)
+         VALUES (?, 'Administración', 450000)`,
+        [paidInvoice.insertId]
+      );
+
+      const [otherUnitInvoice] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2025-04', '2025-04-15', 'pendiente', 'HU047-OTRA', 300000, ?, ?)`,
+        [building1.id, unit2.id, admin.user.id, admin.user.id]
+      );
+      invoiceWithoutPaymentsId = otherUnitInvoice.insertId;
+      await database.query(
+        `INSERT INTO invoice_items (invoice_id, concept, amount)
+         VALUES (?, 'Administración', 300000)`,
+        [invoiceWithoutPaymentsId]
+      );
+
+      const history = await request(
+        `/api/v1/billing/buildings/${building1.id}/invoices?unitId=${unit1.id}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(history, 200);
+      assert.deepEqual(
+        history.payload.data.slice(0, 3).map((invoice) => invoice.period),
+        ['2025-03', '2025-02', '2025-01']
+      );
+      assert.ok(history.payload.data.every((invoice) => invoice.unitId === unit1.id));
+
+      const filtered = await request(
+        `/api/v1/billing/buildings/${building1.id}/invoices?unitId=${unit1.id}&period=2025-02&status=parcialmente_pagada`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(filtered, 200);
+      assert.deepEqual(
+        filtered.payload.data.map((invoice) => invoice.id),
+        [historyInvoiceId]
+      );
+
+      const crossBuildingUnit = await request(
+        `/api/v1/billing/buildings/${building2.id}/invoices?unitId=${unit1.id}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(crossBuildingUnit, 200);
+      assert.deepEqual(crossBuildingUnit.payload.data, []);
+
+      expectStatus(
+        await request(
+          `/api/v1/billing/buildings/${building1.id}/invoices?unitId=${unit1.id}&period=febrero`,
+          { cookie: admin.cookie }
+        ),
+        400
+      );
+      expectStatus(
+        await request(
+          `/api/v1/billing/buildings/${building1.id}/invoices?unitId=${unit1.id}&status=anulada`,
+          { cookie: admin.cookie }
+        ),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/invoices`, {
+          cookie: admin.cookie
+        }),
+        400
+      );
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/invoices?unitId=${unit1.id}`, {
+          cookie: operator.cookie
+        }),
+        403
+      );
+      const buildingAdmin = await login('edificio@example.com', 'Edificio123!');
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building2.id}/invoices?unitId=${unit1.id}`, {
+          cookie: buildingAdmin.cookie
+        }),
+        403
+      );
+    }
+  );
+
+  await check(
+    'CP-047-02',
+    'HU-047: abrir detalle con conceptos, pagos y saldo de forma segura',
+    async () => {
+      const [payment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2025-02-20', 200000, 'transferencia', 'HU047-PAGO-001', 'aplicado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 200000)',
+        [payment.insertId, historyInvoiceId]
+      );
+      const [reversedPayment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2025-02-21', 50000, 'efectivo', 'HU047-PAGO-REV', 'reversado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 50000)',
+        [reversedPayment.insertId, historyInvoiceId]
+      );
+      await database.query(
+        `INSERT INTO late_interests (invoice_id, calculation_date, amount, status, created_by)
+         VALUES (?, '2025-03-01', 15000, 'pendiente', ?),
+                (?, '2025-03-02', 5000, 'reversado', ?)`,
+        [historyInvoiceId, admin.user.id, historyInvoiceId, admin.user.id]
+      );
+
+      const detail = await request(
+        `/api/v1/billing/buildings/${building1.id}/invoices/${historyInvoiceId}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(detail, 200);
+      assert.equal(detail.payload.data.total, 600000);
+      assert.equal(detail.payload.data.interests, 15000);
+      assert.equal(detail.payload.data.appliedPayments, 200000);
+      assert.equal(detail.payload.data.balance, 415000);
+      assert.deepEqual(
+        detail.payload.data.items.map((item) => item.concept),
+        ['Administración', 'Cuota extraordinaria']
+      );
+      assert.deepEqual(detail.payload.data.payments.map((item) => item.status).sort(), [
+        'aplicado',
+        'reversado'
+      ]);
+
+      const withoutPayments = await request(
+        `/api/v1/billing/buildings/${building1.id}/invoices/${invoiceWithoutPaymentsId}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(withoutPayments, 200);
+      assert.equal(withoutPayments.payload.data.appliedPayments, 0);
+      assert.equal(withoutPayments.payload.data.balance, 300000);
+
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building2.id}/invoices/${historyInvoiceId}`, {
+          cookie: admin.cookie
+        }),
+        404
+      );
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/invoices/99999999`, {
+          cookie: admin.cookie
+        }),
+        404
+      );
+    }
+  );
+
   await pendingCheck(
     'CP-034-01',
     'HU-034: asociar varios activos y mostrarlos en el detalle',
