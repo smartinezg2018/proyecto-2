@@ -62,3 +62,27 @@ export const registerPaymentSchema = z.object({
     }),
   reference: z.string().trim().min(1).max(100)
 });
+
+export const applyPaymentSchema = z
+  .object({
+    mode: z.enum(['auto', 'manual']),
+    allocations: z
+      .array(
+        z.object({
+          invoiceId: z.coerce.number().int().positive(),
+          amount: z.coerce.number().positive()
+        })
+      )
+      .optional()
+  })
+  .superRefine((value, context) => {
+    if (value.mode === 'manual' && (!value.allocations || value.allocations.length === 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Debe indicar al menos una factura para la aplicación manual.',
+        path: ['allocations']
+      });
+    }
+  });
+
+export const paymentIdSchema = z.coerce.number().int().positive();

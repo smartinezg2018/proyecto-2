@@ -4,6 +4,7 @@ import {
   Invoice,
   InvoiceItem,
   Payment,
+  PaymentAllocation,
   Unit
 } from '../../../../database/models/index.js';
 import { QueryTypes } from 'sequelize';
@@ -22,8 +23,18 @@ function mapPayment(payment) {
     paymentMethod: data.paymentMethod,
     reference: data.reference,
     status: data.status,
+    creditBalance: Number(data.creditBalance ?? 0),
+    allocations: (data.allocations || []).map((allocation) => ({
+      id: Number(allocation.id),
+      invoiceId: Number(allocation.invoiceId),
+      amount: Number(allocation.amount)
+    })),
     createdBy: data.createdBy == null ? null : Number(data.createdBy)
   };
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value) * 100) / 100;
 }
 
 function mapInvoice(invoice) {
@@ -490,9 +501,182 @@ export class BillingRepository {
 
   async findPaymentById(paymentId) {
     const payment = await Payment.findByPk(paymentId, {
-      include: [{ model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] }]
+      include: [
+        { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+        { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] }
+      ]
     });
     return payment ? mapPayment(payment) : null;
+  }
+
+  async findOpenInvoiceBalances({ buildingId, unitId, invoiceIds = null, transaction }) {
+    const rows = await sequelize.query(
+      `SELECT i.id AS invoiceId,
+              i.period,
+              i.due_date AS dueDate,
+              i.total AS capital,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.payments, 0) AS payments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.payments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ) interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN (
+         SELECT pa.invoice_id, SUM(pa.amount) AS payments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       ) payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.building_id = :buildingId
+         AND i.unit_id = :unitId
+         AND (:hasInvoiceIds = 0 OR i.id IN (:invoiceIds))
+       ORDER BY i.due_date ASC, i.id ASC`,
+      {
+        replacements: {
+          buildingId: Number(buildingId),
+          unitId: Number(unitId),
+          hasInvoiceIds: invoiceIds?.length ? 1 : 0,
+          invoiceIds: invoiceIds?.length ? invoiceIds : [0]
+        },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    return rows.map((row) => ({
+      invoiceId: Number(row.invoiceId),
+      period: row.period,
+      dueDate: row.dueDate,
+      capital: Number(row.capital),
+      interests: Number(row.interests),
+      payments: Number(row.payments),
+      balance: Number(row.balance)
+    }));
+  }
+
+  async applyPayment({ buildingId, paymentId, mode, allocations = [] }) {
+    return sequelize.transaction(async (transaction) => {
+      const payment = await Payment.findOne({
+        where: { id: paymentId, buildingId },
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+      if (!payment) {
+        const error = new Error('El pago no existe en el edificio indicado.');
+        error.code = 'PAYMENT_NOT_FOUND';
+        error.statusCode = 404;
+        throw error;
+      }
+      if (payment.status !== 'registrado') {
+        const error = new Error('Solo se pueden aplicar pagos en estado registrado.');
+        error.code = 'PAYMENT_NOT_APPLICABLE';
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const available = roundMoney(payment.amount);
+      let planned = [];
+
+      if (mode === 'auto') {
+        const openInvoices = await this.findOpenInvoiceBalances({
+          buildingId,
+          unitId: payment.unitId,
+          transaction
+        });
+        let remaining = available;
+        for (const invoice of openInvoices) {
+          if (remaining <= 0) break;
+          const balance = roundMoney(invoice.balance);
+          if (balance <= 0) continue;
+          const applied = roundMoney(Math.min(remaining, balance));
+          planned.push({ invoiceId: invoice.invoiceId, amount: applied });
+          remaining = roundMoney(remaining - applied);
+        }
+      } else {
+        const invoiceIds = [...new Set(allocations.map((item) => Number(item.invoiceId)))];
+        if (invoiceIds.length !== allocations.length) {
+          const error = new Error('No puede repetir facturas en la misma aplicación.');
+          error.code = 'DUPLICATE_INVOICE_ALLOCATION';
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const openInvoices = await this.findOpenInvoiceBalances({
+          buildingId,
+          unitId: payment.unitId,
+          invoiceIds,
+          transaction
+        });
+        const balances = new Map(openInvoices.map((invoice) => [invoice.invoiceId, invoice]));
+
+        planned = allocations.map((item) => {
+          const invoiceId = Number(item.invoiceId);
+          const amount = roundMoney(item.amount);
+          const invoice = balances.get(invoiceId);
+          if (!invoice) {
+            const error = new Error(
+              'Una o más facturas no pertenecen al edificio y apartamento del pago.'
+            );
+            error.code = 'INVOICE_PAYMENT_MISMATCH';
+            error.statusCode = 400;
+            throw error;
+          }
+          if (amount <= 0) {
+            const error = new Error('Cada aplicación debe ser mayor a cero.');
+            error.code = 'VALIDATION_ERROR';
+            error.statusCode = 400;
+            throw error;
+          }
+          if (amount - roundMoney(invoice.balance) > 0.0001) {
+            const error = new Error('No puede aplicar un valor mayor al saldo de la factura.');
+            error.code = 'ALLOCATION_EXCEEDS_BALANCE';
+            error.statusCode = 400;
+            throw error;
+          }
+          return { invoiceId, amount };
+        });
+      }
+
+      const appliedTotal = roundMoney(planned.reduce((sum, item) => sum + item.amount, 0));
+      if (appliedTotal - available > 0.0001) {
+        const error = new Error('El valor aplicado supera el monto del pago.');
+        error.code = 'ALLOCATION_EXCEEDS_PAYMENT';
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (planned.length > 0) {
+        await PaymentAllocation.bulkCreate(
+          planned.map((item) => ({
+            paymentId: payment.id,
+            invoiceId: item.invoiceId,
+            amount: item.amount
+          })),
+          { transaction }
+        );
+      }
+
+      const creditBalance = roundMoney(available - appliedTotal);
+      await payment.update({ status: 'aplicado', creditBalance }, { transaction });
+
+      const updated = await Payment.findByPk(payment.id, {
+        include: [
+          { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
+          { model: PaymentAllocation, as: 'allocations', attributes: ['id', 'invoiceId', 'amount'] }
+        ],
+        transaction
+      });
+      return mapPayment(updated);
+    });
   }
 }
 

@@ -75,6 +75,13 @@ export function registerPayment(buildingId, payment) {
   });
 }
 
+export function applyPayment(buildingId, paymentId, payload) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/payments/${paymentId}/apply`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getPortfolio(buildingId, filters = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {

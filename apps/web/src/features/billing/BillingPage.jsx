@@ -6,6 +6,7 @@ import {
   getInvoiceHistory,
   getPortfolio,
   getUnits,
+  applyPayment,
   registerPayment
 } from '../../services/api.js';
 import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
@@ -20,7 +21,8 @@ const EMPTY_PAYMENT_FORM = {
   paymentDate: '',
   amount: '',
   paymentMethod: 'transferencia',
-  reference: ''
+  reference: '',
+  applyAuto: true
 };
 const STATUS_LABELS = new Map([
   ['al_dia', 'Al día'],
@@ -184,8 +186,11 @@ export function ModuleFacturacion({ activeBuildingId }) {
   }
 
   function updatePaymentForm(event) {
-    const { name, value } = event.target;
-    setPaymentForm((current) => ({ ...current, [name]: value }));
+    const { name, value, type, checked } = event.target;
+    setPaymentForm((current) => ({
+      ...current,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   }
 
   async function submitPayment(event) {
@@ -203,9 +208,14 @@ export function ModuleFacturacion({ activeBuildingId }) {
         paymentMethod: paymentForm.paymentMethod,
         reference: paymentForm.reference.trim()
       });
-      setPaymentMessage(
-        `Pago ${response.data.reference} registrado por ${fmt(response.data.amount)}.`
-      );
+      let message = `Pago ${response.data.reference} registrado por ${fmt(response.data.amount)}.`;
+      if (paymentForm.applyAuto) {
+        const applied = await applyPayment(activeBuildingId, response.data.id, { mode: 'auto' });
+        message += ` Aplicado a ${applied.data.allocations.length} factura(s); saldo a favor ${fmt(
+          applied.data.creditBalance
+        )}.`;
+      }
+      setPaymentMessage(message);
       setPaymentForm(EMPTY_PAYMENT_FORM);
       setShowPaymentForm(false);
       setFilters((current) => ({ ...current }));
@@ -312,6 +322,15 @@ export function ModuleFacturacion({ activeBuildingId }) {
               maxLength={100}
               className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
             />
+          </label>
+          <label className="md:col-span-5 flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              name="applyAuto"
+              checked={paymentForm.applyAuto}
+              onChange={updatePaymentForm}
+            />
+            Aplicar automáticamente a facturas por antigüedad
           </label>
           <div className="md:col-span-5 flex justify-end gap-2">
             <Btn
