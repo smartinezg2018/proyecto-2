@@ -172,11 +172,7 @@ export function createProjectQuoteUseCases(
       const quoteId = Number(input.quoteId);
       const selected = quotes.find((item) => Number(item.id) === quoteId);
       if (!selected) {
-        throw new AppError(
-          'La cotización no pertenece a este proyecto.',
-          404,
-          'QUOTE_NOT_FOUND'
-        );
+        throw new AppError('La cotización no pertenece a este proyecto.', 404, 'QUOTE_NOT_FOUND');
       }
 
       const justification = requiredText(

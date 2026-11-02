@@ -52,10 +52,7 @@ projectRoutes.get(
   requirePermission('projects.view'),
   ensureBuildingAccess,
   asyncHandler(async (request, response) => {
-    const projects = await projectUseCases.listByBuilding(
-      request.params.buildingId,
-      request.query
-    );
+    const projects = await projectUseCases.listByBuilding(request.params.buildingId, request.query);
     response.json({
       data: projects,
       meta: { requestId: request.id, page: 1, pageSize: projects.length }

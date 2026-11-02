@@ -38,11 +38,7 @@ function validateType(input) {
 
 function validateDateString(date, fieldLabel) {
   if (typeof date !== 'string' || !DATE_PATTERN.test(date) || Number.isNaN(Date.parse(date))) {
-    throw new AppError(
-      `${fieldLabel} debe tener el formato YYYY-MM-DD.`,
-      400,
-      'VALIDATION_ERROR'
-    );
+    throw new AppError(`${fieldLabel} debe tener el formato YYYY-MM-DD.`, 400, 'VALIDATION_ERROR');
   }
 }
 
@@ -64,7 +60,11 @@ function validateSchedule(input) {
   }
 
   if (!MAINTENANCE_FREQUENCIES.includes(input.frequency)) {
-    throw new AppError('La frecuencia del mantenimiento preventivo no es válida.', 400, 'VALIDATION_ERROR');
+    throw new AppError(
+      'La frecuencia del mantenimiento preventivo no es válida.',
+      400,
+      'VALIDATION_ERROR'
+    );
   }
 
   if (typeof input.responsible !== 'string' || input.responsible.trim() === '') {

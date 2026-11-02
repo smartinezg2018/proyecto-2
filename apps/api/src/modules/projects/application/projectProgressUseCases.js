@@ -29,7 +29,11 @@ function normalizePercentage(value) {
   }
 
   if (amount < 0 || amount > 100) {
-    throw new AppError('El porcentaje de avance debe estar entre 0 y 100.', 400, 'VALIDATION_ERROR');
+    throw new AppError(
+      'El porcentaje de avance debe estar entre 0 y 100.',
+      400,
+      'VALIDATION_ERROR'
+    );
   }
 
   if (Math.round(amount * 100) / 100 !== amount) {
@@ -147,16 +151,10 @@ export function createProjectProgressUseCases(
       const progress = validateProgressInput(input);
       const quote = await quoteRepository.findById(progress.quoteId);
       if (!quote || Number(quote.projectId) !== Number(projectId)) {
-        throw new AppError(
-          'La cotización no pertenece a este proyecto.',
-          404,
-          'QUOTE_NOT_FOUND'
-        );
+        throw new AppError('La cotización no pertenece a este proyecto.', 404, 'QUOTE_NOT_FOUND');
       }
 
-      const supplierName = quote.supplier?.name
-        ? String(quote.supplier.name).trim()
-        : '';
+      const supplierName = quote.supplier?.name ? String(quote.supplier.name).trim() : '';
       if (!supplierName) {
         throw new AppError(
           'La cotización no tiene un proveedor asociado.',

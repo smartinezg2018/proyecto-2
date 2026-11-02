@@ -1,5 +1,9 @@
 import { AppError } from '../../../shared/errors/AppError.js';
-import { alertTargetDate, shouldAlertMaintenance, todayInColombia } from '../domain/maintenanceSchedule.js';
+import {
+  alertTargetDate,
+  shouldAlertMaintenance,
+  todayInColombia
+} from '../domain/maintenanceSchedule.js';
 
 export function createMaintenanceAlertUseCases(
   alertRepository,

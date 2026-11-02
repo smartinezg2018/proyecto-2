@@ -37,7 +37,10 @@ export const registerMaintenanceSchema = z
     responsible: z.string().trim().optional(),
     nextExecutionDate: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'La próxima fecha de ejecución debe tener el formato YYYY-MM-DD.')
+      .regex(
+        /^\d{4}-\d{2}-\d{2}$/,
+        'La próxima fecha de ejecución debe tener el formato YYYY-MM-DD.'
+      )
       .optional()
       .nullable(),
     description: z.string().trim().optional(),

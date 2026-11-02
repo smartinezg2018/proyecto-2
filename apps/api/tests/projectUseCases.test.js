@@ -295,8 +295,11 @@ test('HU-063: rechaza resultado vacío, costo inválido o fecha anterior al inic
     statusCode: 400,
     message: 'El costo total no puede ser negativo.'
   });
-  await assert.rejects(() => useCases.close(1, saved.id, { ...validClose, closeDate: '2026-10-01' }), {
-    statusCode: 400,
-    message: 'La fecha de cierre no puede ser anterior a la fecha de inicio.'
-  });
+  await assert.rejects(
+    () => useCases.close(1, saved.id, { ...validClose, closeDate: '2026-10-01' }),
+    {
+      statusCode: 400,
+      message: 'La fecha de cierre no puede ser anterior a la fecha de inicio.'
+    }
+  );
 });

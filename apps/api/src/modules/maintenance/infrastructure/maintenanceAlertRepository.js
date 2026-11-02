@@ -39,9 +39,7 @@ function mapAlert(row) {
     createdAt: formatDateTime(row.createdAt),
     attendedAt: formatDateTime(row.attendedAt),
     attendedBy: row.attendedBy ?? null,
-    asset: row.assetCode
-      ? { id: row.assetId, code: row.assetCode, name: row.assetName }
-      : null,
+    asset: row.assetCode ? { id: row.assetId, code: row.assetCode, name: row.assetName } : null,
     responsible: row.responsible ?? null,
     frequency: row.frequency ?? null,
     maintenanceType: row.maintenanceType ?? null,

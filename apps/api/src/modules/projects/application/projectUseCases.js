@@ -1,6 +1,10 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 import { isCalendarDate } from '../../assets/domain/calendarDate.js';
-import { INITIAL_PROJECT_STATUS, PROJECT_STATUSES, PROJECT_TYPES } from '../domain/projectCatalog.js';
+import {
+  INITIAL_PROJECT_STATUS,
+  PROJECT_STATUSES,
+  PROJECT_TYPES
+} from '../domain/projectCatalog.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BUDGET = 9999999999999.99;
@@ -49,11 +53,7 @@ function normalizeAmount(value, fieldLabel) {
   }
 
   if (Math.round(amount * 100) / 100 !== amount) {
-    throw new AppError(
-      `${fieldLabel} admite como máximo dos decimales.`,
-      400,
-      'VALIDATION_ERROR'
-    );
+    throw new AppError(`${fieldLabel} admite como máximo dos decimales.`, 400, 'VALIDATION_ERROR');
   }
 
   return amount;

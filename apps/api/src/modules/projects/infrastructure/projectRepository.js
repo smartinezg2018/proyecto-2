@@ -49,12 +49,14 @@ function mapProject(project) {
     updatedAt: data.updatedAt,
     quotes: (data.quotes ?? []).map(mapProjectQuote),
     progressEntries: (data.progressEntries ?? []).map(mapProjectProgress),
-    currentPercentage: Array.isArray(data.progressEntries) && data.progressEntries.length
-      ? Number(mapProjectProgress(data.progressEntries[0]).percentage)
-      : 0,
-    currentExecutedCost: Array.isArray(data.progressEntries) && data.progressEntries.length
-      ? Number(mapProjectProgress(data.progressEntries[0]).executedCost)
-      : 0
+    currentPercentage:
+      Array.isArray(data.progressEntries) && data.progressEntries.length
+        ? Number(mapProjectProgress(data.progressEntries[0]).percentage)
+        : 0,
+    currentExecutedCost:
+      Array.isArray(data.progressEntries) && data.progressEntries.length
+        ? Number(mapProjectProgress(data.progressEntries[0]).executedCost)
+        : 0
   };
 }
 

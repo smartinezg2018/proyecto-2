@@ -6,16 +6,16 @@ Modulo para proyectos aprobados, cotizaciones, avances, costos y cierre.
 
 Base: `/api/v1/projects`
 
-| Metodo | Ruta                              | Permiso           | Descripcion                            |
-| ------ | --------------------------------- | ----------------- | -------------------------------------- |
-| POST   | `/buildings/:buildingId/projects` | `projects.create` | Registra un proyecto aprobado (HU-058) |
-| GET    | `/buildings/:buildingId/projects` | `projects.view`   | Lista y filtra el historial (HU-062)   |
-| POST   | `/buildings/:buildingId/projects/:projectId/close` | `projects.update` | Cierra un proyecto (HU-063) |
-| POST   | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.update` | Registra una cotización (HU-059) |
-| GET    | `/buildings/:buildingId/projects/:projectId/quotes` | `projects.view`   | Lista las cotizaciones del proyecto |
-| POST   | `/buildings/:buildingId/projects/:projectId/quotes/selection` | `projects.update` | Selecciona una cotización (HU-060) |
-| POST   | `/buildings/:buildingId/projects/:projectId/progress` | `projects.update` | Registra un avance (HU-061) |
-| GET    | `/buildings/:buildingId/projects/:projectId/progress` | `projects.view`   | Lista el historial de avances |
+| Metodo | Ruta                                                          | Permiso           | Descripcion                            |
+| ------ | ------------------------------------------------------------- | ----------------- | -------------------------------------- |
+| POST   | `/buildings/:buildingId/projects`                             | `projects.create` | Registra un proyecto aprobado (HU-058) |
+| GET    | `/buildings/:buildingId/projects`                             | `projects.view`   | Lista y filtra el historial (HU-062)   |
+| POST   | `/buildings/:buildingId/projects/:projectId/close`            | `projects.update` | Cierra un proyecto (HU-063)            |
+| POST   | `/buildings/:buildingId/projects/:projectId/quotes`           | `projects.update` | Registra una cotización (HU-059)       |
+| GET    | `/buildings/:buildingId/projects/:projectId/quotes`           | `projects.view`   | Lista las cotizaciones del proyecto    |
+| POST   | `/buildings/:buildingId/projects/:projectId/quotes/selection` | `projects.update` | Selecciona una cotización (HU-060)     |
+| POST   | `/buildings/:buildingId/projects/:projectId/progress`         | `projects.update` | Registra un avance (HU-061)            |
+| GET    | `/buildings/:buildingId/projects/:projectId/progress`         | `projects.view`   | Lista el historial de avances          |
 
 Cuerpo de registro (HU-058):
 
