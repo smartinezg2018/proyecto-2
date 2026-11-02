@@ -2,6 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBillingUseCases } from '../src/modules/billing/application/billingUseCases.js';
 
+test('HU-046 pasa los filtros y la fecha de Colombia al consultar cartera', async () => {
+  let received;
+  const useCases = createBillingUseCases(
+    {
+      async findPortfolio(input) {
+        received = input;
+        return [{ unitId: 10, totalBalance: 215000 }];
+      }
+    },
+    () => '2026-11-02'
+  );
+
+  const result = await useCases.listPortfolio(4, {
+    unitId: 10,
+    period: '2026-10',
+    status: 'en_mora'
+  });
+
+  assert.deepEqual(received, {
+    buildingId: 4,
+    unitId: 10,
+    period: '2026-10',
+    status: 'en_mora',
+    today: '2026-11-02'
+  });
+  assert.equal(result[0].totalBalance, 215000);
+});
+
 test('genera facturas ordinarias sin repetir apartamentos', async () => {
   const calls = [];
   const useCases = createBillingUseCases({

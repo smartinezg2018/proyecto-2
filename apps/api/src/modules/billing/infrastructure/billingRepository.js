@@ -1,5 +1,6 @@
 import { sequelize } from '../../../../database/connection.js';
 import { ChargeSchedule, Invoice, InvoiceItem, Unit } from '../../../../database/models/index.js';
+import { QueryTypes } from 'sequelize';
 
 function mapInvoice(invoice) {
   const data = invoice.get({ plain: true });
@@ -12,14 +13,110 @@ function mapInvoice(invoice) {
     dueDate: data.dueDate,
     status: data.status,
     paymentReference: data.paymentReference,
-    items: (data.items || []).map((item) => ({ id: item.id, concept: item.concept, amount: Number(item.amount) })),
+    items: (data.items || []).map((item) => ({
+      id: item.id,
+      concept: item.concept,
+      amount: Number(item.amount)
+    })),
     total: Number(data.total),
     createdBy: data.createdBy
   };
 }
 
 export class BillingRepository {
-  async createOrdinaryInvoices({ buildingId, period, unitIds, concept, baseAmount, dueDate, createdBy }) {
+  async findPortfolio({ buildingId, unitId = null, period = null, status = null, today }) {
+    const rows = await sequelize.query(
+      `WITH interest_totals AS (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ),
+       payment_totals AS (
+         SELECT pa.invoice_id, SUM(pa.amount) AS payments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         INNER JOIN invoices payment_invoice
+           ON payment_invoice.id = pa.invoice_id
+          AND payment_invoice.building_id = p.building_id
+          AND payment_invoice.unit_id = p.unit_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       ),
+       invoice_balances AS (
+         SELECT i.unit_id AS unitId,
+                i.total AS capital,
+                COALESCE(interest_totals.interests, 0) AS interests,
+                COALESCE(payment_totals.payments, 0) AS payments,
+                GREATEST(
+                  i.total + COALESCE(interest_totals.interests, 0)
+                    - COALESCE(payment_totals.payments, 0),
+                  0
+                ) AS balance,
+                i.due_date AS dueDate
+         FROM invoices i
+         LEFT JOIN interest_totals ON interest_totals.invoice_id = i.id
+         LEFT JOIN payment_totals ON payment_totals.invoice_id = i.id
+         WHERE i.building_id = :buildingId
+           AND (:period IS NULL OR i.period = :period)
+       ),
+       portfolio AS (
+         SELECT u.id AS unitId,
+                u.number AS unitNumber,
+                u.tower,
+                COALESCE(SUM(invoice_balances.capital), 0) AS capital,
+                COALESCE(SUM(invoice_balances.interests), 0) AS interests,
+                COALESCE(SUM(invoice_balances.payments), 0) AS payments,
+                COALESCE(SUM(invoice_balances.balance), 0) AS totalBalance,
+                CASE
+                  WHEN COALESCE(SUM(invoice_balances.balance), 0) = 0 THEN 'al_dia'
+                  WHEN MAX(
+                    CASE
+                      WHEN invoice_balances.balance > 0 AND invoice_balances.dueDate < :today THEN 1
+                      ELSE 0
+                    END
+                  ) = 1 THEN 'en_mora'
+                  ELSE 'pendiente'
+                END AS portfolioStatus
+         FROM units u
+         LEFT JOIN invoice_balances ON invoice_balances.unitId = u.id
+         WHERE u.building_id = :buildingId
+           AND u.kind = 'apartamento'
+           AND (:unitId IS NULL OR u.id = :unitId)
+         GROUP BY u.id, u.number, u.tower
+       )
+       SELECT unitId, unitNumber, tower, capital, interests, payments, totalBalance,
+              portfolioStatus AS status
+       FROM portfolio
+       WHERE (:status IS NULL OR portfolioStatus = :status)
+       ORDER BY tower ASC, unitNumber ASC`,
+      {
+        replacements: { buildingId: Number(buildingId), unitId, period, status, today },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    return rows.map((row) => ({
+      unitId: Number(row.unitId),
+      unitNumber: row.unitNumber,
+      tower: row.tower,
+      capital: Number(row.capital),
+      interests: Number(row.interests),
+      payments: Number(row.payments),
+      totalBalance: Number(row.totalBalance),
+      status: row.status
+    }));
+  }
+
+  async createOrdinaryInvoices({
+    buildingId,
+    period,
+    unitIds,
+    concept,
+    baseAmount,
+    dueDate,
+    createdBy
+  }) {
     const invoices = await sequelize.transaction(async (transaction) => {
       const units = await Unit.findAll({ where: { buildingId, id: unitIds }, transaction });
       if (units.length !== unitIds.length) {
@@ -107,9 +204,10 @@ export class BillingRepository {
           originPeriod,
           scheduledPeriod: addMonths(startPeriod, index),
           concept,
-          amount: index === installments - 1
-            ? Number(totalAmount) - installmentAmount * (installments - 1)
-            : installmentAmount,
+          amount:
+            index === installments - 1
+              ? Number(totalAmount) - installmentAmount * (installments - 1)
+              : installmentAmount,
           approvalReference,
           createdBy
         });

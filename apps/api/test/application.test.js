@@ -134,8 +134,8 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     cookie: admin.cookie
   });
   expectStatus(initialBuildings, 200);
-  building1 = initialBuildings.payload.data.find((item) => item.nit === '900111001');
-  building2 = initialBuildings.payload.data.find((item) => item.nit === '900111003');
+  building1 = initialBuildings.payload.data.find((item) => item.nit === '900170804-8');
+  building2 = initialBuildings.payload.data.find((item) => item.nit === '900020096-7');
   assert.ok(building1 && building2);
 
   await check('CP-037-01', 'Persistir anticipación y clasificar pólizas por edificio', async () => {
@@ -241,7 +241,7 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     expectStatus(response, 200);
     assert.deepEqual(
       response.payload.data.map((item) => item.nit),
-      ['900111001']
+      [building1.nit]
     );
   });
 
@@ -896,6 +896,131 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
     });
     expectStatus(response, 403);
   });
+
+  let portfolioInvoiceId;
+  await check(
+    'CP-046-01',
+    'HU-046: mostrar capital, intereses, pagos y saldo por apartamento',
+    async () => {
+      const [invoiceResult] = await database.query(
+        `INSERT INTO invoices
+          (building_id, unit_id, period, due_date, status, payment_reference, total, created_by, updated_by)
+         VALUES (?, ?, '2025-01', '2025-01-10', 'pendiente', 'HU046-001', 500000, ?, ?)`,
+        [building1.id, unit1.id, admin.user.id, admin.user.id]
+      );
+      portfolioInvoiceId = invoiceResult.insertId;
+      const [paymentResult] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2025-01-15', 300000, 'transferencia', 'HU046-PAGO-001', 'aplicado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 300000)',
+        [paymentResult.insertId, portfolioInvoiceId]
+      );
+      await database.query(
+        `INSERT INTO late_interests (invoice_id, calculation_date, amount, status, created_by)
+         VALUES (?, '2025-02-01', 15000, 'pendiente', ?)`,
+        [portfolioInvoiceId, admin.user.id]
+      );
+
+      const [reversedPayment] = await database.query(
+        `INSERT INTO payments
+          (building_id, unit_id, payment_date, amount, payment_method, reference, status, created_by)
+         VALUES (?, ?, '2025-01-20', 10000, 'efectivo', 'HU046-REV-001', 'reversado', ?)`,
+        [building1.id, unit1.id, admin.user.id]
+      );
+      await database.query(
+        'INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES (?, ?, 10000)',
+        [reversedPayment.insertId, portfolioInvoiceId]
+      );
+      await database.query(
+        `INSERT INTO late_interests (invoice_id, calculation_date, amount, status, created_by)
+         VALUES (?, '2025-02-02', 5000, 'reversado', ?)`,
+        [portfolioInvoiceId, admin.user.id]
+      );
+
+      const response = await request(
+        `/api/v1/billing/buildings/${building1.id}/portfolio?unitId=${unit1.id}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(response, 200);
+      assert.deepEqual(response.payload.data, [
+        {
+          unitId: unit1.id,
+          unitNumber: unit1.number,
+          tower: unit1.tower,
+          capital: 500000,
+          interests: 15000,
+          payments: 300000,
+          totalBalance: 215000,
+          status: 'en_mora'
+        }
+      ]);
+    }
+  );
+
+  await check(
+    'CP-046-02',
+    'HU-046: filtrar cartera y aislar la información entre edificios',
+    async () => {
+      const otherUnitResponse = await request(
+        `/api/v1/administration/buildings/${building2.id}/units`,
+        {
+          method: 'POST',
+          cookie: admin.cookie,
+          body: {
+            number: 'HU046-OTRO',
+            tower: 'PR',
+            kind: 'apartamento',
+            coefficient: 1,
+            status: 'desocupada'
+          }
+        }
+      );
+      expectStatus(otherUnitResponse, 201);
+      const otherUnit = otherUnitResponse.payload.data;
+
+      const filtered = await request(
+        `/api/v1/billing/buildings/${building1.id}/portfolio?unitId=${unit1.id}&period=2025-01&status=en_mora`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(filtered, 200);
+      assert.deepEqual(
+        filtered.payload.data.map((row) => row.unitId),
+        [unit1.id]
+      );
+
+      const crossBuilding = await request(
+        `/api/v1/billing/buildings/${building1.id}/portfolio?unitId=${otherUnit.id}`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(crossBuilding, 200);
+      assert.deepEqual(crossBuilding.payload.data, []);
+
+      const current = await request(
+        `/api/v1/billing/buildings/${building1.id}/portfolio?period=2025-01&status=al_dia`,
+        { cookie: admin.cookie }
+      );
+      expectStatus(current, 200);
+      assert.ok(current.payload.data.some((row) => row.unitId === unit2.id));
+
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building1.id}/portfolio?period=enero`, {
+          cookie: admin.cookie
+        }),
+        400
+      );
+      const buildingAdmin = await login('edificio@example.com', 'Edificio123!');
+      expectStatus(
+        await request(`/api/v1/billing/buildings/${building2.id}/portfolio`, {
+          cookie: buildingAdmin.cookie
+        }),
+        403
+      );
+    }
+  );
 
   await check(
     'CP-034-01',

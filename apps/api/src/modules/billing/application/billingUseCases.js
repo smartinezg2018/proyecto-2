@@ -1,11 +1,32 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 
-export function createBillingUseCases(repository) {
+function todayInColombia(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
+}
+
+export function createBillingUseCases(repository, clock = todayInColombia) {
   return {
+    async listPortfolio(buildingId, filters = {}) {
+      return repository.findPortfolio({
+        buildingId: Number(buildingId),
+        ...filters,
+        today: clock()
+      });
+    },
+
     async generateOrdinaryInvoices(input, createdBy) {
       const uniqueUnitIds = [...new Set(input.unitIds)];
       if (uniqueUnitIds.length !== input.unitIds.length) {
-        throw new AppError('No puede repetir apartamentos en la misma generación.', 400, 'DUPLICATE_UNITS');
+        throw new AppError(
+          'No puede repetir apartamentos en la misma generación.',
+          400,
+          'DUPLICATE_UNITS'
+        );
       }
 
       return repository.createOrdinaryInvoices({ ...input, unitIds: uniqueUnitIds, createdBy });
@@ -14,7 +35,11 @@ export function createBillingUseCases(repository) {
     async generateExtraordinaryCharges(input, createdBy) {
       const unitIds = [...new Set(input.unitIds)];
       if (unitIds.length !== input.unitIds.length) {
-        throw new AppError('No puede repetir apartamentos en el mismo cobro.', 400, 'DUPLICATE_UNITS');
+        throw new AppError(
+          'No puede repetir apartamentos en el mismo cobro.',
+          400,
+          'DUPLICATE_UNITS'
+        );
       }
       if (input.startPeriod < input.originPeriod) {
         throw new AppError(
@@ -29,7 +54,11 @@ export function createBillingUseCases(repository) {
     async generateRetroactiveCharges(input, createdBy) {
       const unitIds = [...new Set(input.unitIds)];
       if (unitIds.length !== input.unitIds.length) {
-        throw new AppError('No puede repetir apartamentos en el mismo cobro.', 400, 'DUPLICATE_UNITS');
+        throw new AppError(
+          'No puede repetir apartamentos en el mismo cobro.',
+          400,
+          'DUPLICATE_UNITS'
+        );
       }
       if (input.startPeriod < input.originPeriod) {
         throw new AppError(
