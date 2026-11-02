@@ -113,7 +113,7 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
       });
     },
 
-    async applyPayment(buildingId, paymentId, input) {
+    async applyPayment(buildingId, paymentId, input, updatedBy = null) {
       const mode = input.mode;
       if (mode !== 'auto' && mode !== 'manual') {
         throw new AppError('El modo de aplicación no es válido.', 400, 'VALIDATION_ERROR');
@@ -130,7 +130,16 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         buildingId: Number(buildingId),
         paymentId: Number(paymentId),
         mode,
-        allocations: mode === 'manual' ? input.allocations : []
+        allocations: mode === 'manual' ? input.allocations : [],
+        updatedBy
+      });
+    },
+
+    async syncInvoiceStatusesAfterPaymentChange(buildingId, paymentId, updatedBy = null) {
+      return repository.syncInvoiceStatusesForPayment({
+        buildingId: Number(buildingId),
+        paymentId: Number(paymentId),
+        updatedBy
       });
     }
   };

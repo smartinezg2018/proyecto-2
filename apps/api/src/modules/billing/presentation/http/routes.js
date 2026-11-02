@@ -166,9 +166,29 @@ billingRoutes.post(
     const payment = await useCases.applyPayment(
       request.params.buildingId,
       parsedPaymentId.data,
-      request.body
+      request.body,
+      request.user.id
     );
     response.json({ data: payment, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/payments/:paymentId/sync-invoice-statuses',
+  requireAuth,
+  requirePermission('billing.payment.apply'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedPaymentId = paymentIdSchema.safeParse(request.params.paymentId);
+    if (!parsedPaymentId.success) {
+      throw new AppError('El pago indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const invoiceStatuses = await useCases.syncInvoiceStatusesAfterPaymentChange(
+      request.params.buildingId,
+      parsedPaymentId.data,
+      request.user.id
+    );
+    response.json({ data: invoiceStatuses, meta: { requestId: request.id } });
   })
 );
 

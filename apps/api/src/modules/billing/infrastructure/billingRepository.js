@@ -563,7 +563,7 @@ export class BillingRepository {
     }));
   }
 
-  async applyPayment({ buildingId, paymentId, mode, allocations = [] }) {
+  async applyPayment({ buildingId, paymentId, mode, allocations = [], updatedBy = null }) {
     return sequelize.transaction(async (transaction) => {
       const payment = await Payment.findOne({
         where: { id: paymentId, buildingId },
@@ -668,6 +668,13 @@ export class BillingRepository {
       const creditBalance = roundMoney(available - appliedTotal);
       await payment.update({ status: 'aplicado', creditBalance }, { transaction });
 
+      const affectedInvoiceIds = planned.map((item) => item.invoiceId);
+      const invoiceStatuses = await this.syncInvoiceStatuses({
+        invoiceIds: affectedInvoiceIds,
+        updatedBy,
+        transaction
+      });
+
       const updated = await Payment.findByPk(payment.id, {
         include: [
           { model: Unit, as: 'unit', attributes: ['id', 'number', 'tower'] },
@@ -675,7 +682,97 @@ export class BillingRepository {
         ],
         transaction
       });
-      return mapPayment(updated);
+      return {
+        ...mapPayment(updated),
+        invoiceStatuses
+      };
+    });
+  }
+
+  resolveInvoiceStatus({ balance, appliedPayments }) {
+    if (roundMoney(balance) <= 0) return 'pagada';
+    if (roundMoney(appliedPayments) > 0) return 'parcialmente_pagada';
+    return 'pendiente';
+  }
+
+  async syncInvoiceStatuses({ invoiceIds, updatedBy = null, transaction = null }) {
+    const uniqueIds = [...new Set((invoiceIds || []).map(Number).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const rows = await sequelize.query(
+      `SELECT i.id AS invoiceId,
+              i.status AS currentStatus,
+              i.total AS capital,
+              COALESCE(interest_totals.interests, 0) AS interests,
+              COALESCE(payment_totals.payments, 0) AS payments,
+              GREATEST(
+                i.total + COALESCE(interest_totals.interests, 0)
+                  - COALESCE(payment_totals.payments, 0),
+                0
+              ) AS balance
+       FROM invoices i
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount) AS interests
+         FROM late_interests
+         WHERE status <> 'reversado'
+         GROUP BY invoice_id
+       ) interest_totals ON interest_totals.invoice_id = i.id
+       LEFT JOIN (
+         SELECT pa.invoice_id, SUM(pa.amount) AS payments
+         FROM payment_allocations pa
+         INNER JOIN payments p ON p.id = pa.payment_id
+         WHERE p.status <> 'reversado'
+         GROUP BY pa.invoice_id
+       ) payment_totals ON payment_totals.invoice_id = i.id
+       WHERE i.id IN (:invoiceIds)`,
+      {
+        replacements: { invoiceIds: uniqueIds },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const updates = [];
+    for (const row of rows) {
+      const balance = roundMoney(row.balance);
+      const appliedPayments = roundMoney(row.payments);
+      const status = this.resolveInvoiceStatus({ balance, appliedPayments });
+      if (status !== row.currentStatus) {
+        await Invoice.update(
+          { status, updatedBy },
+          { where: { id: Number(row.invoiceId) }, transaction }
+        );
+      }
+      updates.push({
+        invoiceId: Number(row.invoiceId),
+        status,
+        balance,
+        appliedPayments,
+        capital: Number(row.capital),
+        interests: Number(row.interests)
+      });
+    }
+    return updates;
+  }
+
+  async syncInvoiceStatusesForPayment({ buildingId, paymentId, updatedBy = null }) {
+    return sequelize.transaction(async (transaction) => {
+      const payment = await Payment.findOne({
+        where: { id: paymentId, buildingId },
+        include: [
+          { model: PaymentAllocation, as: 'allocations', attributes: ['invoiceId'] }
+        ],
+        transaction
+      });
+      if (!payment) {
+        const error = new Error('El pago no existe en el edificio indicado.');
+        error.code = 'PAYMENT_NOT_FOUND';
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const invoiceIds = (payment.allocations || []).map((item) => Number(item.invoiceId));
+      return this.syncInvoiceStatuses({ invoiceIds, updatedBy, transaction });
     });
   }
 }

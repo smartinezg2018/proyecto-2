@@ -217,3 +217,37 @@ test('HU-044 exige facturas en la aplicación manual', async () => {
     { code: 'VALIDATION_ERROR', statusCode: 400 }
   );
 });
+
+test('HU-045 sincroniza estados de factura tras un cambio de pago', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async syncInvoiceStatusesForPayment(input) {
+      received = input;
+      return [
+        { invoiceId: 8, status: 'parcialmente_pagada', balance: 100000, appliedPayments: 150000 }
+      ];
+    }
+  });
+
+  const statuses = await useCases.syncInvoiceStatusesAfterPaymentChange(4, 21, 7);
+  assert.equal(statuses[0].status, 'parcialmente_pagada');
+  assert.deepEqual(received, { buildingId: 4, paymentId: 21, updatedBy: 7 });
+});
+
+test('HU-045 pasa el usuario al aplicar un pago para actualizar facturas', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async applyPayment(input) {
+      received = input;
+      return {
+        id: 21,
+        status: 'aplicado',
+        invoiceStatuses: [{ invoiceId: 8, status: 'pagada', balance: 0 }]
+      };
+    }
+  });
+
+  const payment = await useCases.applyPayment(4, 21, { mode: 'auto' }, 9);
+  assert.equal(payment.invoiceStatuses[0].status, 'pagada');
+  assert.equal(received.updatedBy, 9);
+});
