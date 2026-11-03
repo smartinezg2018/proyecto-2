@@ -6,7 +6,11 @@ import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware
 import { AppError } from '../../../../shared/errors/AppError.js';
 import { BudgetRepository } from '../../infrastructure/budgetRepository.js';
 import { createBudgetUseCases } from '../../application/budgetUseCases.js';
-import { budgetYearSchema, copyBudgetFromExecutionSchema } from './budgetSchemas.js';
+import {
+  budgetYearSchema,
+  copyBudgetFromExecutionSchema,
+  registerExecutionSchema
+} from './budgetSchemas.js';
 
 export const budgetRoutes = Router();
 const useCases = createBudgetUseCases(new BudgetRepository());
@@ -41,5 +45,36 @@ budgetRoutes.post(
       request.user.id
     );
     response.status(201).json({ data: budget, meta: { requestId: request.id } });
+  })
+);
+
+budgetRoutes.get(
+  '/buildings/:buildingId/budget-lines',
+  requireAuth,
+  requirePermission('budget.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedYear = budgetYearSchema.safeParse(request.query.year);
+    if (!parsedYear.success) {
+      throw new AppError('El año consultado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const lines = await useCases.listBudgetLines(request.params.buildingId, parsedYear.data);
+    response.json({ data: lines, meta: { requestId: request.id } });
+  })
+);
+
+budgetRoutes.post(
+  '/buildings/:buildingId/executions',
+  requireAuth,
+  requirePermission('budget.update'),
+  ensureBuildingAccess,
+  validateBody(registerExecutionSchema),
+  asyncHandler(async (request, response) => {
+    const result = await useCases.registerExecution(
+      request.params.buildingId,
+      request.body,
+      request.user.id
+    );
+    response.status(201).json({ data: result, meta: { requestId: request.id } });
   })
 );

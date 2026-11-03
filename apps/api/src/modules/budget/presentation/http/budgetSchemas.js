@@ -14,3 +14,10 @@ export const copyBudgetFromExecutionSchema = z.object({
     )
     .min(1)
 });
+
+export const registerExecutionSchema = z.object({
+  budgetLineId: z.coerce.number().int().positive(),
+  executionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato YYYY-MM-DD.'),
+  amount: z.coerce.number().positive().multipleOf(0.01),
+  description: z.string().trim().max(255).optional()
+});

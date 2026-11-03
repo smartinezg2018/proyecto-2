@@ -1,6 +1,6 @@
 import { QueryTypes, UniqueConstraintError } from 'sequelize';
 import { sequelize } from '../../../../database/connection.js';
-import { AnnualBudget, BudgetLine } from '../../../../database/models/index.js';
+import { AnnualBudget, BudgetExecution, BudgetLine } from '../../../../database/models/index.js';
 
 function mapBudget(budget) {
   const data = budget.get({ plain: true });
@@ -103,5 +103,115 @@ export class BudgetRepository {
       }
       throw error;
     }
+  }
+
+  async findBudgetLineForBuilding(buildingId, budgetLineId) {
+    const rows = await sequelize.query(
+      `SELECT bl.id,
+              bl.code,
+              bl.name,
+              bl.classification,
+              bl.amount AS budgetedAmount,
+              ab.building_id AS buildingId,
+              ab.year
+       FROM budget_lines bl
+       INNER JOIN annual_budgets ab ON ab.id = bl.budget_id
+       WHERE bl.id = :budgetLineId
+         AND ab.building_id = :buildingId
+       LIMIT 1`,
+      {
+        replacements: { budgetLineId, buildingId },
+        type: QueryTypes.SELECT
+      }
+    );
+    if (!rows[0]) return null;
+    return {
+      id: Number(rows[0].id),
+      code: rows[0].code,
+      name: rows[0].name,
+      classification: rows[0].classification,
+      budgetedAmount: Number(rows[0].budgetedAmount),
+      buildingId: Number(rows[0].buildingId),
+      year: Number(rows[0].year)
+    };
+  }
+
+  async createExecution({ budgetLineId, executionDate, amount, description, createdBy }) {
+    const execution = await BudgetExecution.create({
+      budgetLineId,
+      executionDate,
+      amount,
+      description,
+      createdBy
+    });
+    const data = execution.get({ plain: true });
+    return {
+      id: Number(data.id),
+      budgetLineId: Number(data.budgetLineId),
+      executionDate: data.executionDate,
+      amount: Number(data.amount),
+      description: data.description,
+      createdBy: data.createdBy == null ? null : Number(data.createdBy)
+    };
+  }
+
+  async getLineBalance(budgetLineId) {
+    const rows = await sequelize.query(
+      `SELECT COALESCE(SUM(amount), 0) AS executedAmount
+       FROM budget_executions
+       WHERE budget_line_id = :budgetLineId`,
+      {
+        replacements: { budgetLineId },
+        type: QueryTypes.SELECT
+      }
+    );
+    return { executedAmount: Number(rows[0]?.executedAmount || 0) };
+  }
+
+  async listBudgetLinesForBuilding(buildingId, year) {
+    const rows = await sequelize.query(
+      `SELECT bl.id,
+              bl.code,
+              bl.name,
+              bl.classification,
+              bl.amount AS budgetedAmount,
+              COALESCE(SUM(be.amount), 0) AS executedAmount,
+              ab.version,
+              ab.status
+       FROM annual_budgets ab
+       INNER JOIN budget_lines bl ON bl.budget_id = ab.id
+       LEFT JOIN budget_executions be ON be.budget_line_id = bl.id
+       WHERE ab.id = (
+         SELECT selected.id
+         FROM annual_budgets selected
+         WHERE selected.building_id = :buildingId
+           AND selected.year = :year
+         ORDER BY
+           CASE selected.status
+             WHEN 'aprobado' THEN 1
+             WHEN 'borrador' THEN 2
+             ELSE 3
+           END,
+           selected.version DESC
+         LIMIT 1
+       )
+       GROUP BY bl.id, bl.code, bl.name, bl.classification, bl.amount, ab.version, ab.status
+       ORDER BY bl.code ASC`,
+      {
+        replacements: { buildingId, year },
+        type: QueryTypes.SELECT
+      }
+    );
+    return rows.map((row) => ({
+      id: Number(row.id),
+      code: row.code,
+      name: row.name,
+      classification: row.classification,
+      budgetedAmount: Number(row.budgetedAmount),
+      executedAmount: Number(row.executedAmount),
+      availableAmount: Number(row.budgetedAmount) - Number(row.executedAmount),
+      version: Number(row.version),
+      status: row.status
+    }));
   }
 }
