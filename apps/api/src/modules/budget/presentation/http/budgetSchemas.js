@@ -40,3 +40,17 @@ export const registerExecutionSchema = z.object({
   amount: z.coerce.number().positive().multipleOf(0.01),
   description: z.string().trim().max(255).optional()
 });
+
+export const budgetReportQuerySchema = z.object({
+  year: budgetYearSchema,
+  fromDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  toDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  lineCode: z.string().trim().max(50).optional(),
+  format: z.enum(['json', 'csv']).optional()
+});

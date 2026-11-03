@@ -335,3 +335,70 @@ test('HU-056 / CP-056-01: calcula variación en valor y porcentaje por partida',
   assert.equal(comparison.underExecutedCount, 1);
   assert.equal(comparison.totalVariance, -9500000);
 });
+
+test('HU-057 / CP-057-01: genera reporte filtrable por vigencia, periodo y partida', async () => {
+  let received;
+  const useCases = createBudgetUseCases({
+    async findBudgetReport(filters) {
+      received = filters;
+      return {
+        budgetId: 5,
+        budgetStatus: 'aprobado',
+        lines: [
+          {
+            budgetLineId: 10,
+            code: 'ASE',
+            name: 'Aseo',
+            classification: 'gasto',
+            budgetedAmount: 10000000,
+            executedAmount: 4000000
+          }
+        ],
+        executions: [
+          {
+            id: 1,
+            budgetLineId: 10,
+            lineCode: 'ASE',
+            lineName: 'Aseo',
+            executionDate: '2026-03-10',
+            amount: 4000000,
+            description: 'Marzo'
+          }
+        ]
+      };
+    }
+  });
+
+  const report = await useCases.generateBudgetReport(4, {
+    year: 2026,
+    fromDate: '2026-01-01',
+    toDate: '2026-06-30',
+    lineCode: 'ase'
+  });
+
+  assert.deepEqual(received, {
+    buildingId: 4,
+    year: 2026,
+    fromDate: '2026-01-01',
+    toDate: '2026-06-30',
+    lineCode: 'ASE'
+  });
+  assert.equal(report.totalBudgeted, 10000000);
+  assert.equal(report.totalExecuted, 4000000);
+  assert.equal(report.totalAvailable, 6000000);
+  assert.equal(report.lines[0].availableAmount, 6000000);
+  assert.equal(report.executions.length, 1);
+});
+
+test('HU-057 rechaza periodo inválido', async () => {
+  const useCases = createBudgetUseCases({});
+  await assert.rejects(
+    () =>
+      useCases.generateBudgetReport(4, {
+        year: 2026,
+        fromDate: '2026-12-01',
+        toDate: '2026-01-01'
+      }),
+    { code: 'INVALID_REPORT_PERIOD', statusCode: 400 }
+  );
+});
