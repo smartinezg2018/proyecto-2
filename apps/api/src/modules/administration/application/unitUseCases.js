@@ -50,19 +50,28 @@ function normalizeUnitInput(input, buildingId) {
 export function createUnitUseCases(unitRepository, buildingRepository, audit = null) {
   return {
     async create(buildingId, input, userId = null) {
-      const building = await buildingRepository.findById(buildingId);
+      const parsedBuildingId = Number(buildingId);
+      if (!Number.isSafeInteger(parsedBuildingId) || parsedBuildingId <= 0) {
+        throw new AppError(
+          'El edificio es obligatorio para crear un inmueble.',
+          400,
+          'BUILDING_REQUIRED'
+        );
+      }
+
+      const building = await buildingRepository.findById(parsedBuildingId);
       if (!building) {
-        throw new AppError('El edificio no existe.', 404, 'BUILDING_NOT_FOUND');
+        throw new AppError('Edificio no encontrado.', 404, 'BUILDING_NOT_FOUND');
       }
 
       validateUnitInput(input);
-      const unit = normalizeUnitInput(input, buildingId);
+      const unit = normalizeUnitInput(input, parsedBuildingId);
 
       if (
         await unitRepository.findByBuildingNumberAndTower(unit.buildingId, unit.number, unit.tower)
       ) {
         throw new AppError(
-          'Ya existe un inmueble con ese número y torre en el edificio.',
+          'Ya existe un inmueble con el mismo número y torre en el edificio.',
           409,
           'DUPLICATE_UNIT'
         );
@@ -86,7 +95,7 @@ export function createUnitUseCases(unitRepository, buildingRepository, audit = n
     async listByBuilding(buildingId) {
       const building = await buildingRepository.findById(buildingId);
       if (!building) {
-        throw new AppError('El edificio no existe.', 404, 'BUILDING_NOT_FOUND');
+        throw new AppError('Edificio no encontrado.', 404, 'BUILDING_NOT_FOUND');
       }
 
       return unitRepository.findAllByBuilding(buildingId);

@@ -28,6 +28,7 @@ const UNIT_STATUS_LABELS = {
 };
 
 const emptyUnitForm = {
+  buildingId: '',
   kind: 'apartamento',
   number: '',
   tower: '',
@@ -92,7 +93,14 @@ export function UnitsPage() {
   }, [buildingId]);
 
   function openUnitForm() {
-    setUnitForm(emptyUnitForm);
+    if (buildings.length === 0) {
+      setStatus({
+        type: 'error',
+        message: 'No tiene edificios disponibles para asignar al inmueble.'
+      });
+      return;
+    }
+    setUnitForm({ ...emptyUnitForm, buildingId: buildingId || String(buildings[0].id) });
     setStatus({ type: '', message: '' });
     setIsUnitFormOpen(true);
   }
@@ -122,14 +130,30 @@ export function UnitsPage() {
     event.preventDefault();
     setStatus({ type: '', message: '' });
 
+    if (!unitForm.buildingId) {
+      setStatus({
+        type: 'error',
+        message: 'Debe seleccionar un edificio para el inmueble.'
+      });
+      return;
+    }
+
+    const targetBuildingId = unitForm.buildingId;
+    // eslint-disable-next-line no-unused-vars
+    const { buildingId: _formBuildingId, ...unitPayload } = unitForm;
+
     try {
-      await createUnit(buildingId, {
-        ...unitForm,
+      await createUnit(targetBuildingId, {
+        ...unitPayload,
         coefficient: Number(unitForm.coefficient)
       });
       setStatus({ type: 'success', message: 'Inmueble registrado correctamente.' });
       setIsUnitFormOpen(false);
-      await loadUnits(buildingId);
+      if (String(targetBuildingId) === String(buildingId)) {
+        await loadUnits(buildingId);
+      } else {
+        setBuildingId(String(targetBuildingId));
+      }
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -170,7 +194,7 @@ export function UnitsPage() {
             <ActionButton variant="secondary" onClick={openResponsibleForm} disabled={!buildingId}>
               <UserPlus size={14} /> Registrar responsable
             </ActionButton>
-            <ActionButton onClick={openUnitForm} disabled={!buildingId}>
+            <ActionButton onClick={openUnitForm} disabled={buildings.length === 0}>
               <Plus size={14} /> Registrar inmueble
             </ActionButton>
           </div>
@@ -278,6 +302,31 @@ export function UnitsPage() {
             </p>
           )}
           <form onSubmit={submitUnit} className="grid gap-4 sm:grid-cols-2">
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-xs font-bold text-slate-500">
+                Edificio <span className="text-red-500">*</span>
+              </span>
+              <select
+                name="buildingId"
+                value={unitForm.buildingId}
+                onChange={updateUnitField}
+                required
+                disabled={buildings.length <= 1}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
+              >
+                <option value="">Seleccione un edificio</option>
+                {buildings.map((building) => (
+                  <option key={building.id} value={building.id}>
+                    {building.name}
+                  </option>
+                ))}
+              </select>
+              {buildings.length === 0 && (
+                <span className="mt-1 block text-xs text-red-600">
+                  No tiene edificios disponibles para asignar al inmueble.
+                </span>
+              )}
+            </label>
             <label>
               <span className="mb-1 block text-xs font-bold text-slate-500">Tipo *</span>
               <select
@@ -343,7 +392,7 @@ export function UnitsPage() {
               </select>
             </label>
             <div className="sm:col-span-2">
-              <ActionButton type="submit">
+              <ActionButton type="submit" disabled={!unitForm.buildingId}>
                 <Save size={14} /> Guardar inmueble
               </ActionButton>
             </div>
