@@ -6,10 +6,11 @@ Este documento describe los usuarios, perfiles y edificios semilla disponibles p
 
 ## Cómo cargar los datos
 
-1. Levanta MySQL:
+1. Levanta MySQL y revisa su condición:
 
 ```bash
 docker compose up -d
+docker inspect --format "{{.State.Health.Status}}" building-management-mysql
 ```
 
 2. Aplica migraciones:
