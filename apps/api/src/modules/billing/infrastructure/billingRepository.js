@@ -194,6 +194,23 @@ export class BillingRepository {
          WHERE p.status <> 'reversado'
          GROUP BY pa.invoice_id
        ),
+       unit_credits AS (
+         SELECT p.unit_id AS unitId,
+                SUM(p.amount - COALESCE(applied_by_payment.applied, 0)) AS credit
+         FROM payments p
+         LEFT JOIN (
+           SELECT payment_id, SUM(amount) AS applied
+           FROM payment_allocations
+           GROUP BY payment_id
+         ) applied_by_payment ON applied_by_payment.payment_id = p.id
+         WHERE p.building_id = :buildingId
+           AND p.status <> 'reversado'
+           AND (
+             :period IS NULL
+             OR DATE_FORMAT(p.payment_date, '%Y-%m') = :period
+           )
+         GROUP BY p.unit_id
+       ),
        invoice_balances AS (
          SELECT i.unit_id AS unitId,
                 COALESCE(item_totals.capital, i.total) AS capital,
@@ -222,10 +239,19 @@ export class BillingRepository {
                 COALESCE(SUM(invoice_balances.capital), 0) AS capital,
                 COALESCE(SUM(invoice_balances.otherConcepts), 0) AS otherConcepts,
                 COALESCE(SUM(invoice_balances.interests), 0) AS interests,
-                COALESCE(SUM(invoice_balances.payments), 0) AS payments,
-                COALESCE(SUM(invoice_balances.balance), 0) AS totalBalance,
+                COALESCE(SUM(invoice_balances.payments), 0)
+                  + COALESCE(MAX(unit_credits.credit), 0) AS payments,
+                GREATEST(
+                  COALESCE(SUM(invoice_balances.balance), 0)
+                    - COALESCE(MAX(unit_credits.credit), 0),
+                  0
+                ) AS totalBalance,
                 CASE
-                  WHEN COALESCE(SUM(invoice_balances.balance), 0) = 0 THEN 'al_dia'
+                  WHEN GREATEST(
+                    COALESCE(SUM(invoice_balances.balance), 0)
+                      - COALESCE(MAX(unit_credits.credit), 0),
+                    0
+                  ) = 0 THEN 'al_dia'
                   WHEN MAX(
                     CASE
                       WHEN invoice_balances.balance > 0 AND invoice_balances.dueDate < :today THEN 1
@@ -236,6 +262,7 @@ export class BillingRepository {
                 END AS portfolioStatus
          FROM units u
          LEFT JOIN invoice_balances ON invoice_balances.unitId = u.id
+         LEFT JOIN unit_credits ON unit_credits.unitId = u.id
          WHERE u.building_id = :buildingId
            AND u.kind = 'apartamento'
            AND (:unitId IS NULL OR u.id = :unitId)
@@ -444,6 +471,7 @@ export class BillingRepository {
       }
 
       const created = [];
+      const affectedUnitIds = [];
       for (const unit of units) {
         const amount = Math.round(Number(baseAmount) * Number(unit.coefficient) * 100) / 100;
         const invoice = await Invoice.create(
@@ -465,7 +493,14 @@ export class BillingRepository {
           { transaction }
         );
         created.push(invoice.id);
+        affectedUnitIds.push(unit.id);
       }
+      await this.applyOutstandingCredits({
+        buildingId,
+        unitIds: affectedUnitIds,
+        updatedBy: createdBy,
+        transaction
+      });
       return created;
     });
 
@@ -688,6 +723,87 @@ export class BillingRepository {
     }));
   }
 
+  async applyOutstandingCredits({
+    buildingId,
+    unitIds,
+    excludePaymentId = null,
+    updatedBy = null,
+    transaction
+  }) {
+    const ids = [...new Set((unitIds || []).map(Number).filter(Boolean))];
+    if (ids.length === 0) return;
+
+    const credits = await sequelize.query(
+      `SELECT p.id AS paymentId,
+              p.unit_id AS unitId,
+              p.amount - COALESCE(SUM(pa.amount), 0) AS remaining
+       FROM payments p
+       LEFT JOIN payment_allocations pa ON pa.payment_id = p.id
+       WHERE p.building_id = :buildingId
+         AND p.unit_id IN (:unitIds)
+         AND p.status = 'aplicado'
+         AND (:excludePaymentId IS NULL OR p.id <> :excludePaymentId)
+       GROUP BY p.id, p.unit_id, p.amount, p.payment_date
+       HAVING p.amount - COALESCE(SUM(pa.amount), 0) > 0.0001
+       ORDER BY p.payment_date ASC, p.id ASC`,
+      {
+        replacements: {
+          buildingId: Number(buildingId),
+          unitIds: ids,
+          excludePaymentId
+        },
+        type: QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const affectedInvoiceIds = [];
+    for (const credit of credits) {
+      let remaining = roundMoney(credit.remaining);
+      const openInvoices = await this.findOpenInvoiceBalances({
+        buildingId,
+        unitId: Number(credit.unitId),
+        transaction
+      });
+      for (const invoice of openInvoices) {
+        if (remaining <= 0) break;
+        const balance = roundMoney(invoice.balance);
+        if (balance <= 0) continue;
+        const applied = roundMoney(Math.min(remaining, balance));
+        await sequelize.query(
+          `INSERT INTO payment_allocations (payment_id, invoice_id, amount)
+           VALUES (:paymentId, :invoiceId, :amount)
+           ON DUPLICATE KEY UPDATE amount = amount + :amount`,
+          {
+            replacements: {
+              paymentId: Number(credit.paymentId),
+              invoiceId: invoice.invoiceId,
+              amount: applied
+            },
+            type: QueryTypes.INSERT,
+            transaction
+          }
+        );
+        remaining = roundMoney(remaining - applied);
+        affectedInvoiceIds.push(invoice.invoiceId);
+      }
+      await sequelize.query(
+        `UPDATE payments SET credit_balance = :remaining WHERE id = :paymentId`,
+        {
+          replacements: { remaining, paymentId: Number(credit.paymentId) },
+          type: QueryTypes.UPDATE,
+          transaction
+        }
+      );
+    }
+
+    await this.syncInvoiceStatuses({
+      invoiceIds: affectedInvoiceIds,
+      updatedBy,
+      transaction
+    });
+  }
+
   async applyPayment({ buildingId, paymentId, mode, allocations = [], updatedBy = null }) {
     return sequelize.transaction(async (transaction) => {
       const payment = await Payment.findOne({
@@ -707,6 +823,14 @@ export class BillingRepository {
         error.statusCode = 409;
         throw error;
       }
+
+      await this.applyOutstandingCredits({
+        buildingId,
+        unitIds: [Number(payment.unitId)],
+        excludePaymentId: Number(payment.id),
+        updatedBy,
+        transaction
+      });
 
       const available = roundMoney(payment.amount);
       let planned = [];

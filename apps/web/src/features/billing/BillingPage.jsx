@@ -61,6 +61,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
   const [interestMessage, setInterestMessage] = useState('');
   const [interestError, setInterestError] = useState('');
   const [portfolioRefresh, setPortfolioRefresh] = useState(0);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -152,15 +153,15 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     return () => {
       cancelled = true;
     };
-  }, [activeBuildingId, historyFilters]);
+  }, [activeBuildingId, historyFilters, historyRefresh]);
 
   const totals = useMemo(
     () =>
       portfolio.reduce(
         (result, row) => ({
-          capital: result.capital + row.capital,
-          payments: result.payments + row.payments,
-          balance: result.balance + row.totalBalance
+          capital: result.capital + Number(row.capital || 0),
+          payments: result.payments + Number(row.payments || 0),
+          balance: result.balance + Number(row.totalBalance || 0)
         }),
         { capital: 0, payments: 0, balance: 0 }
       ),
@@ -233,7 +234,9 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
       setPaymentMessage(message);
       setPaymentForm(EMPTY_PAYMENT_FORM);
       setShowPaymentForm(false);
-      setFilters((current) => ({ ...current }));
+      setPortfolioRefresh((current) => current + 1);
+      setHistoryRefresh((current) => current + 1);
+      setInvoiceDetail(null);
     } catch (requestError) {
       setPaymentError(requestError.message || 'No fue posible registrar el pago.');
     } finally {
