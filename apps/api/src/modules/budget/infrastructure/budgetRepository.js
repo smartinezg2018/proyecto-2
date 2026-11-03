@@ -123,6 +123,8 @@ export class BudgetRepository {
   }
 
   async findBudgetReport({ buildingId, year, fromDate, toDate, lineCode }) {
+    const reportFromDate = fromDate || `${year}-01-01`;
+    const reportToDate = toDate || `${year}-12-31`;
     const budgets = await sequelize.query(
       `SELECT id, status
        FROM annual_budgets
@@ -148,8 +150,8 @@ export class BudgetRepository {
     const lineFilter = lineCode ? ' AND bl.code = :lineCode' : '';
     const replacements = {
       budgetId: budget.id,
-      fromDate,
-      toDate,
+      fromDate: reportFromDate,
+      toDate: reportToDate,
       ...(lineCode ? { lineCode } : {})
     };
 
@@ -160,7 +162,9 @@ export class BudgetRepository {
               bl.classification,
               bl.amount AS budgetedAmount,
               COALESCE(SUM(CASE
-                WHEN be.execution_date BETWEEN :fromDate AND :toDate THEN be.amount
+                WHEN be.execution_date >= CAST(:fromDate AS DATE)
+                 AND be.execution_date < DATE_ADD(CAST(:toDate AS DATE), INTERVAL 1 DAY)
+                THEN be.amount
                 ELSE 0
               END), 0) AS executedAmount
        FROM budget_lines bl
@@ -182,7 +186,8 @@ export class BudgetRepository {
        FROM budget_executions be
        INNER JOIN budget_lines bl ON bl.id = be.budget_line_id
        WHERE bl.budget_id = :budgetId
-         AND be.execution_date BETWEEN :fromDate AND :toDate${lineFilter}
+         AND be.execution_date >= CAST(:fromDate AS DATE)
+         AND be.execution_date < DATE_ADD(CAST(:toDate AS DATE), INTERVAL 1 DAY)${lineFilter}
        ORDER BY be.execution_date ASC, be.id ASC`,
       { replacements, type: QueryTypes.SELECT }
     );

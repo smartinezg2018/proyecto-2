@@ -402,3 +402,24 @@ test('HU-057 rechaza periodo inválido', async () => {
     { code: 'INVALID_REPORT_PERIOD', statusCode: 400 }
   );
 });
+
+test('HU-057 usa el año completo cuando no se especifica un periodo', async () => {
+  let received;
+  const useCases = createBudgetUseCases({
+    async findBudgetReport(filters) {
+      received = filters;
+      return { budgetId: null, budgetStatus: null, lines: [], executions: [] };
+    }
+  });
+
+  const report = await useCases.generateBudgetReport(4, { year: 2026 });
+
+  assert.deepEqual(received, {
+    buildingId: 4,
+    year: 2026,
+    fromDate: '2026-01-01',
+    toDate: '2026-12-31',
+    lineCode: null
+  });
+  assert.equal(report.totalAvailable, 0);
+});
