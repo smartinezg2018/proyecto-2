@@ -60,6 +60,68 @@ export class BudgetRepository {
     }));
   }
 
+  async findBudgetComparison(buildingId, year) {
+    const budgets = await sequelize.query(
+      `SELECT id, status
+       FROM annual_budgets
+       WHERE building_id = :buildingId
+         AND year = :year
+       ORDER BY CASE
+         WHEN status = 'aprobado' THEN 0
+         WHEN status = 'cerrado' THEN 1
+         ELSE 2
+       END,
+       version DESC
+       LIMIT 1`,
+      {
+        replacements: { buildingId, year },
+        type: QueryTypes.SELECT
+      }
+    );
+    const budget = budgets[0];
+    if (!budget) {
+      return { budgetId: null, budgetStatus: null, lines: [] };
+    }
+
+    const rows = await sequelize.query(
+      `SELECT bl.id AS sourceLineId,
+              bl.code,
+              bl.name,
+              bl.classification,
+              bl.amount AS budgetedAmount,
+              COALESCE(SUM(be.amount), 0) AS executedAmount
+       FROM budget_lines bl
+       LEFT JOIN budget_executions be
+         ON be.budget_line_id = bl.id
+        AND be.execution_date >= STR_TO_DATE(CONCAT(:year, '-01-01'), '%Y-%m-%d')
+        AND be.execution_date < STR_TO_DATE(CONCAT(:nextYear, '-01-01'), '%Y-%m-%d')
+       WHERE bl.budget_id = :budgetId
+       GROUP BY bl.id, bl.code, bl.name, bl.classification, bl.amount
+       ORDER BY bl.code ASC`,
+      {
+        replacements: {
+          budgetId: budget.id,
+          year,
+          nextYear: Number(year) + 1
+        },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    return {
+      budgetId: Number(budget.id),
+      budgetStatus: budget.status,
+      lines: rows.map((row) => ({
+        sourceLineId: Number(row.sourceLineId),
+        code: row.code,
+        name: row.name,
+        classification: row.classification,
+        budgetedAmount: Number(row.budgetedAmount),
+        executedAmount: Number(row.executedAmount)
+      }))
+    };
+  }
+
   async findDraftByBuildingYear(buildingId, year) {
     const budget = await AnnualBudget.findOne({
       where: { buildingId, year, status: 'borrador' },

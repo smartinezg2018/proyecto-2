@@ -122,3 +122,55 @@ test('HU-052 rechaza años no consecutivos, partidas repetidas y borrador existe
     { code: 'BUDGET_ALREADY_EXISTS', statusCode: 409 }
   );
 });
+
+test('HU-056 / CP-056-01: calcula variación en valor y porcentaje por partida', async () => {
+  const useCases = createBudgetUseCases({
+    async findBudgetComparison(buildingId, year) {
+      assert.equal(buildingId, 4);
+      assert.equal(year, 2026);
+      return {
+        budgetId: 7,
+        budgetStatus: 'aprobado',
+        lines: [
+          {
+            sourceLineId: 10,
+            code: 'ASE',
+            name: 'Aseo',
+            classification: 'gasto',
+            budgetedAmount: 10000000,
+            executedAmount: 12500000
+          },
+          {
+            sourceLineId: 11,
+            code: 'VIG',
+            name: 'Vigilancia',
+            classification: 'gasto',
+            budgetedAmount: 20000000,
+            executedAmount: 8000000
+          },
+          {
+            sourceLineId: 12,
+            code: 'MAN',
+            name: 'Mantenimiento',
+            classification: 'gasto',
+            budgetedAmount: 15000000,
+            executedAmount: 15000000
+          }
+        ]
+      };
+    }
+  });
+
+  const comparison = await useCases.compareBudgetExecution(4, 2026);
+  assert.equal(comparison.budgetStatus, 'aprobado');
+  assert.equal(comparison.lines[0].varianceAmount, 2500000);
+  assert.equal(comparison.lines[0].variancePercent, 25);
+  assert.equal(comparison.lines[0].alert, 'sobreejecucion');
+  assert.equal(comparison.lines[1].varianceAmount, -12000000);
+  assert.equal(comparison.lines[1].variancePercent, -60);
+  assert.equal(comparison.lines[1].alert, 'baja_ejecucion');
+  assert.equal(comparison.lines[2].alert, 'normal');
+  assert.equal(comparison.overExecutedCount, 1);
+  assert.equal(comparison.underExecutedCount, 1);
+  assert.equal(comparison.totalVariance, -9500000);
+});

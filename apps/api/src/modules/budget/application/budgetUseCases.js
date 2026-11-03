@@ -91,6 +91,60 @@ export function createBudgetUseCases(repository) {
           amount: amountByLineId.get(line.sourceLineId)
         }))
       });
+    },
+
+    async compareBudgetExecution(buildingId, year) {
+      const numericBuildingId = Number(buildingId);
+      const numericYear = Number(year);
+      const summary = await repository.findBudgetComparison(numericBuildingId, numericYear);
+      const lines = summary.lines.map((line) => {
+        const budgetedAmount = roundMoney(line.budgetedAmount);
+        const executedAmount = roundMoney(line.executedAmount);
+        const varianceAmount = roundMoney(executedAmount - budgetedAmount);
+        const variancePercent =
+          budgetedAmount === 0
+            ? executedAmount === 0
+              ? 0
+              : null
+            : roundMoney((varianceAmount / budgetedAmount) * 100);
+        let alert = 'normal';
+        if (executedAmount > budgetedAmount) {
+          alert = 'sobreejecucion';
+        } else if (budgetedAmount > 0 && executedAmount / budgetedAmount < 0.5) {
+          alert = 'baja_ejecucion';
+        }
+        return {
+          ...line,
+          budgetedAmount,
+          executedAmount,
+          varianceAmount,
+          variancePercent,
+          alert
+        };
+      });
+
+      const totalBudgeted = roundMoney(lines.reduce((sum, line) => sum + line.budgetedAmount, 0));
+      const totalExecuted = roundMoney(lines.reduce((sum, line) => sum + line.executedAmount, 0));
+      const totalVariance = roundMoney(totalExecuted - totalBudgeted);
+
+      return {
+        buildingId: numericBuildingId,
+        year: numericYear,
+        budgetId: summary.budgetId,
+        budgetStatus: summary.budgetStatus,
+        lines,
+        totalBudgeted,
+        totalExecuted,
+        totalVariance,
+        totalVariancePercent:
+          totalBudgeted === 0
+            ? totalExecuted === 0
+              ? 0
+              : null
+            : roundMoney((totalVariance / totalBudgeted) * 100),
+        overExecutedCount: lines.filter((line) => line.alert === 'sobreejecucion').length,
+        underExecutedCount: lines.filter((line) => line.alert === 'baja_ejecucion').length
+      };
     }
   };
 }

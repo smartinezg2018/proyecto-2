@@ -43,3 +43,21 @@ budgetRoutes.post(
     response.status(201).json({ data: budget, meta: { requestId: request.id } });
   })
 );
+
+budgetRoutes.get(
+  '/buildings/:buildingId/budget-comparison',
+  requireAuth,
+  requirePermission('budget.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsedYear = budgetYearSchema.safeParse(request.query.year);
+    if (!parsedYear.success) {
+      throw new AppError('El año consultado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const comparison = await useCases.compareBudgetExecution(
+      request.params.buildingId,
+      parsedYear.data
+    );
+    response.json({ data: comparison, meta: { requestId: request.id } });
+  })
+);

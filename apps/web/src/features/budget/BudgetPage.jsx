@@ -6,6 +6,7 @@ import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 import { HistoricalBudgetSection } from './HistoricalBudgetSection.jsx';
+import { BudgetComparisonSection } from './BudgetComparisonSection.jsx';
 
 export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false }) {
   const [method, setMethod] = useState('Hist�rica');
@@ -35,6 +36,8 @@ export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false })
         activeBuildingId={activeBuildingId}
         canUpdateBudget={canUpdateBudget}
       />
+
+      <BudgetComparisonSection activeBuildingId={activeBuildingId} />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <MetricCard

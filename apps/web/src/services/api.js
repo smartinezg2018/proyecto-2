@@ -146,6 +146,12 @@ export function createBudgetFromExecution(buildingId, payload) {
   });
 }
 
+export function getBudgetComparison(buildingId, year) {
+  return apiRequest(
+    `/api/v1/budget/buildings/${buildingId}/budget-comparison?year=${encodeURIComponent(year)}`
+  );
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }
