@@ -25,6 +25,10 @@ function createRepositories() {
       async findAllByBuilding(buildingId) {
         return units.filter((unit) => String(unit.buildingId) === String(buildingId));
       },
+      async remove(id) {
+        const index = units.findIndex((unit) => String(unit.id) === String(id));
+        if (index >= 0) units.splice(index, 1);
+      },
       async findByBuildingNumberAndTower(buildingId, number, tower, excludedId = null) {
         return (
           units.find(
@@ -94,6 +98,46 @@ test('rechaza inmuebles duplicados dentro del mismo edificio', async () => {
     code: 'DUPLICATE_UNIT',
     statusCode: 409
   });
+});
+
+test('elimina un inmueble del edificio', async () => {
+  const { unitRepository, buildingRepository } = createRepositories();
+  const deleted = [];
+  const useCases = createUnitUseCases(unitRepository, buildingRepository, {
+    async record(entry) {
+      deleted.push(entry);
+    }
+  });
+  const unit = await useCases.create(1, {
+    number: '202',
+    tower: 'B',
+    kind: 'apartamento',
+    coefficient: 1,
+    status: 'desocupada'
+  });
+
+  await useCases.remove(1, unit.id, 4);
+
+  assert.equal(await unitRepository.findById(unit.id), null);
+  assert.equal(deleted.at(-1).action, 'delete');
+  assert.equal(deleted.at(-1).entityId, unit.id);
+});
+
+test('rechaza eliminar un inmueble de otro edificio', async () => {
+  const { unitRepository, buildingRepository } = createRepositories();
+  const useCases = createUnitUseCases(unitRepository, buildingRepository);
+  const unit = await useCases.create(1, {
+    number: '303',
+    kind: 'parqueadero',
+    coefficient: 0.2,
+    status: 'desocupada'
+  });
+
+  await assert.rejects(() => useCases.remove(2, unit.id), {
+    code: 'UNIT_NOT_FOUND',
+    statusCode: 404
+  });
+  assert.ok(await unitRepository.findById(unit.id));
 });
 
 test('rechaza un inmueble cuando el edificio no existe', async () => {

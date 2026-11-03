@@ -9,6 +9,7 @@ import { createBudgetUseCases } from '../../application/budgetUseCases.js';
 import {
   budgetYearSchema,
   copyBudgetFromExecutionSchema,
+  expenseProjectionSchema,
   registerAnnualBudgetSchema,
   updateBudgetStatusSchema,
   registerExecutionSchema,
@@ -65,6 +66,18 @@ budgetRoutes.get(
     }
     const summary = await useCases.getPreviousExecution(request.params.buildingId, parsedYear.data);
     response.json({ data: summary, meta: { requestId: request.id } });
+  })
+);
+
+budgetRoutes.post(
+  '/buildings/:buildingId/expense-projection',
+  requireAuth,
+  requirePermission('budget.view'),
+  ensureBuildingAccess,
+  validateBody(expenseProjectionSchema),
+  asyncHandler(async (request, response) => {
+    const projection = await useCases.projectExpenses(request.params.buildingId, request.body);
+    response.json({ data: projection, meta: { requestId: request.id } });
   })
 );
 

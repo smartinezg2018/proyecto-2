@@ -169,7 +169,7 @@ export default function App() {
       case 'edificios':
         return <BuildingsPage />;
       case 'inmuebles':
-        return <UnitsPage />;
+        return <UnitsPage permissions={permissions} />;
       case 'inventario':
         return <ModuleInventario />;
       case 'mantenimientos':

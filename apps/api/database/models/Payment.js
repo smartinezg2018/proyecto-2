@@ -13,6 +13,8 @@ export const Payment = sequelize.define(
     reference: { type: DataTypes.STRING(100), allowNull: false },
     status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'registrado' },
     creditBalance: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
+    concept: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'administracion' },
+    period: { type: DataTypes.CHAR(7), allowNull: true },
     createdBy: DataTypes.BIGINT.UNSIGNED
   },
   { tableName: 'payments' }

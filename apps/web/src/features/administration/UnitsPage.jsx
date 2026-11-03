@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Save, UserPlus, X } from 'lucide-react';
-import { createResponsible, createUnit, getBuildings, getUnits } from '../../services/api.js';
+import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
+import { hasPermission } from '../../app/permissions.js';
+import { createResponsible, createUnit, deleteUnit, getBuildings, getUnits } from '../../services/api.js';
 import { SectionHeader } from '../../components/SectionHeader.jsx';
 import { ActionButton } from '../../components/ActionButton.jsx';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
@@ -44,7 +45,8 @@ const emptyResponsibleForm = {
   unitIds: []
 };
 
-export function UnitsPage() {
+export function UnitsPage({ permissions = [] }) {
+  const canDelete = hasPermission(permissions, 'units.delete');
   const [buildings, setBuildings] = useState([]);
   const [buildingId, setBuildingId] = useState('');
   const [units, setUnits] = useState([]);
@@ -54,6 +56,7 @@ export function UnitsPage() {
   const [isResponsibleFormOpen, setIsResponsibleFormOpen] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   async function loadBuildings() {
     try {
@@ -159,6 +162,26 @@ export function UnitsPage() {
     }
   }
 
+  async function removeUnit(unit) {
+    const label = unit.tower ? `${unit.tower} - ${unit.number}` : unit.number;
+    const confirmed = window.confirm(
+      `¿Eliminar el inmueble ${label}? También se borran su responsable, facturas y pagos.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(unit.id);
+    setStatus({ type: '', message: '' });
+    try {
+      await deleteUnit(buildingId, unit.id);
+      setStatus({ type: 'success', message: 'Inmueble eliminado.' });
+      await loadUnits(buildingId);
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   async function submitResponsible(event) {
     event.preventDefault();
     setStatus({ type: '', message: '' });
@@ -229,7 +252,15 @@ export function UnitsPage() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              {['Tipo', 'Número', 'Torre o bloque', 'Coeficiente', 'Estado', 'Responsable'].map(
+              {[
+                'Tipo',
+                'Número',
+                'Torre o bloque',
+                'Coeficiente',
+                'Estado',
+                'Responsable',
+                ...(canDelete ? [''] : [])
+              ].map(
                 (heading) => (
                   <th
                     key={heading}
@@ -260,11 +291,24 @@ export function UnitsPage() {
                     ? `${unit.responsible.name} · ${unit.responsible.identification}`
                     : 'Sin responsable'}
                 </td>
+                {canDelete && (
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeUnit(unit)}
+                      disabled={deletingId === unit.id}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                      {deletingId === unit.id ? 'Eliminando…' : 'Eliminar'}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {!isLoading && units.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={canDelete ? 7 : 6} className="px-4 py-10 text-center text-sm text-slate-400">
                   {buildingId
                     ? 'No hay inmuebles registrados en este edificio.'
                     : 'Registra un edificio antes de crear inmuebles.'}
@@ -273,7 +317,10 @@ export function UnitsPage() {
             )}
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td
+                  colSpan={canDelete ? 7 : 6}
+                  className="px-4 py-10 text-center text-sm text-slate-400"
+                >
                   Cargando inmuebles...
                 </td>
               </tr>

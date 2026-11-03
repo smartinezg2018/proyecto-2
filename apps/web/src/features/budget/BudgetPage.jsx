@@ -5,6 +5,7 @@ import { BUDGET_ITEMS, formatCompactCurrency as fmtM } from '../fixtures.js';
 import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
+import { BudgetProjectionSection } from './BudgetProjectionSection.jsx';
 import { HistoricalBudgetSection } from './HistoricalBudgetSection.jsx';
 import { AnnualBudgetSection } from './AnnualBudgetSection.jsx';
 import { BudgetExecutionSection } from './BudgetExecutionSection.jsx';
@@ -33,6 +34,11 @@ export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false })
             <Plus size={14} /> Registrar Ejecuci�n
           </Btn>
         }
+      />
+
+      <BudgetProjectionSection
+        activeBuildingId={activeBuildingId}
+        canUpdateBudget={canUpdateBudget}
       />
 
       <HistoricalBudgetSection

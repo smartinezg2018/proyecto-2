@@ -225,6 +225,21 @@ administrationRoutes.post(
   })
 );
 
+administrationRoutes.delete(
+  '/buildings/:buildingId/units/:unitId',
+  requireAuth,
+  requirePermission('units.delete'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    await unitUseCases.remove(
+      request.params.buildingId,
+      request.params.unitId,
+      request.user.id
+    );
+    response.json({ data: { deleted: true }, meta: { requestId: request.id } });
+  })
+);
+
 administrationRoutes.get(
   '/persons',
   requireAuth,

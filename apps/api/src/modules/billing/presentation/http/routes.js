@@ -15,7 +15,14 @@ import {
   registerPaymentSchema,
   applyPaymentSchema,
   paymentIdSchema,
-  interestSettingsSchema
+  interestSettingsSchema,
+  adminFeeSchema,
+  monthlySummaryQuerySchema,
+  yearlySummaryQuerySchema,
+  periodMarkSchema,
+  assignChargeSchema,
+  chargeStatusSchema,
+  chargeIdSchema
 } from './billingSchemas.js';
 import { AppError } from '../../../../shared/errors/AppError.js';
 
@@ -125,6 +132,157 @@ billingRoutes.put(
       request.user.id
     );
     response.json({ data: result, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/admin-fee',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const fee = await useCases.getAdminFee(request.params.buildingId);
+    response.json({ data: fee, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.put(
+  '/buildings/:buildingId/admin-fee',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(adminFeeSchema),
+  asyncHandler(async (request, response) => {
+    const fee = await useCases.saveAdminFee(
+      request.params.buildingId,
+      request.body.adminFee,
+      request.user.id
+    );
+    response.json({ data: fee, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/monthly-summary',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsed = monthlySummaryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError(
+        parsed.error.issues[0]?.message || 'El periodo del resumen mensual no es válido.',
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+    const summary = await useCases.getMonthlySummary(request.params.buildingId, parsed.data.period);
+    response.json({ data: summary, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.get(
+  '/buildings/:buildingId/yearly-summary',
+  requireAuth,
+  requirePermission('billing.view'),
+  ensureBuildingAccess,
+  asyncHandler(async (request, response) => {
+    const parsed = yearlySummaryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError('El año del resumen no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const summary = await useCases.getYearlySummary(request.params.buildingId, parsed.data.year);
+    response.json({ data: summary, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.put(
+  '/buildings/:buildingId/period-marks',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(periodMarkSchema),
+  asyncHandler(async (request, response) => {
+    const mark = await useCases.setPeriodMark(
+      request.params.buildingId,
+      request.body,
+      request.user.id
+    );
+    response.json({ data: mark, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/fines',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(assignChargeSchema),
+  asyncHandler(async (request, response) => {
+    const fine = await useCases.assignFine(
+      request.params.buildingId,
+      request.body,
+      request.user.id
+    );
+    response.status(201).json({ data: fine, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.put(
+  '/buildings/:buildingId/fines/:fineId/status',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(chargeStatusSchema),
+  asyncHandler(async (request, response) => {
+    const parsedId = chargeIdSchema.safeParse(request.params.fineId);
+    if (!parsedId.success) {
+      throw new AppError('La multa indicada no es válida.', 400, 'VALIDATION_ERROR');
+    }
+    const fine = await useCases.setFineStatus(
+      request.params.buildingId,
+      parsedId.data,
+      request.body.status,
+      request.user.id
+    );
+    response.json({ data: fine, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.post(
+  '/buildings/:buildingId/extra-charges',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(assignChargeSchema),
+  asyncHandler(async (request, response) => {
+    const charge = await useCases.assignExtraCharge(
+      request.params.buildingId,
+      request.body,
+      request.user.id
+    );
+    response.status(201).json({ data: charge, meta: { requestId: request.id } });
+  })
+);
+
+billingRoutes.put(
+  '/buildings/:buildingId/extra-charges/:chargeId/status',
+  requireAuth,
+  requirePermission('billing.charge.create'),
+  ensureBuildingAccess,
+  validateBody(chargeStatusSchema),
+  asyncHandler(async (request, response) => {
+    const parsedId = chargeIdSchema.safeParse(request.params.chargeId);
+    if (!parsedId.success) {
+      throw new AppError('El pago extra indicado no es válido.', 400, 'VALIDATION_ERROR');
+    }
+    const charge = await useCases.setExtraChargeStatus(
+      request.params.buildingId,
+      parsedId.data,
+      request.body.status,
+      request.user.id
+    );
+    response.json({ data: charge, meta: { requestId: request.id } });
   })
 );
 

@@ -1,0 +1,5 @@
+$ node node_modules/eslint/bin/eslint.js apps/web/src/features/billing/BillingPage.jsx apps/web/src/services/api.js apps/api/src/modules/billing/application/billingUseCases.js apps/api/src/modules/billing/infrastructure/billingRepository.js apps/api/src/modules/billing/presentation/http/routes.js apps/api/src/modules/billing/presentation/http/billingSchemas.js apps/api/database/models/Payment.js
+exit=0
+STDOUT
+
+STDERR

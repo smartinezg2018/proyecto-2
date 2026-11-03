@@ -1,20 +1,24 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Plus, AlertTriangle, TrendingUp, FileText } from 'lucide-react';
 import { formatCurrency as fmt, formatCompactCurrency as fmtM } from '../fixtures.js';
 import {
+  getAdminFee,
   getInvoiceDetail,
   getInvoiceHistory,
   getInterestSettings,
+  getMonthlySummary,
   getPortfolio,
   getUnits,
   applyPayment,
   registerPayment,
+  saveAdminFee,
   saveInterestSettings
 } from '../../services/api.js';
 import { StatusBadge as Badge } from '../../components/StatusBadge.jsx';
 import { MetricCard } from '../../components/MetricCard.jsx';
 import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx';
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
+import { MonthlyPeriodSection } from './MonthlyPeriodSection.jsx';
 
 const EMPTY_FILTERS = { unitId: '', period: '', status: '' };
 const EMPTY_HISTORY_FILTERS = { unitId: '', period: '', status: '' };
@@ -24,6 +28,8 @@ const EMPTY_PAYMENT_FORM = {
   amount: '',
   paymentMethod: 'transferencia',
   reference: '',
+  concept: 'administracion',
+  period: '',
   applyAuto: true
 };
 const STATUS_LABELS = new Map([
@@ -34,13 +40,23 @@ const STATUS_LABELS = new Map([
   ['pagada', 'Pagada'],
   ['aplicado', 'Aplicado'],
   ['registrado', 'Registrado'],
-  ['reversado', 'Reversado']
+  ['reversado', 'Reversado'],
+  ['pagado', 'Pagado'],
+  ['parcial', 'Pago parcial'],
+  ['sin_cuota', 'Sin cuota']
 ]);
+
+function currentPeriod() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export function ModuleFacturacion({ activeBuildingId, canManageInterest = false }) {
   const [tab, setTab] = useState('cartera');
   const [portfolio, setPortfolio] = useState([]);
   const [units, setUnits] = useState([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState('');
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -61,6 +77,16 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
   const [interestMessage, setInterestMessage] = useState('');
   const [interestError, setInterestError] = useState('');
   const [portfolioRefresh, setPortfolioRefresh] = useState(0);
+  const [adminFee, setAdminFee] = useState('0');
+  const [adminFeeDraft, setAdminFeeDraft] = useState('0');
+  const [adminFeeSaving, setAdminFeeSaving] = useState(false);
+  const [adminFeeError, setAdminFeeError] = useState('');
+  const [adminFeeMessage, setAdminFeeMessage] = useState('');
+  const [monthlyPeriod, setMonthlyPeriod] = useState(currentPeriod);
+  const [monthlySummary, setMonthlySummary] = useState(null);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [monthlyError, setMonthlyError] = useState('');
+  const [monthlyRefresh, setMonthlyRefresh] = useState(0);
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -75,24 +101,88 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     setAnnualRate('0');
     setInterestMessage('');
     setInterestError('');
-    if (!activeBuildingId) return undefined;
+    setAdminFee('0');
+    setAdminFeeDraft('0');
+    setAdminFeeError('');
+    setAdminFeeMessage('');
+    setMonthlySummary(null);
+    setMonthlyError('');
+    setUnitsError('');
+    if (!activeBuildingId) {
+      setUnitsLoading(false);
+      return undefined;
+    }
 
     let cancelled = false;
-    Promise.all([getUnits(activeBuildingId), getInterestSettings(activeBuildingId)])
-      .then(([unitsResponse, settingsResponse]) => {
+    setUnitsLoading(true);
+    getUnits(activeBuildingId)
+      .then((response) => {
         if (cancelled) return;
-        setUnits((unitsResponse.data ?? []).filter((unit) => unit.kind === 'apartamento'));
-        setAnnualRate(String(settingsResponse.data?.annualRate ?? 0));
+        setUnits((response.data ?? []).filter((unit) => unit.kind === 'apartamento'));
       })
       .catch((requestError) => {
         if (cancelled) return;
         setUnits([]);
+        setUnitsError(requestError.message || 'No fue posible consultar los apartamentos.');
+      })
+      .finally(() => {
+        if (!cancelled) setUnitsLoading(false);
+      });
+    getInterestSettings(activeBuildingId)
+      .then((response) => {
+        if (cancelled) return;
+        setAnnualRate(String(response.data?.annualRate ?? 0));
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
         setInterestError(requestError.message || 'No fue posible consultar la tasa de mora.');
+      });
+    getAdminFee(activeBuildingId)
+      .then((response) => {
+        if (cancelled) return;
+        const fee = String(response.data?.adminFee ?? 0);
+        setAdminFee(fee);
+        setAdminFeeDraft(fee);
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
+        setAdminFeeError(
+          requestError.message || 'No fue posible consultar la cuota de administración.'
+        );
       });
     return () => {
       cancelled = true;
     };
   }, [activeBuildingId]);
+
+  useEffect(() => {
+    if (!activeBuildingId || !monthlyPeriod) {
+      setMonthlySummary(null);
+      setMonthlyError('');
+      return undefined;
+    }
+    let cancelled = false;
+    setMonthlyLoading(true);
+    setMonthlyError('');
+    getMonthlySummary(activeBuildingId, monthlyPeriod)
+      .then((response) => {
+        if (!cancelled) setMonthlySummary(response.data ?? null);
+      })
+      .catch((requestError) => {
+        if (!cancelled) {
+          setMonthlySummary(null);
+          setMonthlyError(
+            requestError.message || 'No fue posible consultar el resumen mensual.'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMonthlyLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBuildingId, monthlyPeriod, monthlyRefresh]);
 
   useEffect(() => {
     if (!activeBuildingId) {
@@ -154,18 +244,50 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     };
   }, [activeBuildingId, historyFilters]);
 
-  const totals = useMemo(
+  const portfolioTotals = useMemo(
     () =>
       portfolio.reduce(
         (result, row) => ({
           capital: result.capital + row.capital,
+          otherConcepts: result.otherConcepts + row.otherConcepts,
+          interests: result.interests + row.interests,
           payments: result.payments + row.payments,
-          balance: result.balance + row.totalBalance
+          balance: result.balance + row.totalBalance,
+          inArrears: result.inArrears + (row.status === 'en_mora' ? 1 : 0)
         }),
-        { capital: 0, payments: 0, balance: 0 }
+        { capital: 0, otherConcepts: 0, interests: 0, payments: 0, balance: 0, inArrears: 0 }
       ),
     [portfolio]
   );
+
+  const monthTotals = monthlySummary?.totals ?? null;
+
+  const totals = useMemo(() => {
+    const monthDue = Number(monthTotals?.due ?? 0);
+    const monthCollected = Number(monthTotals?.collected ?? 0);
+    const monthBalance = Number(monthTotals?.balance ?? 0);
+    return {
+      due: monthDue,
+      collected: monthCollected,
+      balance: monthBalance + portfolioTotals.balance,
+      monthDue,
+      monthCollected,
+      monthBalance,
+      invoiceBalance: portfolioTotals.balance,
+      inArrears: portfolioTotals.inArrears
+    };
+  }, [monthTotals, portfolioTotals]);
+
+  const refreshBillingSummaries = useCallback(() => {
+    setPortfolioRefresh((current) => current + 1);
+    setMonthlyRefresh((current) => current + 1);
+  }, []);
+
+  const handlePeriodChange = useCallback((period) => {
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+      setMonthlyPeriod(period);
+    }
+  }, []);
 
   function updateFilter(event) {
     const { name, value } = event.target;
@@ -213,13 +335,18 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     setPaymentMessage('');
     setPaymentError('');
     try {
-      const response = await registerPayment(activeBuildingId, {
+      const paymentPayload = {
         unitId: Number(paymentForm.unitId),
         paymentDate: paymentForm.paymentDate,
         amount: Number(paymentForm.amount),
         paymentMethod: paymentForm.paymentMethod,
-        reference: paymentForm.reference.trim()
-      });
+        reference: paymentForm.reference.trim(),
+        concept: paymentForm.concept
+      };
+      if (paymentForm.period) {
+        paymentPayload.period = paymentForm.period;
+      }
+      const response = await registerPayment(activeBuildingId, paymentPayload);
       let message = `Pago ${response.data.reference} registrado por ${fmt(response.data.amount)}.`;
       if (paymentForm.applyAuto) {
         const applied = await applyPayment(activeBuildingId, response.data.id, { mode: 'auto' });
@@ -233,11 +360,32 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
       setPaymentMessage(message);
       setPaymentForm(EMPTY_PAYMENT_FORM);
       setShowPaymentForm(false);
-      setFilters((current) => ({ ...current }));
+      refreshBillingSummaries();
     } catch (requestError) {
       setPaymentError(requestError.message || 'No fue posible registrar el pago.');
     } finally {
       setPaymentSaving(false);
+    }
+  }
+
+  async function handleSaveAdminFee() {
+    if (!activeBuildingId) return;
+    setAdminFeeSaving(true);
+    setAdminFeeError('');
+    setAdminFeeMessage('');
+    try {
+      const response = await saveAdminFee(activeBuildingId, Number(adminFeeDraft));
+      const fee = String(response.data?.adminFee ?? 0);
+      setAdminFee(fee);
+      setAdminFeeDraft(fee);
+      setAdminFeeMessage('Cuota de administración actualizada.');
+      refreshBillingSummaries();
+    } catch (requestError) {
+      setAdminFeeError(
+        requestError.message || 'No fue posible actualizar la cuota de administración.'
+      );
+    } finally {
+      setAdminFeeSaving(false);
     }
   }
 
@@ -251,7 +399,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
       setInterestMessage(
         `Cálculo actualizado para ${response.data.calculation.processed} facturas.`
       );
-      setPortfolioRefresh((current) => current + 1);
+      refreshBillingSummaries();
     } catch (requestError) {
       setInterestError(requestError.message || 'No fue posible recalcular los intereses.');
     } finally {
@@ -269,7 +417,24 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
             <Btn variant="secondary">
               <FileText size={13} /> Generar Factura
             </Btn>
-            <Btn onClick={() => setShowPaymentForm((current) => !current)}>
+            <Btn
+              onClick={() => {
+                setShowPaymentForm((current) => {
+                  if (!current) {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setPaymentForm({
+                      ...EMPTY_PAYMENT_FORM,
+                      paymentDate: today,
+                      period: today.slice(0, 7),
+                      amount: Number(adminFee) > 0 ? adminFee : ''
+                    });
+                    setPaymentMessage('');
+                    setPaymentError('');
+                  }
+                  return !current;
+                });
+              }}
+            >
               <Plus size={13} /> Registrar Pago
             </Btn>
           </div>
@@ -285,7 +450,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
       {showPaymentForm && (
         <form
           onSubmit={submitPayment}
-          className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-3 items-end border border-slate-200 rounded-lg p-4 bg-white"
+          className="mb-6 grid grid-cols-1 md:grid-cols-6 gap-3 items-end border border-slate-200 rounded-lg p-4 bg-white"
         >
           <label className="text-sm text-slate-600">
             Apartamento
@@ -294,15 +459,31 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
               value={paymentForm.unitId}
               onChange={updatePaymentForm}
               required
-              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+              disabled={unitsLoading || units.length === 0}
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-400"
             >
-              <option value="">Seleccione</option>
+              <option value="">
+                {unitsLoading
+                  ? 'Cargando apartamentos...'
+                  : units.length === 0
+                    ? 'Sin apartamentos'
+                    : 'Seleccione'}
+              </option>
               {units.map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.tower ? `${unit.tower} - ${unit.number}` : unit.number}
                 </option>
               ))}
             </select>
+            {!unitsLoading && unitsError && (
+              <span className="mt-1 block text-xs text-red-600">{unitsError}</span>
+            )}
+            {!unitsLoading && !unitsError && units.length === 0 && (
+              <span className="mt-1 block text-xs text-amber-600">
+                Este edificio no tiene apartamentos registrados. Cambia de edificio en el menú
+                superior o regístralos en Inmuebles.
+              </span>
+            )}
           </label>
           <label className="text-sm text-slate-600">
             Fecha
@@ -356,7 +537,30 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
               className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
             />
           </label>
-          <label className="md:col-span-5 flex items-center gap-2 text-sm text-slate-600">
+          <label className="text-sm text-slate-600">
+            Concepto
+            <select
+              name="concept"
+              value={paymentForm.concept}
+              onChange={updatePaymentForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            >
+              <option value="administracion">Administración</option>
+              <option value="extra">Pago extra</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">
+            Mes
+            <input
+              type="month"
+              name="period"
+              value={paymentForm.period}
+              onChange={updatePaymentForm}
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="md:col-span-6 flex items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               name="applyAuto"
@@ -365,7 +569,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
             />
             Aplicar automáticamente a facturas por antigüedad
           </label>
-          <div className="md:col-span-5 flex justify-end gap-2">
+          <div className="md:col-span-6 flex justify-end gap-2">
             <Btn
               type="button"
               variant="secondary"
@@ -383,23 +587,27 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <MetricCard
-          label="Capital facturado"
-          value={fmtM(totals.capital)}
-          sub="Según los filtros seleccionados"
+          label="Debido del mes"
+          value={fmtM(totals.due)}
+          sub={`Administración, multas y extras de ${monthlyPeriod}`}
           icon={TrendingUp}
           color="blue"
         />
         <MetricCard
-          label="Pagos aplicados"
-          value={fmtM(totals.payments)}
-          sub="Sin movimientos reversados"
+          label="Recaudado del mes"
+          value={fmtM(totals.collected)}
+          sub={`Cobros registrados en ${monthlyPeriod}`}
           icon={BarChart3}
           color="emerald"
         />
         <MetricCard
           label="Saldo pendiente"
           value={fmtM(totals.balance)}
-          sub={`${portfolio.filter((row) => row.status === 'en_mora').length} apartamentos en mora`}
+          sub={
+            totals.invoiceBalance > 0
+              ? `Mes ${fmtM(totals.monthBalance)} + facturas ${fmtM(totals.invoiceBalance)}`
+              : `${totals.inArrears} apartamentos en mora`
+          }
           icon={AlertTriangle}
           color="red"
         />
@@ -408,6 +616,8 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
       <div className="flex gap-0 mb-4 bg-slate-100 rounded-lg p-1 w-fit">
         {[
           { key: 'cartera', label: 'Estado de Cartera' },
+          { key: 'mensual', label: 'Resumen mensual' },
+          { key: 'periodo', label: 'Pagos por mes' },
           { key: 'historial', label: 'Historial de Facturación' }
         ].map((item) => (
           <button
@@ -420,7 +630,7 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
         ))}
       </div>
 
-      {tab === 'cartera' ? (
+      {tab === 'cartera' && (
         <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
           <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
             <label className="text-xs font-semibold text-slate-500">
@@ -568,7 +778,178 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
             </table>
           )}
         </div>
-      ) : (
+      )}
+
+      {tab === 'mensual' && (
+        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
+            <label className="text-xs font-semibold text-slate-500">
+              Cuota de administración
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={adminFeeDraft}
+                onChange={(event) => setAdminFeeDraft(event.target.value)}
+                disabled={!activeBuildingId || !canManageInterest || adminFeeSaving}
+                className="mt-1 block w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              />
+            </label>
+            {canManageInterest && (
+              <Btn
+                onClick={handleSaveAdminFee}
+                disabled={
+                  !activeBuildingId ||
+                  adminFeeDraft === '' ||
+                  adminFeeSaving ||
+                  String(adminFeeDraft) === String(adminFee)
+                }
+              >
+                {adminFeeSaving ? 'Guardando…' : 'Guardar cuota'}
+              </Btn>
+            )}
+            <span className="text-xs text-slate-500">
+              Valor vigente: <strong>{fmt(Number(adminFee))}</strong>
+            </span>
+            {adminFeeMessage && (
+              <p className="text-xs text-emerald-600">{adminFeeMessage}</p>
+            )}
+            {adminFeeError && <p className="text-xs text-red-600">{adminFeeError}</p>}
+          </div>
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50 p-4">
+            <label className="text-xs font-semibold text-slate-500">
+              Mes
+              <input
+                type="month"
+                value={monthlyPeriod}
+                onChange={(event) => setMonthlyPeriod(event.target.value)}
+                disabled={!activeBuildingId}
+                className="mt-1 block w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              />
+            </label>
+            {monthlySummary && (
+              <div className="ml-auto grid grid-cols-2 gap-4 text-xs text-slate-500 md:grid-cols-4">
+                <div>
+                  <span className="block">Debido</span>
+                  <strong className="text-sm text-slate-800">
+                    {fmt(monthlySummary.totals.due ?? 0)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block">Recaudado</span>
+                  <strong className="text-sm text-emerald-700">
+                    {fmt(monthlySummary.totals.collected ?? 0)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block">Saldo</span>
+                  <strong className="text-sm text-red-600">
+                    {fmt(monthlySummary.totals.balance ?? 0)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block">Admin. / Multas / Extra</span>
+                  <strong className="text-sm text-slate-800">
+                    {fmt(monthlySummary.totals.adminPaid ?? 0)} ·{' '}
+                    {fmt(monthlySummary.totals.finesPaid ?? 0)} ·{' '}
+                    {fmt(monthlySummary.totals.extraChargesPaid ?? 0)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!activeBuildingId ? (
+            <p className="px-4 py-12 text-center text-sm text-slate-400">
+              Selecciona un edificio para ver el resumen mensual.
+            </p>
+          ) : monthlyError ? (
+            <p className="px-4 py-12 text-center text-sm text-red-600">{monthlyError}</p>
+          ) : (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  {[
+                    'Apartamento',
+                    'Cuota administración',
+                    'Pagado administración',
+                    'Estado',
+                    'Multas',
+                    'Pagos extra',
+                    'Debido',
+                    'Recaudado',
+                    'Saldo'
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyLoading ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      Consultando resumen…
+                    </td>
+                  </tr>
+                ) : !monthlySummary || monthlySummary.units.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      No hay apartamentos registrados para este edificio.
+                    </td>
+                  </tr>
+                ) : (
+                  monthlySummary.units.map((row) => (
+                    <tr key={row.unitId} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm font-bold text-slate-800">
+                        {row.tower ? `${row.tower} - ` : ''}
+                        {row.unitNumber}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{fmt(row.adminFee)}</td>
+                      <td className="px-4 py-3 text-sm text-emerald-700">{fmt(row.adminPaid)}</td>
+                      <td className="px-4 py-3">
+                        <Badge label={STATUS_LABELS.get(row.adminStatus) ?? row.adminStatus} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {fmt(row.finesPaid ?? 0)} / {fmt(row.finesAmount ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {fmt(row.extraChargesPaid ?? 0)} / {fmt(row.extraChargesAmount ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{fmt(row.due ?? 0)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+                        {fmt(row.collected ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold text-red-600">
+                        {fmt(row.balance ?? 0)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'periodo' && (
+        <MonthlyPeriodSection
+          activeBuildingId={activeBuildingId}
+          canManage={canManageInterest}
+          units={units}
+          unitsLoading={unitsLoading}
+          initialPeriod={monthlyPeriod}
+          refreshKey={monthlyRefresh}
+          onPeriodChange={handlePeriodChange}
+          onDataChange={refreshBillingSummaries}
+        />
+      )}
+
+      {tab === 'historial' && (
         <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden">
           <div className="grid grid-cols-1 gap-3 border-b border-slate-100 bg-slate-50 p-4 md:grid-cols-4">
             <label className="text-xs font-semibold text-slate-500">

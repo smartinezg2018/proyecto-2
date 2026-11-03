@@ -1,12 +1,15 @@
 import { sequelize } from '../../../../database/connection.js';
 import {
+  BillingExtraCharge,
+  BillingPeriodMark,
   CashReceipt,
   ChargeSchedule,
   Invoice,
   InvoiceItem,
   Payment,
   PaymentAllocation,
-  Unit
+  Unit,
+  UnitFine
 } from '../../../../database/models/index.js';
 import { QueryTypes } from 'sequelize';
 
@@ -582,6 +585,8 @@ export class BillingRepository {
     amount,
     paymentMethod,
     reference,
+    concept = 'administracion',
+    period = null,
     createdBy
   }) {
     try {
@@ -597,6 +602,8 @@ export class BillingRepository {
           throw error;
         }
 
+        const resolvedPeriod = resolvePaymentPeriod(period, paymentDate);
+
         return Payment.create(
           {
             buildingId,
@@ -606,6 +613,8 @@ export class BillingRepository {
             paymentMethod,
             reference,
             status: 'registrado',
+            concept,
+            period: resolvedPeriod,
             createdBy
           },
           { transaction }
@@ -620,6 +629,471 @@ export class BillingRepository {
         duplicate.statusCode = 409;
         throw duplicate;
       }
+      throw error;
+    }
+  }
+
+  async findAdminFee(buildingId) {
+    const rows = await sequelize.query(
+      'SELECT id, admin_fee AS adminFee FROM buildings WHERE id = :buildingId',
+      { replacements: { buildingId: Number(buildingId) }, type: QueryTypes.SELECT }
+    );
+    if (!rows[0]) {
+      const error = new Error('Edificio no encontrado.');
+      error.code = 'BUILDING_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
+    return { buildingId: Number(buildingId), adminFee: Number(rows[0].adminFee) };
+  }
+
+  async upsertAdminFee({ buildingId, adminFee, updatedBy }) {
+    const updateResult = await sequelize.query(
+      'UPDATE buildings SET admin_fee = :adminFee, updated_by = :updatedBy WHERE id = :buildingId',
+      {
+        replacements: { buildingId: Number(buildingId), adminFee: Number(adminFee), updatedBy },
+        type: QueryTypes.UPDATE
+      }
+    );
+    // mysql2 + Sequelize may return [undefined, affectedRows] for UPDATE.
+    const affected = Array.isArray(updateResult)
+      ? Number(updateResult[1] ?? updateResult[0] ?? 0)
+      : Number(updateResult ?? 0);
+    if (!affected) {
+      const error = new Error('Edificio no encontrado.');
+      error.code = 'BUILDING_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
+    return this.findAdminFee(buildingId);
+  }
+
+  async findMonthlySummary({ buildingId, period }) {
+    const { periodStart, periodEnd } = periodBounds(period);
+    const paymentPeriodSql = `(
+             p.period = :period
+             OR (
+               (p.period IS NULL OR p.period = '')
+               AND p.payment_date >= :periodStart
+               AND p.payment_date < :periodEnd
+             )
+           )`;
+    const rows = await sequelize.query(
+      `SELECT u.id AS unitId,
+              u.number AS unitNumber,
+              u.tower,
+              b.admin_fee AS adminFee,
+              COALESCE(SUM(CASE WHEN p.concept = 'administracion' THEN p.amount ELSE 0 END), 0) AS adminPaid,
+              COALESCE(SUM(CASE WHEN p.concept = 'extra' THEN p.amount ELSE 0 END), 0) AS extraPaid,
+              COALESCE(SUM(p.amount), 0) AS totalPaid,
+              COUNT(p.id) AS paymentCount
+         FROM units u
+         JOIN buildings b ON b.id = u.building_id
+         LEFT JOIN payments p
+           ON p.unit_id = u.id
+          AND p.building_id = u.building_id
+          AND p.status <> 'reversado'
+          AND ${paymentPeriodSql}
+        WHERE u.building_id = :buildingId
+          AND u.kind = 'apartamento'
+        GROUP BY u.id, u.number, u.tower, b.admin_fee
+        ORDER BY u.tower ASC, u.number ASC`,
+      {
+        replacements: { buildingId: Number(buildingId), period, periodStart, periodEnd },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    const [fines, extraCharges, marks, adminPayments] = await Promise.all([
+      sequelize.query(
+        `SELECT id, unit_id AS unitId, reason, amount, status
+           FROM unit_fines
+          WHERE building_id = :buildingId AND period = :period
+          ORDER BY id ASC`,
+        { replacements: { buildingId: Number(buildingId), period }, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT id, unit_id AS unitId, reason, amount, status
+           FROM billing_extra_charges
+          WHERE building_id = :buildingId AND period = :period
+          ORDER BY id ASC`,
+        { replacements: { buildingId: Number(buildingId), period }, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT unit_id AS unitId, status
+           FROM billing_period_marks
+          WHERE building_id = :buildingId AND period = :period`,
+        { replacements: { buildingId: Number(buildingId), period }, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT id, unit_id AS unitId, payment_date AS paymentDate, amount, reference
+           FROM payments
+          WHERE building_id = :buildingId
+            AND concept = 'administracion'
+            AND status <> 'reversado'
+            AND (
+              period = :period
+              OR (
+                (period IS NULL OR period = '')
+                AND payment_date >= :periodStart
+                AND payment_date < :periodEnd
+              )
+            )
+          ORDER BY payment_date ASC, id ASC`,
+        {
+          replacements: { buildingId: Number(buildingId), period, periodStart, periodEnd },
+          type: QueryTypes.SELECT
+        }
+      )
+    ]);
+
+    const finesByUnit = groupByUnit(fines, mapCharge);
+    const extrasByUnit = groupByUnit(extraCharges, mapCharge);
+    const paymentsByUnit = groupByUnit(adminPayments, (payment) => ({
+      id: Number(payment.id),
+      paymentDate: payment.paymentDate,
+      amount: Number(payment.amount),
+      reference: payment.reference
+    }));
+    const markByUnit = new Map(marks.map((mark) => [Number(mark.unitId), mark.status]));
+
+    const units = rows.map((row) => {
+      const unitId = Number(row.unitId);
+      const adminFee = Number(row.adminFee);
+      const cashAdminPaid = Number(row.adminPaid);
+      const extraPaid = Number(row.extraPaid);
+      const totalPaid = Number(row.totalPaid);
+      const mark = markByUnit.get(unitId) ?? null;
+      let adminStatus;
+      if (mark === 'pagado' || mark === 'no_pagado') {
+        adminStatus = mark;
+      } else if (adminFee === 0) {
+        adminStatus = cashAdminPaid > 0 ? 'pagado' : 'sin_cuota';
+      } else if (cashAdminPaid >= adminFee - 0.0001) {
+        adminStatus = 'pagado';
+      } else if (cashAdminPaid > 0) {
+        adminStatus = 'parcial';
+      } else {
+        adminStatus = 'pendiente';
+      }
+      const unitFines = finesByUnit.get(unitId) ?? [];
+      const unitExtras = extrasByUnit.get(unitId) ?? [];
+      const finesAmount = sumAmounts(unitFines);
+      const finesPaid = sumAmounts(unitFines.filter((item) => item.status === 'pagada'));
+      const finesPending = finesAmount - finesPaid;
+      const extraChargesAmount = sumAmounts(unitExtras);
+      const extraChargesPaid = sumAmounts(
+        unitExtras.filter((item) => item.status === 'pagada')
+      );
+      const extraChargesPending = extraChargesAmount - extraChargesPaid;
+      const adminDue = adminFee;
+      const adminPaid =
+        mark === 'pagado' ? Math.max(cashAdminPaid, adminFee) : cashAdminPaid;
+      const adminBalance =
+        mark === 'pagado' ? 0 : Math.max(0, Number((adminFee - cashAdminPaid).toFixed(2)));
+      const collected = Number(
+        (adminPaid + extraPaid + finesPaid + extraChargesPaid).toFixed(2)
+      );
+      const due = Number((adminDue + finesAmount + extraChargesAmount).toFixed(2));
+      const balance = Number(
+        (adminBalance + finesPending + extraChargesPending).toFixed(2)
+      );
+      return {
+        unitId,
+        unitNumber: row.unitNumber,
+        tower: row.tower,
+        adminFee,
+        adminPaid,
+        adminDue,
+        adminBalance,
+        adminStatus,
+        adminMark: mark,
+        adminPayments: paymentsByUnit.get(unitId) ?? [],
+        extraPaid,
+        totalPaid,
+        paymentCount: Number(row.paymentCount),
+        fines: unitFines,
+        finesAmount,
+        finesPaid,
+        finesPending,
+        extraCharges: unitExtras,
+        extraChargesAmount,
+        extraChargesPaid,
+        extraChargesPending,
+        collected,
+        due,
+        balance
+      };
+    });
+
+    const totals = units.reduce(
+      (acc, unit) => ({
+        adminFee: acc.adminFee + unit.adminFee,
+        adminDue: acc.adminDue + unit.adminDue,
+        adminPaid: acc.adminPaid + unit.adminPaid,
+        adminBalance: acc.adminBalance + unit.adminBalance,
+        extraPaid: acc.extraPaid + unit.extraPaid,
+        totalPaid: acc.totalPaid + unit.totalPaid,
+        finesAmount: acc.finesAmount + unit.finesAmount,
+        finesPaid: acc.finesPaid + unit.finesPaid,
+        finesPending: acc.finesPending + unit.finesPending,
+        extraChargesAmount: acc.extraChargesAmount + unit.extraChargesAmount,
+        extraChargesPaid: acc.extraChargesPaid + unit.extraChargesPaid,
+        extraChargesPending: acc.extraChargesPending + unit.extraChargesPending,
+        collected: acc.collected + unit.collected,
+        due: acc.due + unit.due,
+        balance: acc.balance + unit.balance
+      }),
+      {
+        adminFee: 0,
+        adminDue: 0,
+        adminPaid: 0,
+        adminBalance: 0,
+        extraPaid: 0,
+        totalPaid: 0,
+        finesAmount: 0,
+        finesPaid: 0,
+        finesPending: 0,
+        extraChargesAmount: 0,
+        extraChargesPaid: 0,
+        extraChargesPending: 0,
+        collected: 0,
+        due: 0,
+        balance: 0
+      }
+    );
+
+    return {
+      period,
+      units,
+      totals: {
+        ...totals,
+        adminFee: Number(totals.adminFee.toFixed(2)),
+        adminDue: Number(totals.adminDue.toFixed(2)),
+        adminPaid: Number(totals.adminPaid.toFixed(2)),
+        adminBalance: Number(totals.adminBalance.toFixed(2)),
+        extraPaid: Number(totals.extraPaid.toFixed(2)),
+        totalPaid: Number(totals.totalPaid.toFixed(2)),
+        finesAmount: Number(totals.finesAmount.toFixed(2)),
+        finesPaid: Number(totals.finesPaid.toFixed(2)),
+        finesPending: Number(totals.finesPending.toFixed(2)),
+        extraChargesAmount: Number(totals.extraChargesAmount.toFixed(2)),
+        extraChargesPaid: Number(totals.extraChargesPaid.toFixed(2)),
+        extraChargesPending: Number(totals.extraChargesPending.toFixed(2)),
+        collected: Number(totals.collected.toFixed(2)),
+        due: Number(totals.due.toFixed(2)),
+        balance: Number(totals.balance.toFixed(2))
+      }
+    };
+  }
+
+  async findYearlySummary({ buildingId, year }) {
+    const yearPrefix = `${year}-%`;
+    const replacements = {
+      buildingId: Number(buildingId),
+      yearPrefix,
+      yearStart: `${year}-01-01`,
+      yearEnd: `${Number(year) + 1}-01-01`
+    };
+    const [adminRows, fineRows, extraRows, markRows, markedAdminRows] = await Promise.all([
+      sequelize.query(
+        `SELECT COALESCE(NULLIF(period, ''), DATE_FORMAT(payment_date, '%Y-%m')) AS period,
+                COALESCE(SUM(amount), 0) AS adminPaid,
+                COUNT(*) AS paymentCount
+           FROM payments
+          WHERE building_id = :buildingId
+            AND concept = 'administracion'
+            AND status <> 'reversado'
+            AND (
+              period LIKE :yearPrefix
+              OR (
+                (period IS NULL OR period = '')
+                AND payment_date >= :yearStart
+                AND payment_date < :yearEnd
+              )
+            )
+          GROUP BY COALESCE(NULLIF(period, ''), DATE_FORMAT(payment_date, '%Y-%m'))`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT period,
+                COUNT(*) AS finesCount,
+                COALESCE(SUM(amount), 0) AS finesAmount,
+                COALESCE(SUM(CASE WHEN status = 'pagada' THEN amount ELSE 0 END), 0) AS finesPaid
+           FROM unit_fines
+          WHERE building_id = :buildingId AND period LIKE :yearPrefix
+          GROUP BY period`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT period,
+                COUNT(*) AS extrasCount,
+                COALESCE(SUM(amount), 0) AS extrasAmount,
+                COALESCE(SUM(CASE WHEN status = 'pagada' THEN amount ELSE 0 END), 0) AS extrasPaid
+           FROM billing_extra_charges
+          WHERE building_id = :buildingId AND period LIKE :yearPrefix
+          GROUP BY period`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT period,
+                SUM(status = 'pagado') AS markedPaid,
+                SUM(status = 'no_pagado') AS markedUnpaid
+           FROM billing_period_marks
+          WHERE building_id = :buildingId AND period LIKE :yearPrefix
+          GROUP BY period`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT m.period,
+                COALESCE(SUM(GREATEST(b.admin_fee - COALESCE(paid.amount, 0), 0)), 0) AS recognizedAdmin
+           FROM billing_period_marks m
+           INNER JOIN buildings b ON b.id = m.building_id
+           LEFT JOIN (
+             SELECT unit_id,
+                    COALESCE(NULLIF(period, ''), DATE_FORMAT(payment_date, '%Y-%m')) AS period,
+                    SUM(amount) AS amount
+               FROM payments
+              WHERE building_id = :buildingId
+                AND concept = 'administracion'
+                AND status <> 'reversado'
+                AND (
+                  period LIKE :yearPrefix
+                  OR (
+                    (period IS NULL OR period = '')
+                    AND payment_date >= :yearStart
+                    AND payment_date < :yearEnd
+                  )
+                )
+              GROUP BY unit_id, COALESCE(NULLIF(period, ''), DATE_FORMAT(payment_date, '%Y-%m'))
+           ) paid ON paid.unit_id = m.unit_id AND paid.period = m.period
+          WHERE m.building_id = :buildingId
+            AND m.status = 'pagado'
+            AND m.period LIKE :yearPrefix
+          GROUP BY m.period`,
+        { replacements, type: QueryTypes.SELECT }
+      )
+    ]);
+
+    const adminByPeriod = new Map(adminRows.map((row) => [row.period, row]));
+    const finesByPeriod = new Map(fineRows.map((row) => [row.period, row]));
+    const extrasByPeriod = new Map(extraRows.map((row) => [row.period, row]));
+    const marksByPeriod = new Map(markRows.map((row) => [row.period, row]));
+    const markedAdminByPeriod = new Map(markedAdminRows.map((row) => [row.period, row]));
+
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const period = `${year}-${String(index + 1).padStart(2, '0')}`;
+      const admin = adminByPeriod.get(period);
+      const fines = finesByPeriod.get(period);
+      const extras = extrasByPeriod.get(period);
+      const marks = marksByPeriod.get(period);
+      const markedAdmin = markedAdminByPeriod.get(period);
+      return {
+        period,
+        adminPaid: Number(
+          (Number(admin?.adminPaid ?? 0) + Number(markedAdmin?.recognizedAdmin ?? 0)).toFixed(2)
+        ),
+        adminPaymentCount: Number(admin?.paymentCount ?? 0),
+        finesCount: Number(fines?.finesCount ?? 0),
+        finesAmount: Number(fines?.finesAmount ?? 0),
+        finesPaid: Number(fines?.finesPaid ?? 0),
+        extrasCount: Number(extras?.extrasCount ?? 0),
+        extrasAmount: Number(extras?.extrasAmount ?? 0),
+        extrasPaid: Number(extras?.extrasPaid ?? 0),
+        markedPaid: Number(marks?.markedPaid ?? 0),
+        markedUnpaid: Number(marks?.markedUnpaid ?? 0)
+      };
+    });
+
+    return { year: Number(year), months };
+  }
+
+  async setPeriodMark({ buildingId, unitId, period, status, updatedBy }) {
+    await this.assertApartment(buildingId, unitId);
+    const existing = await BillingPeriodMark.findOne({ where: { unitId, period } });
+    if (existing) {
+      await existing.update({ buildingId, status, updatedBy });
+      return mapPeriodMark(existing);
+    }
+    const created = await BillingPeriodMark.create({
+      buildingId,
+      unitId,
+      period,
+      status,
+      updatedBy
+    });
+    return mapPeriodMark(created);
+  }
+
+  async createFine({ buildingId, unitId, period, reason, amount, createdBy }) {
+    await this.assertApartment(buildingId, unitId);
+    const created = await UnitFine.create({
+      buildingId,
+      unitId,
+      period,
+      reason,
+      amount,
+      status: 'pendiente',
+      createdBy
+    });
+    return mapCharge(created);
+  }
+
+  async setFineStatus({ buildingId, fineId, status, updatedBy }) {
+    const fine = await UnitFine.findOne({ where: { id: fineId, buildingId } });
+    if (!fine) {
+      const error = new Error('La multa no existe en este edificio.');
+      error.code = 'FINE_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
+    await fine.update({ status, updatedBy });
+    return mapCharge(fine);
+  }
+
+  async createExtraCharge({ buildingId, unitId, period, reason, amount, createdBy }) {
+    await this.assertApartment(buildingId, unitId);
+    const created = await BillingExtraCharge.create({
+      buildingId,
+      unitId,
+      period,
+      reason,
+      amount,
+      status: 'pendiente',
+      createdBy
+    });
+    return mapCharge(created);
+  }
+
+  async setExtraChargeStatus({ buildingId, chargeId, status, updatedBy }) {
+    const charge = await BillingExtraCharge.findOne({ where: { id: chargeId, buildingId } });
+    if (!charge) {
+      const error = new Error('El pago extra no existe en este edificio.');
+      error.code = 'EXTRA_CHARGE_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
+    await charge.update({ status, updatedBy });
+    return mapCharge(charge);
+  }
+
+  async assertApartment(buildingId, unitId) {
+    const rows = await sequelize.query(
+      `SELECT id
+         FROM units
+        WHERE id = :unitId
+          AND building_id = :buildingId
+          AND kind = 'apartamento'
+        LIMIT 1`,
+      {
+        replacements: { buildingId: Number(buildingId), unitId: Number(unitId) },
+        type: QueryTypes.SELECT
+      }
+    );
+    if (!rows[0]) {
+      const error = new Error('El apartamento no pertenece a este edificio.');
+      error.code = 'UNIT_NOT_FOUND';
+      error.statusCode = 404;
       throw error;
     }
   }
@@ -1013,6 +1487,65 @@ function mapInvoiceSummary(row) {
     appliedPayments: Number(row.appliedPayments),
     balance: Number(row.balance)
   };
+}
+
+function mapCharge(row) {
+  const data = row.get ? row.get({ plain: true }) : row;
+  return {
+    id: Number(data.id),
+    unitId: Number(data.unitId),
+    reason: data.reason,
+    amount: Number(data.amount),
+    status: data.status
+  };
+}
+
+function mapPeriodMark(row) {
+  const data = row.get({ plain: true });
+  return {
+    id: Number(data.id),
+    buildingId: Number(data.buildingId),
+    unitId: Number(data.unitId),
+    period: data.period,
+    status: data.status
+  };
+}
+
+function groupByUnit(rows, mapRow) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const unitId = Number(row.unitId);
+    const list = grouped.get(unitId) ?? [];
+    list.push(mapRow(row));
+    grouped.set(unitId, list);
+  }
+  return grouped;
+}
+
+function sumAmounts(items) {
+  return items.reduce((total, item) => total + Number(item.amount), 0);
+}
+
+function resolvePaymentPeriod(period, paymentDate) {
+  if (typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return period;
+  if (typeof paymentDate === 'string') {
+    const match = paymentDate.match(/^(\d{4}-(0[1-9]|1[0-2]))/);
+    if (match) return match[1];
+  }
+  if (paymentDate instanceof Date && !Number.isNaN(paymentDate.getTime())) {
+    return `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function periodBounds(period) {
+  const [year, month] = String(period).split('-').map(Number);
+  const periodStart = `${period}-01`;
+  const periodEnd =
+    month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  return { periodStart, periodEnd };
 }
 
 function addMonths(period, months) {

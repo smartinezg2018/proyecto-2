@@ -20,6 +20,7 @@ const SEED_PROFILES = [
       'buildings.update',
       'units.list',
       'units.create',
+      'units.delete',
       'persons.list',
       'persons.create',
       'assets.list',
@@ -210,6 +211,143 @@ async function upsertUser(connection, user, profileId, buildingIdsByNit) {
   return userId;
 }
 
+function recurringExecutions(amount, description) {
+  return Array.from({ length: 12 }, (_, index) => ({
+    month: index + 1,
+    day: 15,
+    amount,
+    extraordinary: false,
+    description
+  }));
+}
+
+function previousYearExpenseLines(scale) {
+  const money = (value) => Math.round(value * scale);
+  const maintenance = [1800000, 1800000, 2000000, 1800000, 1800000, 2200000, 1800000, 1800000, 1900000, 1800000, 1800000, 2500000];
+  return [
+    {
+      code: 'ASE',
+      name: 'Aseo y cafetería',
+      budgeted: money(30000000),
+      executions: recurringExecutions(money(2500000), 'seed:aseo-mensual')
+    },
+    {
+      code: 'VIG',
+      name: 'Vigilancia',
+      budgeted: money(60000000),
+      executions: recurringExecutions(money(4800000), 'seed:vigilancia-mensual')
+    },
+    {
+      code: 'SRV',
+      name: 'Servicios públicos',
+      budgeted: money(15600000),
+      executions: recurringExecutions(money(1200000), 'seed:servicios-mensual')
+    },
+    {
+      code: 'MNT',
+      name: 'Mantenimiento locativo',
+      budgeted: money(24000000),
+      executions: maintenance.map((amount, index) => ({
+        month: index + 1,
+        day: 15,
+        amount: money(amount),
+        extraordinary: false,
+        description: 'seed:mantenimiento-mensual'
+      }))
+    },
+    {
+      code: 'ADM',
+      name: 'Administración',
+      budgeted: money(12000000),
+      executions: recurringExecutions(money(900000), 'seed:administracion-mensual')
+    },
+    {
+      code: 'FAC',
+      name: 'Reparación de fachada',
+      budgeted: money(18500000),
+      executions: [
+        {
+          month: 3,
+          day: 20,
+          amount: money(18500000),
+          extraordinary: true,
+          description: 'seed:fachada-extraordinaria'
+        }
+      ]
+    },
+    {
+      code: 'BOM',
+      name: 'Reposición de bombas',
+      budgeted: money(6400000),
+      executions: [
+        {
+          month: 8,
+          day: 10,
+          amount: money(6400000),
+          extraordinary: true,
+          description: 'seed:bombas-extraordinaria'
+        }
+      ]
+    }
+  ];
+}
+
+async function seedPreviousYearBudget(connection, { buildingId, year, createdBy, lines }) {
+  const [budgets] = await connection.execute(
+    'SELECT id FROM annual_budgets WHERE building_id = ? AND year = ?',
+    [buildingId, year]
+  );
+  if (budgets.length) {
+    const [foreignRows] = await connection.execute(
+      `SELECT COUNT(*) AS total
+       FROM budget_executions be
+       INNER JOIN budget_lines bl ON bl.id = be.budget_line_id
+       INNER JOIN annual_budgets ab ON ab.id = bl.budget_id
+       WHERE ab.building_id = ? AND ab.year = ?
+         AND (be.description IS NULL OR be.description NOT LIKE 'seed:%')`,
+      [buildingId, year]
+    );
+    if (Number(foreignRows[0].total) > 0) {
+      console.log(`Budget ${year} kept for building ${buildingId}: tiene ejecuciones propias.`);
+      return;
+    }
+    await connection.execute('DELETE FROM annual_budgets WHERE building_id = ? AND year = ?', [
+      buildingId,
+      year
+    ]);
+  }
+
+  const [budgetResult] = await connection.execute(
+    `INSERT INTO annual_budgets (building_id, year, version, status, created_by)
+     VALUES (?, ?, 1, 'cerrado', ?)`,
+    [buildingId, year, createdBy]
+  );
+  for (const line of lines) {
+    const [lineResult] = await connection.execute(
+      `INSERT INTO budget_lines (budget_id, code, name, classification, amount)
+       VALUES (?, ?, ?, 'gasto', ?)`,
+      [budgetResult.insertId, line.code, line.name, line.budgeted]
+    );
+    for (const execution of line.executions) {
+      const month = String(execution.month).padStart(2, '0');
+      const day = String(execution.day || 15).padStart(2, '0');
+      await connection.execute(
+        `INSERT INTO budget_executions
+           (budget_line_id, execution_date, amount, description, is_extraordinary, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          lineResult.insertId,
+          `${year}-${month}-${day}`,
+          execution.amount,
+          execution.description,
+          execution.extraordinary ? 1 : 0,
+          createdBy
+        ]
+      );
+    }
+  }
+}
+
 let connection;
 try {
   connection = await database.getConnection();
@@ -287,6 +425,22 @@ try {
       ]
     );
     console.log(`Audit backfilled: building ${building.name}`);
+  }
+
+  const previousYear = new Date().getFullYear() - 1;
+  const budgetSeeds = [
+    { nit: '900170804-8', scale: 1 },
+    { nit: '900501288-9', scale: 0.8 }
+  ];
+  for (const item of budgetSeeds) {
+    const buildingId = buildingIdsByNit.get(item.nit);
+    await seedPreviousYearBudget(connection, {
+      buildingId,
+      year: previousYear,
+      createdBy: adminUserId,
+      lines: previousYearExpenseLines(item.scale)
+    });
+    console.log(`Previous-year budget ready: ${item.nit} ${previousYear}`);
   }
 
   await connection.commit();

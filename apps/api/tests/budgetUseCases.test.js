@@ -403,6 +403,180 @@ test('HU-057 rechaza periodo inválido', async () => {
   );
 });
 
+function monthsWith(amountsByMonth) {
+  return Array.from({ length: 12 }, (_, index) => ({
+    month: index + 1,
+    amount: amountsByMonth[index + 1] ?? 0
+  }));
+}
+
+test('proyecta el gasto del año anterior, excluye no recurrentes y suma los incrementos', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources(buildingId, year) {
+      assert.equal(buildingId, 4);
+      assert.equal(year, 2025);
+      return {
+        expenseLines: [
+          { code: 'ASE', name: 'Aseo', months: monthsWith({ 1: 100, 2: 50 }) },
+          { code: 'VIG', name: 'Vigilancia', months: monthsWith({ 1: 200 }) }
+        ],
+        adminPayments: monthsWith({ 1: 9000 }),
+        fines: monthsWith({ 1: 999 }),
+        nonAdminGains: monthsWith({ 1: 500 }),
+        extraCharges: monthsWith({ 3: 40 })
+      };
+    }
+  });
+
+  const projection = await useCases.projectExpenses(4, {
+    year: 2025,
+    increments: [
+      { code: 'ase', percent: 10 },
+      { code: 'VIG', percent: 0 }
+    ]
+  });
+
+  assert.equal(projection.basis, 'gastos');
+  assert.equal(projection.totalBase, 350);
+  assert.equal(projection.totalProjected, 365);
+  assert.equal(projection.totalExcluded, 1539);
+  assert.equal(projection.categories[0].projectedAmount, 165);
+  assert.equal(projection.categories[1].projectedAmount, 200);
+  assert.equal(projection.months[0].projectedAmount, 310);
+  assert.equal(projection.excluded.find((item) => item.code === 'MULTAS').amount, 999);
+});
+
+test('discrimina la proyección por mes', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources() {
+      return {
+        expenseLines: [{ code: 'ASE', name: 'Aseo', months: monthsWith({ 1: 100, 2: 50 }) }],
+        adminPayments: monthsWith({}),
+        fines: monthsWith({ 2: 80 }),
+        nonAdminGains: monthsWith({}),
+        extraCharges: monthsWith({})
+      };
+    }
+  });
+
+  const february = await useCases.projectExpenses(4, {
+    year: 2025,
+    month: 2,
+    increments: [{ code: 'ASE', percent: 20 }]
+  });
+
+  assert.equal(february.totalBase, 50);
+  assert.equal(february.totalProjected, 60);
+  assert.equal(february.totalExcluded, 80);
+  assert.equal(february.categories[0].months[0].projectedAmount, 120);
+});
+
+test('si no hay gastos presupuestales usa los pagos de administración y deja fuera multas y extras', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources() {
+      return {
+        expenseLines: [],
+        adminPayments: monthsWith({ 4: 1000 }),
+        fines: monthsWith({ 4: 300 }),
+        nonAdminGains: monthsWith({ 4: 150 }),
+        extraCharges: monthsWith({ 4: 25 })
+      };
+    }
+  });
+
+  const projection = await useCases.projectExpenses(4, {
+    year: 2025,
+    increments: [{ code: 'ADMIN', percent: 5 }]
+  });
+
+  assert.equal(projection.basis, 'administracion');
+  assert.equal(projection.totalBase, 1000);
+  assert.equal(projection.totalProjected, 1050);
+  assert.equal(projection.totalExcluded, 475);
+});
+
+test('excluye gastos extraordinarios, acepta un valor manual y suma partidas nuevas', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources() {
+      return {
+        expenseLines: [
+          { code: 'ASE', name: 'Aseo', months: monthsWith({ 1: 100, 2: 100 }) },
+          { code: 'VIG', name: 'Vigilancia', months: monthsWith({ 1: 200 }) }
+        ],
+        extraordinaryLines: [
+          { code: 'FAC', name: 'Fachada', months: monthsWith({ 3: 500 }) }
+        ],
+        adminPayments: monthsWith({}),
+        fines: monthsWith({}),
+        nonAdminGains: monthsWith({}),
+        extraCharges: monthsWith({})
+      };
+    }
+  });
+
+  const projection = await useCases.projectExpenses(4, {
+    year: 2025,
+    increments: [{ code: 'VIG', percent: 10 }],
+    overrides: [{ code: 'ASE', amount: 300 }],
+    manualLines: [{ code: 'SEG', name: 'Seguro nuevo', amount: 1200 }]
+  });
+
+  assert.equal(projection.basis, 'gastos');
+  assert.equal(projection.categories.find((item) => item.code === 'ASE').projectedAmount, 300);
+  assert.equal(projection.categories.find((item) => item.code === 'ASE').manual, true);
+  assert.equal(projection.categories.find((item) => item.code === 'VIG').projectedAmount, 220);
+  const seguro = projection.categories.find((item) => item.code === 'SEG');
+  assert.equal(seguro.source, 'manual');
+  assert.equal(seguro.baseAmount, 0);
+  assert.equal(seguro.projectedAmount, 1200);
+  assert.equal(seguro.months[0].projectedAmount, 100);
+  assert.equal(projection.totalBase, 400);
+  assert.equal(projection.totalProjected, 1720);
+  assert.equal(projection.totalExcluded, 500);
+  assert.equal(
+    projection.excluded.find((item) => item.code === 'FAC').reason,
+    'Gasto extraordinario no recurrente'
+  );
+  assert.equal(projection.months[0].projectedAmount, 150 + 220 + 100);
+});
+
+test('rechaza una partida manual que repite un gasto del año anterior', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources() {
+      return {
+        expenseLines: [{ code: 'ASE', name: 'Aseo', months: monthsWith({ 1: 10 }) }],
+        extraordinaryLines: [],
+        adminPayments: monthsWith({}),
+        fines: monthsWith({}),
+        nonAdminGains: monthsWith({}),
+        extraCharges: monthsWith({})
+      };
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      useCases.projectExpenses(4, {
+        year: 2025,
+        manualLines: [{ code: 'ase', name: 'Otro aseo', amount: 50 }]
+      }),
+    (error) => error.code === 'DUPLICATE_BUDGET_LINES'
+  );
+});
+
+test('rechaza un porcentaje de crecimiento fuera de rango', async () => {
+  const useCases = createBudgetUseCases({
+    async findExpenseProjectionSources() {
+      throw new Error('no debe consultar la base');
+    }
+  });
+
+  await assert.rejects(
+    () => useCases.projectExpenses(4, { year: 2025, increments: [{ code: 'ASE', percent: 1001 }] }),
+    (error) => error.code === 'INVALID_GROWTH_PERCENT'
+  );
+});
+
 test('HU-057 usa el año completo cuando no se especifica un periodo', async () => {
   let received;
   const useCases = createBudgetUseCases({

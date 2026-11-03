@@ -2,6 +2,38 @@ import { QueryTypes, UniqueConstraintError } from 'sequelize';
 import { sequelize } from '../../../../database/connection.js';
 import { AnnualBudget, BudgetExecution, BudgetLine } from '../../../../database/models/index.js';
 
+function monthsFromRows(rows) {
+  const amounts = Array.from({ length: 12 }, () => 0);
+  for (const row of rows) {
+    const month = Number(row.monthNum);
+    if (month >= 1 && month <= 12) amounts[month - 1] += Number(row.amount);
+  }
+  return amounts.map((amount, index) => ({ month: index + 1, amount }));
+}
+
+function groupExpenseLines(rows) {
+  const byCode = new Map();
+  for (const row of rows) {
+    const code = String(row.code).trim().toUpperCase();
+    if (!byCode.has(code)) {
+      byCode.set(code, {
+        code,
+        name: row.name,
+        amounts: Array.from({ length: 12 }, () => 0)
+      });
+    }
+    const month = Number(row.monthNum);
+    if (month >= 1 && month <= 12) {
+      byCode.get(code).amounts[month - 1] += Number(row.amount);
+    }
+  }
+  return [...byCode.values()].map((line) => ({
+    code: line.code,
+    name: line.name,
+    months: line.amounts.map((amount, index) => ({ month: index + 1, amount }))
+  }));
+}
+
 function mapBudget(budget) {
   const data = budget.get({ plain: true });
   return {
@@ -358,12 +390,20 @@ export class BudgetRepository {
     };
   }
 
-  async createExecution({ budgetLineId, executionDate, amount, description, createdBy }) {
+  async createExecution({
+    budgetLineId,
+    executionDate,
+    amount,
+    description,
+    extraordinary,
+    createdBy
+  }) {
     const execution = await BudgetExecution.create({
       budgetLineId,
       executionDate,
       amount,
       description,
+      isExtraordinary: Boolean(extraordinary),
       createdBy
     });
     const data = execution.get({ plain: true });
@@ -373,6 +413,7 @@ export class BudgetRepository {
       executionDate: data.executionDate,
       amount: Number(data.amount),
       description: data.description,
+      extraordinary: Boolean(data.isExtraordinary),
       createdBy: data.createdBy == null ? null : Number(data.createdBy)
     };
   }
@@ -388,6 +429,123 @@ export class BudgetRepository {
       }
     );
     return { executedAmount: Number(rows[0]?.executedAmount || 0) };
+  }
+
+  async findExpenseProjectionSources(buildingId, year) {
+    const replacements = {
+      buildingId,
+      year,
+      nextYear: Number(year) + 1,
+      yearPrefix: `${year}-%`
+    };
+    const [expenseRows, extraordinaryRows, adminRows, fineRows, nonAdminRows, extraChargeRows] =
+      await Promise.all([
+      sequelize.query(
+        `SELECT bl.code,
+                bl.name,
+                MONTH(be.execution_date) AS monthNum,
+                COALESCE(SUM(be.amount), 0) AS amount
+         FROM annual_budgets ab
+         INNER JOIN budget_lines bl
+           ON bl.budget_id = ab.id
+          AND bl.classification = 'gasto'
+         LEFT JOIN budget_executions be
+           ON be.budget_line_id = bl.id
+          AND be.is_extraordinary = 0
+          AND be.execution_date >= STR_TO_DATE(CONCAT(:year, '-01-01'), '%Y-%m-%d')
+          AND be.execution_date < STR_TO_DATE(CONCAT(:nextYear, '-01-01'), '%Y-%m-%d')
+         WHERE ab.id = (
+           SELECT selected.id
+           FROM annual_budgets selected
+           WHERE selected.building_id = :buildingId
+             AND selected.year = :year
+           ORDER BY selected.version DESC
+           LIMIT 1
+         )
+         GROUP BY bl.code, bl.name, MONTH(be.execution_date)
+         ORDER BY bl.code ASC`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT bl.code,
+                bl.name,
+                MONTH(be.execution_date) AS monthNum,
+                COALESCE(SUM(be.amount), 0) AS amount
+         FROM annual_budgets ab
+         INNER JOIN budget_lines bl
+           ON bl.budget_id = ab.id
+          AND bl.classification = 'gasto'
+         INNER JOIN budget_executions be
+           ON be.budget_line_id = bl.id
+          AND be.is_extraordinary = 1
+          AND be.execution_date >= STR_TO_DATE(CONCAT(:year, '-01-01'), '%Y-%m-%d')
+          AND be.execution_date < STR_TO_DATE(CONCAT(:nextYear, '-01-01'), '%Y-%m-%d')
+         WHERE ab.id = (
+           SELECT selected.id
+           FROM annual_budgets selected
+           WHERE selected.building_id = :buildingId
+             AND selected.year = :year
+           ORDER BY selected.version DESC
+           LIMIT 1
+         )
+         GROUP BY bl.code, bl.name, MONTH(be.execution_date)
+         ORDER BY bl.code ASC`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT CAST(SUBSTRING(period, 6, 2) AS UNSIGNED) AS monthNum,
+                COALESCE(SUM(amount), 0) AS amount
+         FROM payments
+         WHERE building_id = :buildingId
+           AND concept = 'administracion'
+           AND status <> 'reversado'
+           AND period LIKE :yearPrefix
+         GROUP BY monthNum`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT CAST(SUBSTRING(period, 6, 2) AS UNSIGNED) AS monthNum,
+                COALESCE(SUM(amount), 0) AS amount
+         FROM unit_fines
+         WHERE building_id = :buildingId
+           AND period LIKE :yearPrefix
+         GROUP BY monthNum`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT CAST(SUBSTRING(period, 6, 2) AS UNSIGNED) AS monthNum,
+                COALESCE(SUM(amount), 0) AS amount
+         FROM payments
+         WHERE building_id = :buildingId
+           AND concept <> 'administracion'
+           AND status <> 'reversado'
+           AND period LIKE :yearPrefix
+         GROUP BY monthNum`,
+        { replacements, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT CAST(SUBSTRING(period, 6, 2) AS UNSIGNED) AS monthNum,
+                COALESCE(SUM(amount), 0) AS amount
+         FROM billing_extra_charges
+         WHERE building_id = :buildingId
+           AND period LIKE :yearPrefix
+         GROUP BY monthNum`,
+        { replacements, type: QueryTypes.SELECT }
+      )
+    ]);
+
+    return {
+      expenseLines: groupExpenseLines(expenseRows).filter((line) =>
+        line.months.some((month) => month.amount > 0)
+      ),
+      extraordinaryLines: groupExpenseLines(extraordinaryRows).filter((line) =>
+        line.months.some((month) => month.amount > 0)
+      ),
+      adminPayments: monthsFromRows(adminRows),
+      fines: monthsFromRows(fineRows),
+      nonAdminGains: monthsFromRows(nonAdminRows),
+      extraCharges: monthsFromRows(extraChargeRows)
+    };
   }
 
   async listBudgetLinesForBuilding(buildingId, year) {

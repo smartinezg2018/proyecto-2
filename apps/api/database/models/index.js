@@ -22,6 +22,9 @@ import { ProjectProgress } from './ProjectProgress.js';
 import { AnnualBudget } from './AnnualBudget.js';
 import { BudgetLine } from './BudgetLine.js';
 import { BudgetExecution } from './BudgetExecution.js';
+import { BillingPeriodMark } from './BillingPeriodMark.js';
+import { UnitFine } from './UnitFine.js';
+import { BillingExtraCharge } from './BillingExtraCharge.js';
 
 Unit.hasOne(UnitResponsible, { foreignKey: 'unitId', as: 'responsibleAssignment' });
 UnitResponsible.belongsTo(Unit, { foreignKey: 'unitId' });
@@ -102,5 +105,8 @@ export {
   ProjectProgress,
   AnnualBudget,
   BudgetLine,
-  BudgetExecution
+  BudgetExecution,
+  BillingPeriodMark,
+  UnitFine,
+  BillingExtraCharge
 };

@@ -12,6 +12,7 @@ export function BudgetExecutionSection({ activeBuildingId, canUpdateBudget }) {
   const [executionDate, setExecutionDate] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [extraordinary, setExtraordinary] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -56,13 +57,15 @@ export function BudgetExecutionSection({ activeBuildingId, canUpdateBudget }) {
         budgetLineId: Number(budgetLineId),
         executionDate,
         amount: Number(amount),
-        description: description || undefined
+        description: description || undefined,
+        extraordinary
       });
       setMessage(
         `Ejecución registrada en ${response.data.line.code}. Disponible: ${fmt(response.data.line.availableAmount)}.`
       );
       setAmount('');
       setDescription('');
+      setExtraordinary(false);
       await refreshLines();
     } catch (requestError) {
       setError(requestError.message || 'No fue posible registrar la ejecución.');
@@ -142,6 +145,14 @@ export function BudgetExecutionSection({ activeBuildingId, canUpdateBudget }) {
               maxLength={255}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600 md:col-span-2">
+            <input
+              type="checkbox"
+              checked={extraordinary}
+              onChange={(event) => setExtraordinary(event.target.checked)}
+            />
+            Gasto extraordinario (no recurrente). Queda fuera de la base del presupuesto siguiente.
           </label>
           <div>
             <Btn type="submit" disabled={saving || !activeBuildingId || !budgetLineId}>

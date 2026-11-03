@@ -9,6 +9,7 @@ export const BudgetExecution = sequelize.define(
     executionDate: { type: DataTypes.DATEONLY, allowNull: false },
     amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false },
     description: DataTypes.STRING(255),
+    isExtraordinary: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     createdBy: DataTypes.BIGINT.UNSIGNED
   },
   { tableName: 'budget_executions', updatedAt: false }

@@ -353,3 +353,52 @@ test('HU-048 rechaza cuando no existe recibo de caja', async () => {
     statusCode: 404
   });
 });
+
+test('asigna una multa al apartamento y periodo indicados', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async createFine(input) {
+      received = input;
+      return { id: 3, ...input, status: 'pendiente' };
+    }
+  });
+
+  const fine = await useCases.assignFine(
+    8,
+    { unitId: 12, period: '2026-03', reason: '  Ruido después de las 10  ', amount: '45000' },
+    4
+  );
+
+  assert.equal(fine.status, 'pendiente');
+  assert.deepEqual(received, {
+    buildingId: 8,
+    unitId: 12,
+    period: '2026-03',
+    reason: 'Ruido después de las 10',
+    amount: 45000,
+    createdBy: 4
+  });
+});
+
+test('rechaza un pago extra sin motivo', async () => {
+  const useCases = createBillingUseCases({});
+  await assert.rejects(
+    () => useCases.assignExtraCharge(1, { unitId: 2, period: '2026-01', reason: ' ', amount: 10 }, 1),
+    { code: 'VALIDATION_ERROR', statusCode: 400 }
+  );
+});
+
+test('marca el mes de un apartamento como no pagado', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async setPeriodMark(input) {
+      received = input;
+      return input;
+    }
+  });
+
+  await useCases.setPeriodMark(5, { unitId: 9, period: '2026-11', status: 'no_pagado' }, 2);
+  assert.equal(received.status, 'no_pagado');
+  assert.equal(received.buildingId, 5);
+  assert.equal(received.updatedBy, 2);
+});

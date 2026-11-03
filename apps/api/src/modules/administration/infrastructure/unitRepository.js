@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { sequelize } from '../../../../database/connection.js';
 import { Person, Unit, UnitResponsible } from '../../../../database/models/index.js';
 
 const responsibleInclude = {
@@ -86,5 +87,39 @@ export class UnitRepository {
     }
 
     return Unit.findOne({ where, attributes: ['id'] });
+  }
+
+  async remove(id) {
+    const unitId = Number(id);
+    await sequelize.transaction(async (transaction) => {
+      const statements = [
+        `DELETE pa FROM payment_allocations pa
+           INNER JOIN payments p ON p.id = pa.payment_id
+          WHERE p.unit_id = :unitId`,
+        `DELETE pa FROM payment_allocations pa
+           INNER JOIN invoices i ON i.id = pa.invoice_id
+          WHERE i.unit_id = :unitId`,
+        `DELETE cr FROM cash_receipts cr
+           INNER JOIN payments p ON p.id = cr.payment_id
+          WHERE p.unit_id = :unitId`,
+        `DELETE li FROM late_interests li
+           INNER JOIN invoices i ON i.id = li.invoice_id
+          WHERE i.unit_id = :unitId`,
+        `DELETE ii FROM invoice_items ii
+           INNER JOIN invoices i ON i.id = ii.invoice_id
+          WHERE i.unit_id = :unitId`,
+        'DELETE FROM invoices WHERE unit_id = :unitId',
+        'DELETE FROM payments WHERE unit_id = :unitId',
+        'DELETE FROM charge_schedules WHERE unit_id = :unitId',
+        'DELETE FROM billing_period_marks WHERE unit_id = :unitId',
+        'DELETE FROM unit_fines WHERE unit_id = :unitId',
+        'DELETE FROM billing_extra_charges WHERE unit_id = :unitId',
+        'DELETE FROM unit_responsibles WHERE unit_id = :unitId',
+        'DELETE FROM units WHERE id = :unitId'
+      ];
+      for (const sql of statements) {
+        await sequelize.query(sql, { replacements: { unitId }, transaction });
+      }
+    });
   }
 }

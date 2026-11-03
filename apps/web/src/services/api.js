@@ -70,6 +70,62 @@ export function getPaymentSlip(invoiceId) {
   });
 }
 
+export function getAdminFee(buildingId) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/admin-fee`);
+}
+
+export function saveAdminFee(buildingId, adminFee) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/admin-fee`, {
+    method: 'PUT',
+    body: JSON.stringify({ adminFee })
+  });
+}
+
+export function getMonthlySummary(buildingId, period) {
+  return apiRequest(
+    `/api/v1/billing/buildings/${buildingId}/monthly-summary?period=${encodeURIComponent(period)}`
+  );
+}
+
+export function getYearlySummary(buildingId, year) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/yearly-summary?year=${year}`);
+}
+
+export function setPeriodMark(buildingId, mark) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/period-marks`, {
+    method: 'PUT',
+    body: JSON.stringify(mark)
+  });
+}
+
+export function assignFine(buildingId, fine) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/fines`, {
+    method: 'POST',
+    body: JSON.stringify(fine)
+  });
+}
+
+export function setFineStatus(buildingId, fineId, status) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/fines/${fineId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status })
+  });
+}
+
+export function assignExtraCharge(buildingId, charge) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/extra-charges`, {
+    method: 'POST',
+    body: JSON.stringify(charge)
+  });
+}
+
+export function setExtraChargeStatus(buildingId, chargeId, status) {
+  return apiRequest(`/api/v1/billing/buildings/${buildingId}/extra-charges/${chargeId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status })
+  });
+}
+
 export function registerPayment(buildingId, payment) {
   return apiRequest(`/api/v1/billing/buildings/${buildingId}/payments`, {
     method: 'POST',
@@ -132,6 +188,13 @@ export function saveInterestSettings(buildingId, annualRate) {
   return apiRequest(`/api/v1/billing/buildings/${buildingId}/interest-settings`, {
     method: 'PUT',
     body: JSON.stringify({ annualRate })
+  });
+}
+
+export function previewBudgetProjection(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/expense-projection`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 
@@ -228,6 +291,12 @@ export function createUnit(buildingId, unit) {
   return apiRequest(`/api/v1/administration/buildings/${buildingId}/units`, {
     method: 'POST',
     body: JSON.stringify(unit)
+  });
+}
+
+export function deleteUnit(buildingId, unitId) {
+  return apiRequest(`/api/v1/administration/buildings/${buildingId}/units/${unitId}`, {
+    method: 'DELETE'
   });
 }
 

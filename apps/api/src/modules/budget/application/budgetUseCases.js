@@ -4,8 +4,256 @@ function roundMoney(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+function distributeAmount(total, weights) {
+  const normalized = weights.map((weight) => Math.max(0, Number(weight) || 0));
+  const weightTotal = normalized.reduce((sum, weight) => sum + weight, 0);
+  const shares =
+    weightTotal > 0
+      ? normalized.map((weight) => roundMoney((Number(total) * weight) / weightTotal))
+      : Array.from({ length: normalized.length }, () => roundMoney(Number(total) / normalized.length));
+  const drift = roundMoney(Number(total) - shares.reduce((sum, value) => sum + value, 0));
+  if (shares.length > 0) {
+    shares[shares.length - 1] = roundMoney(shares[shares.length - 1] + drift);
+  }
+  return shares;
+}
+
+function monthsFromManualLine(line) {
+  if (Array.isArray(line.months) && line.months.length > 0) {
+    const seen = new Set();
+    const amounts = Array.from({ length: 12 }, () => 0);
+    for (const entry of line.months) {
+      const month = Number(entry.month);
+      if (seen.has(month)) {
+        throw new AppError('No puede repetir un mes en una partida manual.', 400, 'VALIDATION_ERROR');
+      }
+      seen.add(month);
+      amounts[month - 1] = roundMoney(entry.amount);
+    }
+    return amounts.map((amount, index) => ({ month: index + 1, amount }));
+  }
+  if (line.amount == null || line.amount === '') {
+    throw new AppError(
+      'Indique el valor de la partida que no se ejecutó el año anterior.',
+      400,
+      'VALIDATION_ERROR'
+    );
+  }
+  return distributeAmount(roundMoney(line.amount), Array.from({ length: 12 }, () => 1)).map(
+    (amount, index) => ({ month: index + 1, amount })
+  );
+}
+
 export function createBudgetUseCases(repository) {
   return {
+    async projectExpenses(buildingId, input = {}) {
+      const numericYear = Number(input.year);
+      if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2100) {
+        throw new AppError('El año consultado no es válido.', 400, 'VALIDATION_ERROR');
+      }
+      const month = input.month == null || input.month === '' ? null : Number(input.month);
+      if (month != null && (!Number.isInteger(month) || month < 1 || month > 12)) {
+        throw new AppError('El mes consultado no es válido.', 400, 'VALIDATION_ERROR');
+      }
+
+      const increments = new Map();
+      for (const item of input.increments || []) {
+        const code = String(item.code).trim().toUpperCase();
+        const percent = Number(item.percent);
+        if (!Number.isFinite(percent) || percent < -100 || percent > 1000) {
+          throw new AppError(
+            'El porcentaje de crecimiento debe estar entre -100 y 1000.',
+            400,
+            'INVALID_GROWTH_PERCENT'
+          );
+        }
+        increments.set(code, percent);
+      }
+
+      const manualOverrides = new Map();
+      for (const item of input.overrides || []) {
+        const code = String(item.code).trim().toUpperCase();
+        const amount = Number(item.amount);
+        if (!Number.isFinite(amount) || amount < 0) {
+          throw new AppError('El valor manual de la partida no es válido.', 400, 'VALIDATION_ERROR');
+        }
+        manualOverrides.set(code, roundMoney(amount));
+      }
+
+      const sources = await repository.findExpenseProjectionSources(
+        Number(buildingId),
+        numericYear
+      );
+      const extraordinaryLines = sources.extraordinaryLines || [];
+      const recurringLines = (sources.expenseLines || []).filter((category) =>
+        category.months.some((item) => Number(item.amount) > 0)
+      );
+      const hasExpenseActivity = recurringLines.length > 0 || extraordinaryLines.length > 0;
+      const sourceCategories = recurringLines.length
+        ? recurringLines
+        : hasExpenseActivity
+          ? []
+          : [
+              {
+                code: 'ADMIN',
+                name: 'Pagos de administración',
+                months: sources.adminPayments
+              }
+            ];
+
+      const historicalCodes = new Set(
+        sourceCategories.map((category) => String(category.code).toUpperCase())
+      );
+      for (const code of manualOverrides.keys()) {
+        if (!historicalCodes.has(code)) {
+          throw new AppError(
+            `La partida ${code} no está en los gastos recurrentes del año anterior.`,
+            400,
+            'BUDGET_LINE_MISMATCH'
+          );
+        }
+      }
+
+      const categories = sourceCategories.map((category) => {
+        const code = String(category.code).toUpperCase();
+        const incrementPercent = increments.get(code) ?? 0;
+        const factor = 1 + incrementPercent / 100;
+        const manualAnnual = manualOverrides.has(code) ? manualOverrides.get(code) : null;
+        const projectedShares =
+          manualAnnual == null
+            ? null
+            : distributeAmount(
+                manualAnnual,
+                category.months.map((item) => item.amount)
+              );
+        const months = category.months.map((item, index) => {
+          const baseAmount = roundMoney(item.amount);
+          return {
+            month: item.month,
+            baseAmount,
+            projectedAmount: projectedShares
+              ? projectedShares[index]
+              : roundMoney(baseAmount * factor)
+          };
+        });
+        const scoped = month == null ? months : months.filter((item) => item.month === month);
+        return {
+          code,
+          name: category.name,
+          source: 'historico',
+          manual: manualAnnual != null,
+          incrementPercent,
+          baseAmount: roundMoney(scoped.reduce((sum, item) => sum + item.baseAmount, 0)),
+          projectedAmount: roundMoney(scoped.reduce((sum, item) => sum + item.projectedAmount, 0)),
+          months
+        };
+      });
+
+      const manualCodes = new Set();
+      for (const line of input.manualLines || []) {
+        const code = String(line.code).trim().toUpperCase();
+        if (historicalCodes.has(code) || manualCodes.has(code)) {
+          throw new AppError(
+            'No puede repetir códigos de partida en la proyección.',
+            400,
+            'DUPLICATE_BUDGET_LINES'
+          );
+        }
+        manualCodes.add(code);
+        const projectedMonths = monthsFromManualLine(line).map((item) => ({
+          month: item.month,
+          baseAmount: 0,
+          projectedAmount: roundMoney(item.amount)
+        }));
+        const scoped =
+          month == null
+            ? projectedMonths
+            : projectedMonths.filter((item) => item.month === month);
+        categories.push({
+          code,
+          name: String(line.name).trim(),
+          source: 'manual',
+          manual: true,
+          incrementPercent: 0,
+          baseAmount: 0,
+          projectedAmount: roundMoney(
+            scoped.reduce((sum, item) => sum + item.projectedAmount, 0)
+          ),
+          months: projectedMonths
+        });
+      }
+
+      const excluded = [
+        ...extraordinaryLines.map((line) => ({
+          code: String(line.code).toUpperCase(),
+          name: line.name,
+          reason: 'Gasto extraordinario no recurrente',
+          months: line.months
+        })),
+        {
+          code: 'MULTAS',
+          name: 'Multas a apartamentos',
+          reason: 'Gasto no recurrente',
+          months: sources.fines
+        },
+        {
+          code: 'NO_ADMIN',
+          name: 'Ganancias no marcadas como pago de administración',
+          reason: 'No son pago de administración',
+          months: sources.nonAdminGains
+        },
+        {
+          code: 'EXTRA',
+          name: 'Cargos extraordinarios',
+          reason: 'Gasto no recurrente',
+          months: sources.extraCharges
+        }
+      ].map((item) => {
+        const months = item.months.map((entry) => ({
+          month: entry.month,
+          amount: roundMoney(entry.amount)
+        }));
+        const scoped = month == null ? months : months.filter((entry) => entry.month === month);
+        return {
+          code: item.code,
+          name: item.name,
+          reason: item.reason,
+          amount: roundMoney(scoped.reduce((sum, entry) => sum + entry.amount, 0)),
+          months
+        };
+      });
+
+      const monthTotals = Array.from({ length: 12 }, (_, index) => ({
+        month: index + 1,
+        baseAmount: roundMoney(
+          categories.reduce((sum, category) => sum + category.months[index].baseAmount, 0)
+        ),
+        projectedAmount: roundMoney(
+          categories.reduce((sum, category) => sum + category.months[index].projectedAmount, 0)
+        ),
+        excludedAmount: roundMoney(
+          excluded.reduce((sum, item) => sum + item.months[index].amount, 0)
+        )
+      }));
+      const scopedMonths = month == null ? monthTotals : monthTotals.filter((item) => item.month === month);
+
+      return {
+        buildingId: Number(buildingId),
+        sourceYear: numericYear,
+        targetYear: numericYear + 1,
+        month,
+        basis: hasExpenseActivity ? 'gastos' : 'administracion',
+        categories,
+        excluded,
+        months: monthTotals,
+        totalBase: roundMoney(scopedMonths.reduce((sum, item) => sum + item.baseAmount, 0)),
+        totalProjected: roundMoney(
+          scopedMonths.reduce((sum, item) => sum + item.projectedAmount, 0)
+        ),
+        totalExcluded: roundMoney(scopedMonths.reduce((sum, item) => sum + item.excludedAmount, 0))
+      };
+    },
+
     async getPreviousExecution(buildingId, year) {
       const numericBuildingId = Number(buildingId);
       const numericYear = Number(year);
@@ -180,6 +428,7 @@ export function createBudgetUseCases(repository) {
         executionDate: input.executionDate,
         amount,
         description: input.description || null,
+        extraordinary: Boolean(input.extraordinary),
         createdBy
       });
 

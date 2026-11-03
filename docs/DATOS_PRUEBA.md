@@ -137,6 +137,29 @@ curl.exe -X POST http://localhost:5000/api/v1/auth/login `
   -c cookies.txt
 ```
 
+## Presupuesto del año anterior
+
+El seed carga la ejecución de gastos del año calendario anterior para **Bucanero 3** (`900170804-8`) y **San Marcos** (`900501288-9`). San Marcos usa el 80 % de los valores de Bucanero 3.
+
+Partidas recurrentes, con un movimiento el día 15 de cada mes:
+
+| Código | Partida | Mensual en Bucanero 3 |
+| ------ | ------- | --------------------- |
+| `ASE` | Aseo y cafetería | $2.500.000 |
+| `VIG` | Vigilancia | $4.800.000 |
+| `SRV` | Servicios públicos | $1.200.000 |
+| `ADM` | Administración | $900.000 |
+| `MNT` | Mantenimiento locativo | Varía entre $1.800.000 y $2.500.000 |
+
+Gastos extraordinarios, excluidos de la base de la proyección:
+
+| Código | Partida | Mes | Valor en Bucanero 3 |
+| ------ | ------- | --- | ------------------- |
+| `FAC` | Reparación de fachada | Marzo | $18.500.000 |
+| `BOM` | Reposición de bombas | Agosto | $6.400.000 |
+
+En Presupuesto, el año base queda en el año anterior. Ahí se puede aplicar un porcentaje por partida, escribir un valor manual y agregar una partida que no se ejecutó ese año. El presupuesto queda en estado `cerrado`, versión 1. Si ese año ya tiene ejecuciones que no vienen del seed, el script no las reemplaza.
+
 ## Notas
 
 - Las contraseñas se almacenan con hash `scrypt`; el script de seeds las regenera en cada ejecución.

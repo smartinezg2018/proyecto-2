@@ -99,6 +99,32 @@ export function createUnitUseCases(unitRepository, buildingRepository, audit = n
       }
 
       return unitRepository.findAllByBuilding(buildingId);
+    },
+
+    async remove(buildingId, unitId, userId = null) {
+      const parsedBuildingId = Number(buildingId);
+      const parsedUnitId = Number(unitId);
+      if (!Number.isSafeInteger(parsedUnitId) || parsedUnitId <= 0) {
+        throw new AppError('Inmueble no encontrado.', 404, 'UNIT_NOT_FOUND');
+      }
+
+      const unit = await unitRepository.findById(parsedUnitId);
+      if (!unit || Number(unit.buildingId) !== parsedBuildingId) {
+        throw new AppError('Inmueble no encontrado.', 404, 'UNIT_NOT_FOUND');
+      }
+
+      await unitRepository.remove(parsedUnitId);
+      if (audit) {
+        await audit.record({
+          userId,
+          action: 'delete',
+          module: 'administration',
+          entity: 'unit',
+          entityId: parsedUnitId,
+          buildingId: parsedBuildingId,
+          metadata: { number: unit.number, tower: unit.tower, kind: unit.kind }
+        });
+      }
     }
   };
 }

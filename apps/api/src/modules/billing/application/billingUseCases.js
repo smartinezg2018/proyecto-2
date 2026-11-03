@@ -1,5 +1,34 @@
 import { AppError } from '../../../shared/errors/AppError.js';
 
+function assertPeriod(period) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period))) {
+    throw new AppError('El periodo debe tener el formato YYYY-MM.', 400, 'VALIDATION_ERROR');
+  }
+}
+
+function assertPaidStatus(status) {
+  if (status !== 'pendiente' && status !== 'pagada') {
+    throw new AppError('El estado del cobro no es válido.', 400, 'VALIDATION_ERROR');
+  }
+}
+
+function assertAssignableCharge(input) {
+  assertPeriod(input.period);
+  const reason = String(input.reason ?? '').trim();
+  const amount = Number(input.amount);
+  const unitId = Number(input.unitId);
+  if (!Number.isInteger(unitId) || unitId <= 0) {
+    throw new AppError('Selecciona un apartamento válido.', 400, 'VALIDATION_ERROR');
+  }
+  if (!reason || reason.length > 255) {
+    throw new AppError('Indica el motivo del cobro.', 400, 'VALIDATION_ERROR');
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError('El valor debe ser mayor a cero.', 400, 'VALIDATION_ERROR');
+  }
+  return { unitId, period: String(input.period), reason, amount };
+}
+
 function todayInColombia(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
@@ -174,6 +203,11 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         throw new AppError('El valor del pago debe ser mayor a cero.', 400, 'VALIDATION_ERROR');
       }
 
+      const concept = input.concept === 'extra' ? 'extra' : 'administracion';
+      const period =
+        input.period ||
+        (typeof input.paymentDate === 'string' ? input.paymentDate.slice(0, 7) : null);
+
       return repository.createPayment({
         buildingId: Number(input.buildingId),
         unitId: Number(input.unitId),
@@ -181,7 +215,101 @@ export function createBillingUseCases(repository, clock = todayInColombia) {
         amount,
         paymentMethod: String(input.paymentMethod).trim(),
         reference: String(input.reference).trim(),
+        concept,
+        period,
         createdBy
+      });
+    },
+
+    async getAdminFee(buildingId) {
+      return repository.findAdminFee(Number(buildingId));
+    },
+
+    async saveAdminFee(buildingId, adminFee, updatedBy) {
+      if (!Number.isFinite(Number(adminFee)) || Number(adminFee) < 0) {
+        throw new AppError(
+          'La cuota de administración debe ser un número mayor o igual a cero.',
+          400,
+          'VALIDATION_ERROR'
+        );
+      }
+      return repository.upsertAdminFee({
+        buildingId: Number(buildingId),
+        adminFee: Number(adminFee),
+        updatedBy
+      });
+    },
+
+    async getMonthlySummary(buildingId, period) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period))) {
+        throw new AppError('El periodo debe tener el formato YYYY-MM.', 400, 'VALIDATION_ERROR');
+      }
+      return repository.findMonthlySummary({
+        buildingId: Number(buildingId),
+        period: String(period)
+      });
+    },
+
+    async getYearlySummary(buildingId, year) {
+      const numericYear = Number(year);
+      if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2100) {
+        throw new AppError('El año no es válido.', 400, 'VALIDATION_ERROR');
+      }
+      return repository.findYearlySummary({
+        buildingId: Number(buildingId),
+        year: numericYear
+      });
+    },
+
+    async setPeriodMark(buildingId, input, updatedBy) {
+      assertPeriod(input.period);
+      if (input.status !== 'pagado' && input.status !== 'no_pagado') {
+        throw new AppError('El estado del mes no es válido.', 400, 'VALIDATION_ERROR');
+      }
+      return repository.setPeriodMark({
+        buildingId: Number(buildingId),
+        unitId: Number(input.unitId),
+        period: String(input.period),
+        status: input.status,
+        updatedBy
+      });
+    },
+
+    async assignFine(buildingId, input, createdBy) {
+      const charge = assertAssignableCharge(input);
+      return repository.createFine({
+        buildingId: Number(buildingId),
+        ...charge,
+        createdBy
+      });
+    },
+
+    async setFineStatus(buildingId, fineId, status, updatedBy) {
+      assertPaidStatus(status);
+      return repository.setFineStatus({
+        buildingId: Number(buildingId),
+        fineId: Number(fineId),
+        status,
+        updatedBy
+      });
+    },
+
+    async assignExtraCharge(buildingId, input, createdBy) {
+      const charge = assertAssignableCharge(input);
+      return repository.createExtraCharge({
+        buildingId: Number(buildingId),
+        ...charge,
+        createdBy
+      });
+    },
+
+    async setExtraChargeStatus(buildingId, chargeId, status, updatedBy) {
+      assertPaidStatus(status);
+      return repository.setExtraChargeStatus({
+        buildingId: Number(buildingId),
+        chargeId: Number(chargeId),
+        status,
+        updatedBy
       });
     },
 

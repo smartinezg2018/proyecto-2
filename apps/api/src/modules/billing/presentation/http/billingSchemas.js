@@ -60,8 +60,41 @@ export const registerPaymentSchema = z.object({
     .refine((value) => ['efectivo', 'transferencia', 'cheque', 'pse', 'otro'].includes(value), {
       message: 'El medio de pago no es válido.'
     }),
-  reference: z.string().trim().min(1).max(100)
+  reference: z.string().trim().min(1).max(100),
+  concept: z.enum(['administracion', 'extra']).optional().default('administracion'),
+  period: periodSchema.optional()
 });
+
+export const adminFeeSchema = z.object({
+  adminFee: z.coerce.number().min(0, 'La cuota de administración no puede ser negativa.')
+});
+
+export const monthlySummaryQuerySchema = z.object({
+  period: periodSchema
+});
+
+export const yearlySummaryQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100)
+});
+
+export const periodMarkSchema = z.object({
+  unitId: z.coerce.number().int().positive(),
+  period: periodSchema,
+  status: z.enum(['pagado', 'no_pagado'])
+});
+
+export const assignChargeSchema = z.object({
+  unitId: z.coerce.number().int().positive(),
+  period: periodSchema,
+  reason: z.string().trim().min(1).max(255),
+  amount: z.coerce.number().positive()
+});
+
+export const chargeStatusSchema = z.object({
+  status: z.enum(['pendiente', 'pagada'])
+});
+
+export const chargeIdSchema = z.coerce.number().int().positive();
 
 export const applyPaymentSchema = z
   .object({
