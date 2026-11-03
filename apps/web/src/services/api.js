@@ -169,6 +169,19 @@ export function updateAnnualBudgetStatus(buildingId, budgetId, status) {
   });
 }
 
+export function listBudgetLines(buildingId, year) {
+  return apiRequest(
+    `/api/v1/budget/buildings/${buildingId}/budget-lines?year=${encodeURIComponent(year)}`
+  );
+}
+
+export function registerBudgetExecution(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/executions`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }

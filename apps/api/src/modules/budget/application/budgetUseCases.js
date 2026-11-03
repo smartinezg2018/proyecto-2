@@ -152,6 +152,54 @@ export function createBudgetUseCases(repository) {
       }
       const budget = await this.getAnnualBudget(buildingId, budgetId);
       return repository.updateAnnualBudgetStatus(budget.id, status, updatedBy);
+    },
+
+    async registerExecution(buildingId, input, createdBy) {
+      const numericBuildingId = Number(buildingId);
+      const budgetLineId = Number(input.budgetLineId);
+      const amount = roundMoney(input.amount);
+      if (!(amount > 0)) {
+        throw new AppError(
+          'El valor ejecutado debe ser mayor que cero.',
+          400,
+          'INVALID_EXECUTION_AMOUNT'
+        );
+      }
+
+      const line = await repository.findBudgetLineForBuilding(numericBuildingId, budgetLineId);
+      if (!line) {
+        throw new AppError(
+          'La partida no pertenece al presupuesto del edificio.',
+          404,
+          'BUDGET_LINE_NOT_FOUND'
+        );
+      }
+
+      const execution = await repository.createExecution({
+        budgetLineId,
+        executionDate: input.executionDate,
+        amount,
+        description: input.description || null,
+        createdBy
+      });
+
+      const balance = await repository.getLineBalance(budgetLineId);
+      return {
+        execution,
+        line: {
+          id: line.id,
+          code: line.code,
+          name: line.name,
+          classification: line.classification,
+          budgetedAmount: line.budgetedAmount,
+          executedAmount: balance.executedAmount,
+          availableAmount: roundMoney(line.budgetedAmount - balance.executedAmount)
+        }
+      };
+    },
+
+    async listBudgetLines(buildingId, year) {
+      return repository.listBudgetLinesForBuilding(Number(buildingId), Number(year));
     }
   };
 }

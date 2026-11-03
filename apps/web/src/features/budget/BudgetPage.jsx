@@ -7,6 +7,7 @@ import { SectionHeader as SectionHead } from '../../components/SectionHeader.jsx
 import { ActionButton as Btn } from '../../components/ActionButton.jsx';
 import { HistoricalBudgetSection } from './HistoricalBudgetSection.jsx';
 import { AnnualBudgetSection } from './AnnualBudgetSection.jsx';
+import { BudgetExecutionSection } from './BudgetExecutionSection.jsx';
 
 export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false }) {
   const [method, setMethod] = useState('Hist�rica');
@@ -38,6 +39,11 @@ export function ModulePresupuesto({ activeBuildingId, canUpdateBudget = false })
       />
 
       <AnnualBudgetSection
+        activeBuildingId={activeBuildingId}
+        canUpdateBudget={canUpdateBudget}
+      />
+
+      <BudgetExecutionSection
         activeBuildingId={activeBuildingId}
         canUpdateBudget={canUpdateBudget}
       />

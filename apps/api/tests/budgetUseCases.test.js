@@ -216,3 +216,70 @@ test('HU-054 rechaza códigos duplicados y estados inválidos', async () => {
     { code: 'INVALID_BUDGET_STATUS', statusCode: 400 }
   );
 });
+
+test('HU-055 / CP-055-01: registra ejecución asociada a una partida y actualiza saldo', async () => {
+  let created;
+  const useCases = createBudgetUseCases({
+    async findBudgetLineForBuilding(buildingId, budgetLineId) {
+      assert.equal(buildingId, 4);
+      assert.equal(budgetLineId, 10);
+      return {
+        id: 10,
+        code: 'ASE',
+        name: 'Aseo',
+        classification: 'gasto',
+        budgetedAmount: 45000000
+      };
+    },
+    async createExecution(input) {
+      created = input;
+      return { id: 90, ...input };
+    },
+    async getLineBalance(budgetLineId) {
+      assert.equal(budgetLineId, 10);
+      return { executedAmount: 5000000 };
+    }
+  });
+
+  const result = await useCases.registerExecution(
+    4,
+    {
+      budgetLineId: 10,
+      executionDate: '2026-03-15',
+      amount: 5000000,
+      description: 'Servicio febrero'
+    },
+    3
+  );
+
+  assert.equal(created.createdBy, 3);
+  assert.equal(result.line.executedAmount, 5000000);
+  assert.equal(result.line.availableAmount, 40000000);
+});
+
+test('HU-055 rechaza montos no positivos y partidas ajenas al edificio', async () => {
+  const useCases = createBudgetUseCases({
+    async findBudgetLineForBuilding() {
+      return null;
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      useCases.registerExecution(4, {
+        budgetLineId: 10,
+        executionDate: '2026-01-01',
+        amount: 0
+      }),
+    { code: 'INVALID_EXECUTION_AMOUNT', statusCode: 400 }
+  );
+  await assert.rejects(
+    () =>
+      useCases.registerExecution(4, {
+        budgetLineId: 99,
+        executionDate: '2026-01-01',
+        amount: 1000
+      }),
+    { code: 'BUDGET_LINE_NOT_FOUND', statusCode: 404 }
+  );
+});
