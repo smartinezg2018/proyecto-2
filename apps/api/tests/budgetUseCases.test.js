@@ -122,3 +122,97 @@ test('HU-052 rechaza años no consecutivos, partidas repetidas y borrador existe
     { code: 'BUDGET_ALREADY_EXISTS', statusCode: 409 }
   );
 });
+
+test('HU-054 / CP-054-01: registra presupuesto anual con partidas e ingreso/gasto', async () => {
+  let created;
+  const useCases = createBudgetUseCases({
+    async nextVersionForBuildingYear(buildingId, year) {
+      assert.equal(buildingId, 4);
+      assert.equal(year, 2026);
+      return 1;
+    },
+    async createAnnualBudget(input) {
+      created = input;
+      return { id: 40, ...input, lines: input.lines.map((line, index) => ({ id: index + 1, ...line })) };
+    }
+  });
+
+  const budget = await useCases.registerAnnualBudget(
+    4,
+    {
+      year: 2026,
+      status: 'borrador',
+      lines: [
+        { code: 'ase', name: 'Aseo', classification: 'gasto', amount: 45000000 },
+        { code: 'cuo', name: 'Cuotas', classification: 'ingreso', amount: 280000000.5 }
+      ]
+    },
+    9
+  );
+
+  assert.equal(budget.status, 'borrador');
+  assert.equal(created.version, 1);
+  assert.equal(created.createdBy, 9);
+  assert.deepEqual(created.lines[0], {
+    code: 'ASE',
+    name: 'Aseo',
+    classification: 'gasto',
+    amount: 45000000
+  });
+  assert.equal(created.lines[1].amount, 280000000.5);
+});
+
+test('HU-054 / CP-054-02: maneja versiones y estado de aprobación', async () => {
+  const useCases = createBudgetUseCases({
+    async nextVersionForBuildingYear() {
+      return 3;
+    },
+    async createAnnualBudget(input) {
+      return { id: 41, ...input };
+    },
+    async findAnnualBudgetById(budgetId) {
+      assert.equal(budgetId, 41);
+      return { id: 41, buildingId: 4, year: 2026, version: 3, status: 'borrador', lines: [] };
+    },
+    async updateAnnualBudgetStatus(budgetId, status, updatedBy) {
+      return { id: budgetId, buildingId: 4, year: 2026, version: 3, status, updatedBy, lines: [] };
+    }
+  });
+
+  const registered = await useCases.registerAnnualBudget(
+    4,
+    {
+      year: 2026,
+      lines: [{ code: 'MNT', name: 'Mantenimiento', classification: 'gasto', amount: 1000 }]
+    },
+    2
+  );
+  assert.equal(registered.version, 3);
+
+  const approved = await useCases.updateAnnualBudgetStatus(4, 41, 'aprobado', 2);
+  assert.equal(approved.status, 'aprobado');
+});
+
+test('HU-054 rechaza códigos duplicados y estados inválidos', async () => {
+  const useCases = createBudgetUseCases({
+    async nextVersionForBuildingYear() {
+      return 1;
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      useCases.registerAnnualBudget(4, {
+        year: 2026,
+        lines: [
+          { code: 'ASE', name: 'Aseo', classification: 'gasto', amount: 1 },
+          { code: 'ase', name: 'Otro', classification: 'gasto', amount: 2 }
+        ]
+      }),
+    { code: 'DUPLICATE_BUDGET_LINES', statusCode: 400 }
+  );
+  await assert.rejects(
+    () => useCases.updateAnnualBudgetStatus(4, 1, 'publicado', 1),
+    { code: 'INVALID_BUDGET_STATUS', statusCode: 400 }
+  );
+});

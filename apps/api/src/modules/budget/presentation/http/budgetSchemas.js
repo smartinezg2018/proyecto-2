@@ -14,3 +14,22 @@ export const copyBudgetFromExecutionSchema = z.object({
     )
     .min(1)
 });
+
+export const registerAnnualBudgetSchema = z.object({
+  year: budgetYearSchema,
+  status: z.enum(['borrador', 'aprobado']).optional().default('borrador'),
+  lines: z
+    .array(
+      z.object({
+        code: z.string().trim().min(1).max(50),
+        name: z.string().trim().min(1).max(255),
+        classification: z.enum(['ingreso', 'gasto']),
+        amount: z.coerce.number().nonnegative().multipleOf(0.01)
+      })
+    )
+    .min(1)
+});
+
+export const updateBudgetStatusSchema = z.object({
+  status: z.enum(['borrador', 'aprobado', 'cerrado'])
+});
