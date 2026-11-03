@@ -104,4 +104,71 @@ export class BudgetRepository {
       throw error;
     }
   }
+
+  async nextVersionForBuildingYear(buildingId, year) {
+    const latest = await AnnualBudget.findOne({
+      where: { buildingId, year },
+      order: [['version', 'DESC']]
+    });
+    return latest ? Number(latest.version) + 1 : 1;
+  }
+
+  async createAnnualBudget({ buildingId, year, version, status, lines, createdBy }) {
+    return sequelize.transaction(async (transaction) => {
+      const budget = await AnnualBudget.create(
+        {
+          buildingId,
+          year,
+          version,
+          status,
+          createdBy,
+          updatedBy: createdBy
+        },
+        { transaction }
+      );
+      await BudgetLine.bulkCreate(
+        lines.map((line) => ({ ...line, budgetId: budget.id })),
+        { transaction }
+      );
+      const created = await AnnualBudget.findByPk(budget.id, {
+        include: [{ model: BudgetLine, as: 'lines' }],
+        order: [[{ model: BudgetLine, as: 'lines' }, 'code', 'ASC']],
+        transaction
+      });
+      return mapBudget(created);
+    });
+  }
+
+  async listAnnualBudgets(buildingId, year) {
+    const where = { buildingId };
+    if (year != null) where.year = year;
+    const budgets = await AnnualBudget.findAll({
+      where,
+      include: [{ model: BudgetLine, as: 'lines' }],
+      order: [
+        ['year', 'DESC'],
+        ['version', 'DESC'],
+        [{ model: BudgetLine, as: 'lines' }, 'code', 'ASC']
+      ]
+    });
+    return budgets.map(mapBudget);
+  }
+
+  async findAnnualBudgetById(budgetId) {
+    const budget = await AnnualBudget.findByPk(budgetId, {
+      include: [{ model: BudgetLine, as: 'lines' }],
+      order: [[{ model: BudgetLine, as: 'lines' }, 'code', 'ASC']]
+    });
+    return budget ? mapBudget(budget) : null;
+  }
+
+  async updateAnnualBudgetStatus(budgetId, status, updatedBy) {
+    const budget = await AnnualBudget.findByPk(budgetId, {
+      include: [{ model: BudgetLine, as: 'lines' }],
+      order: [[{ model: BudgetLine, as: 'lines' }, 'code', 'ASC']]
+    });
+    if (!budget) return null;
+    await budget.update({ status, updatedBy });
+    return mapBudget(budget);
+  }
 }

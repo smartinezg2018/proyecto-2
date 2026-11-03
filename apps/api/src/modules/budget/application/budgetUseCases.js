@@ -91,6 +91,67 @@ export function createBudgetUseCases(repository) {
           amount: amountByLineId.get(line.sourceLineId)
         }))
       });
+    },
+
+    async registerAnnualBudget(buildingId, input, createdBy) {
+      const numericBuildingId = Number(buildingId);
+      const year = Number(input.year);
+      const status = input.status || 'borrador';
+      if (!['borrador', 'aprobado'].includes(status)) {
+        throw new AppError(
+          'El estado del presupuesto debe ser borrador o aprobado.',
+          400,
+          'INVALID_BUDGET_STATUS'
+        );
+      }
+
+      const codes = input.lines.map((line) => String(line.code).trim().toUpperCase());
+      if (new Set(codes).size !== codes.length) {
+        throw new AppError(
+          'No puede repetir códigos de partida en el presupuesto.',
+          400,
+          'DUPLICATE_BUDGET_LINES'
+        );
+      }
+
+      const nextVersion = await repository.nextVersionForBuildingYear(numericBuildingId, year);
+      return repository.createAnnualBudget({
+        buildingId: numericBuildingId,
+        year,
+        version: nextVersion,
+        status,
+        createdBy,
+        lines: input.lines.map((line) => ({
+          code: String(line.code).trim().toUpperCase(),
+          name: String(line.name).trim(),
+          classification: line.classification,
+          amount: roundMoney(line.amount)
+        }))
+      });
+    },
+
+    async listAnnualBudgets(buildingId, year) {
+      return repository.listAnnualBudgets(Number(buildingId), year == null ? null : Number(year));
+    },
+
+    async getAnnualBudget(buildingId, budgetId) {
+      const budget = await repository.findAnnualBudgetById(Number(budgetId));
+      if (!budget || budget.buildingId !== Number(buildingId)) {
+        throw new AppError('Presupuesto no encontrado.', 404, 'BUDGET_NOT_FOUND');
+      }
+      return budget;
+    },
+
+    async updateAnnualBudgetStatus(buildingId, budgetId, status, updatedBy) {
+      if (!['borrador', 'aprobado', 'cerrado'].includes(status)) {
+        throw new AppError(
+          'El estado del presupuesto no es válido.',
+          400,
+          'INVALID_BUDGET_STATUS'
+        );
+      }
+      const budget = await this.getAnnualBudget(buildingId, budgetId);
+      return repository.updateAnnualBudgetStatus(budget.id, status, updatedBy);
     }
   };
 }

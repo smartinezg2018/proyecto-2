@@ -146,6 +146,29 @@ export function createBudgetFromExecution(buildingId, payload) {
   });
 }
 
+export function listAnnualBudgets(buildingId, year) {
+  const query = year == null || year === '' ? '' : `?year=${encodeURIComponent(year)}`;
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets${query}`);
+}
+
+export function getAnnualBudget(buildingId, budgetId) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/${budgetId}`);
+}
+
+export function registerAnnualBudget(buildingId, payload) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAnnualBudgetStatus(buildingId, budgetId, status) {
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budgets/${budgetId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  });
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }
