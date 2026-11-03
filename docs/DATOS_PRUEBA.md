@@ -139,7 +139,7 @@ curl.exe -X POST http://localhost:5000/api/v1/auth/login `
 
 ## Presupuesto del año anterior
 
-El seed carga la ejecución de gastos del año calendario anterior para **Bucanero 3** (`900170804-8`) y **San Marcos** (`900501288-9`). San Marcos usa el 80 % de los valores de Bucanero 3.
+El seed carga la ejecución de gastos del año calendario anterior para **Bucanero 3** (`900170804-8`), **San Marcos** (`900501288-9`) y **Bonaire** (`900020096-7`). San Marcos usa el 80 % de los valores de la tabla. Bucanero 3 y Bonaire usan esos valores completos.
 
 Partidas recurrentes, con un movimiento el día 15 de cada mes:
 

@@ -430,7 +430,8 @@ try {
   const previousYear = new Date().getFullYear() - 1;
   const budgetSeeds = [
     { nit: '900170804-8', scale: 1 },
-    { nit: '900501288-9', scale: 0.8 }
+    { nit: '900501288-9', scale: 0.8 },
+    { nit: '900020096-7', scale: 1 }
   ];
   for (const item of budgetSeeds) {
     const buildingId = buildingIdsByNit.get(item.nit);
