@@ -7,6 +7,8 @@ import {
   getInsurancePolicies
 } from '../../services/api.js';
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
 const statusOptions = [
   ['reportada', 'Reportada'],
   ['en_revision', 'En revisión'],
@@ -427,7 +429,7 @@ export function InsuranceClaims({ buildingId, permissions }) {
                     <a
                       key={document.id}
                       className="block text-blue-700 underline"
-                      href={`/api/v1/insurance/buildings/${buildingId}/claims/${claim.id}/documents/${document.id}`}
+                      href={`${API_BASE_URL}/api/v1/insurance/buildings/${buildingId}/claims/${claim.id}/documents/${document.id}`}
                     >
                       Descargar {document.originalName}
                     </a>
