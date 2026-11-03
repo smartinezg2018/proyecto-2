@@ -14,3 +14,17 @@ export const copyBudgetFromExecutionSchema = z.object({
     )
     .min(1)
 });
+
+export const budgetReportQuerySchema = z.object({
+  year: budgetYearSchema,
+  fromDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  toDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  lineCode: z.string().trim().max(50).optional(),
+  format: z.enum(['json', 'csv']).optional()
+});

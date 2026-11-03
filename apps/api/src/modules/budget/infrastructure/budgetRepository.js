@@ -60,6 +60,94 @@ export class BudgetRepository {
     }));
   }
 
+  async findBudgetReport({ buildingId, year, fromDate, toDate, lineCode }) {
+    const budgets = await sequelize.query(
+      `SELECT id, status
+       FROM annual_budgets
+       WHERE building_id = :buildingId
+         AND year = :year
+       ORDER BY CASE
+         WHEN status = 'aprobado' THEN 0
+         WHEN status = 'cerrado' THEN 1
+         ELSE 2
+       END,
+       version DESC
+       LIMIT 1`,
+      {
+        replacements: { buildingId, year },
+        type: QueryTypes.SELECT
+      }
+    );
+    const budget = budgets[0];
+    if (!budget) {
+      return { budgetId: null, budgetStatus: null, lines: [], executions: [] };
+    }
+
+    const lineFilter = lineCode ? ' AND bl.code = :lineCode' : '';
+    const replacements = {
+      budgetId: budget.id,
+      fromDate,
+      toDate,
+      ...(lineCode ? { lineCode } : {})
+    };
+
+    const lines = await sequelize.query(
+      `SELECT bl.id AS budgetLineId,
+              bl.code,
+              bl.name,
+              bl.classification,
+              bl.amount AS budgetedAmount,
+              COALESCE(SUM(CASE
+                WHEN be.execution_date BETWEEN :fromDate AND :toDate THEN be.amount
+                ELSE 0
+              END), 0) AS executedAmount
+       FROM budget_lines bl
+       LEFT JOIN budget_executions be ON be.budget_line_id = bl.id
+       WHERE bl.budget_id = :budgetId${lineFilter}
+       GROUP BY bl.id, bl.code, bl.name, bl.classification, bl.amount
+       ORDER BY bl.code ASC`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    const executions = await sequelize.query(
+      `SELECT be.id,
+              be.budget_line_id AS budgetLineId,
+              bl.code AS lineCode,
+              bl.name AS lineName,
+              be.execution_date AS executionDate,
+              be.amount,
+              be.description
+       FROM budget_executions be
+       INNER JOIN budget_lines bl ON bl.id = be.budget_line_id
+       WHERE bl.budget_id = :budgetId
+         AND be.execution_date BETWEEN :fromDate AND :toDate${lineFilter}
+       ORDER BY be.execution_date ASC, be.id ASC`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    return {
+      budgetId: Number(budget.id),
+      budgetStatus: budget.status,
+      lines: lines.map((row) => ({
+        budgetLineId: Number(row.budgetLineId),
+        code: row.code,
+        name: row.name,
+        classification: row.classification,
+        budgetedAmount: Number(row.budgetedAmount),
+        executedAmount: Number(row.executedAmount)
+      })),
+      executions: executions.map((row) => ({
+        id: Number(row.id),
+        budgetLineId: Number(row.budgetLineId),
+        lineCode: row.lineCode,
+        lineName: row.lineName,
+        executionDate: row.executionDate,
+        amount: Number(row.amount),
+        description: row.description || null
+      }))
+    };
+  }
+
   async findDraftByBuildingYear(buildingId, year) {
     const budget = await AnnualBudget.findOne({
       where: { buildingId, year, status: 'borrador' },

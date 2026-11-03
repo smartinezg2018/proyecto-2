@@ -146,6 +146,14 @@ export function createBudgetFromExecution(buildingId, payload) {
   });
 }
 
+export function getBudgetReport(buildingId, { year, fromDate, toDate, lineCode } = {}) {
+  const params = new URLSearchParams({ year: String(year) });
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
+  if (lineCode) params.set('lineCode', lineCode);
+  return apiRequest(`/api/v1/budget/buildings/${buildingId}/budget-report?${params.toString()}`);
+}
+
 export function getBuildings() {
   return apiRequest('/api/v1/administration/buildings');
 }
