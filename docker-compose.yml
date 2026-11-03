@@ -5,11 +5,9 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: building_management
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app_password
-      MYSQL_ROOT_PASSWORD: root_password
-    ports:
-      - '3306:3306'
+      MYSQL_USER: ${DB_USER:-app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -17,6 +15,40 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app_network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - '5000'
+    networks:
+      - app_network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ''
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+    networks:
+      - app_network
 
 volumes:
   mysql_data:
+
+networks:
+  app_network:
