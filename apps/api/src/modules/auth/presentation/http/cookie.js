@@ -8,6 +8,6 @@ export function readSessionCookie(request) {
 }
 
 export function serializeSessionCookie(value, maxAge) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = process.env.COOKIE_SECURE === 'true' ? '; Secure' : '';
   return `${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}; Max-Age=${Math.floor(maxAge / 1000)}; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }

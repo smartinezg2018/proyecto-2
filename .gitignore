@@ -7,3 +7,5 @@ coverage/
 !.env.production.example
 *.log
 apps/api/storage/
+backup.sql
+volumen_mysql.tar.gz
