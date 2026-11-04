@@ -8,6 +8,7 @@ import {
   getPortfolio,
   getUnits,
   applyPayment,
+  generateOrdinaryInvoices,
   registerPayment,
   saveInterestSettings
 } from '../../services/api.js';
@@ -26,6 +27,13 @@ const EMPTY_PAYMENT_FORM = {
   reference: '',
   applyAuto: true
 };
+const EMPTY_INVOICE_FORM = {
+  period: '',
+  dueDate: '',
+  concept: 'Cuota de administración',
+  baseAmount: '',
+  unitIds: []
+};
 const STATUS_LABELS = new Map([
   ['al_dia', 'Al día'],
   ['pendiente', 'Pendiente'],
@@ -37,7 +45,11 @@ const STATUS_LABELS = new Map([
   ['reversado', 'Reversado']
 ]);
 
-export function ModuleFacturacion({ activeBuildingId, canManageInterest = false }) {
+export function ModuleFacturacion({
+  activeBuildingId,
+  canManageInterest = false,
+  canCreateInvoices = false
+}) {
   const [tab, setTab] = useState('cartera');
   const [portfolio, setPortfolio] = useState([]);
   const [units, setUnits] = useState([]);
@@ -62,6 +74,11 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
   const [interestError, setInterestError] = useState('');
   const [portfolioRefresh, setPortfolioRefresh] = useState(0);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState(EMPTY_INVOICE_FORM);
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [invoiceMessage, setInvoiceMessage] = useState('');
+  const [invoiceError, setInvoiceError] = useState('');
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -71,6 +88,10 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     setInvoiceDetail(null);
     setShowPaymentForm(false);
     setPaymentForm(EMPTY_PAYMENT_FORM);
+    setShowInvoiceForm(false);
+    setInvoiceForm(EMPTY_INVOICE_FORM);
+    setInvoiceMessage('');
+    setInvoiceError('');
     setPaymentMessage('');
     setPaymentError('');
     setAnnualRate('0');
@@ -244,6 +265,69 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
     }
   }
 
+  function openInvoiceForm() {
+    setShowInvoiceForm((current) => !current);
+    setShowPaymentForm(false);
+    setInvoiceMessage('');
+    setInvoiceError('');
+    setInvoiceForm((current) =>
+      current.unitIds.length ? current : { ...current, unitIds: units.map((unit) => unit.id) }
+    );
+  }
+
+  function updateInvoiceForm(event) {
+    const { name, value } = event.target;
+    setInvoiceForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function toggleInvoiceUnit(unitId) {
+    setInvoiceForm((current) => ({
+      ...current,
+      unitIds: current.unitIds.includes(unitId)
+        ? current.unitIds.filter((id) => id !== unitId)
+        : [...current.unitIds, unitId]
+    }));
+  }
+
+  async function submitInvoices(event) {
+    event.preventDefault();
+    if (!activeBuildingId) return;
+    if (invoiceForm.unitIds.length === 0) {
+      setInvoiceError('Selecciona al menos un apartamento.');
+      return;
+    }
+
+    setInvoiceSaving(true);
+    setInvoiceMessage('');
+    setInvoiceError('');
+    try {
+      const response = await generateOrdinaryInvoices(activeBuildingId, {
+        period: invoiceForm.period,
+        dueDate: invoiceForm.dueDate,
+        concept: invoiceForm.concept.trim(),
+        baseAmount: Number(invoiceForm.baseAmount),
+        unitIds: invoiceForm.unitIds.map(Number)
+      });
+      const created = response.data ?? [];
+      setInvoiceMessage(
+        `Se generaron ${created.length} factura(s) para el periodo ${invoiceForm.period}.`
+      );
+      setInvoiceForm(EMPTY_INVOICE_FORM);
+      setShowInvoiceForm(false);
+      setPortfolioRefresh((current) => current + 1);
+      setHistoryRefresh((current) => current + 1);
+      setInvoiceDetail(null);
+      if (created.length > 0) {
+        setHistoryFilters({ ...EMPTY_HISTORY_FILTERS, unitId: String(created[0].unitId) });
+        setTab('historial');
+      }
+    } catch (requestError) {
+      setInvoiceError(requestError.message || 'No fue posible generar las facturas.');
+    } finally {
+      setInvoiceSaving(false);
+    }
+  }
+
   async function handleSaveInterestRate() {
     setInterestSaving(true);
     setInterestMessage('');
@@ -269,10 +353,17 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
         subtitle="Control de cartera, facturación y pagos del conjunto"
         action={
           <div className="flex gap-2">
-            <Btn variant="secondary">
-              <FileText size={13} /> Generar Factura
-            </Btn>
-            <Btn onClick={() => setShowPaymentForm((current) => !current)}>
+            {canCreateInvoices && (
+              <Btn variant="secondary" onClick={openInvoiceForm} disabled={!activeBuildingId}>
+                <FileText size={13} /> Generar Factura
+              </Btn>
+            )}
+            <Btn
+              onClick={() => {
+                setShowPaymentForm((current) => !current);
+                setShowInvoiceForm(false);
+              }}
+            >
               <Plus size={13} /> Registrar Pago
             </Btn>
           </div>
@@ -283,6 +374,99 @@ export function ModuleFacturacion({ activeBuildingId, canManageInterest = false 
         <p className={`mb-4 text-sm ${paymentError ? 'text-red-600' : 'text-emerald-700'}`}>
           {paymentError || paymentMessage}
         </p>
+      )}
+
+      {(invoiceMessage || invoiceError) && (
+        <p className={`mb-4 text-sm ${invoiceError ? 'text-red-600' : 'text-emerald-700'}`}>
+          {invoiceError || invoiceMessage}
+        </p>
+      )}
+
+      {showInvoiceForm && (
+        <form
+          onSubmit={submitInvoices}
+          className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-3 items-end border border-slate-200 rounded-lg p-4 bg-white"
+        >
+          <label className="text-sm text-slate-600">
+            Periodo
+            <input
+              type="month"
+              name="period"
+              value={invoiceForm.period}
+              onChange={updateInvoiceForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="text-sm text-slate-600">
+            Vencimiento
+            <input
+              type="date"
+              name="dueDate"
+              value={invoiceForm.dueDate}
+              onChange={updateInvoiceForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="text-sm text-slate-600">
+            Concepto
+            <input
+              type="text"
+              name="concept"
+              value={invoiceForm.concept}
+              onChange={updateInvoiceForm}
+              required
+              maxLength={255}
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="text-sm text-slate-600">
+            Valor base (se multiplica por el coeficiente)
+            <input
+              type="number"
+              name="baseAmount"
+              min="0.01"
+              step="0.01"
+              value={invoiceForm.baseAmount}
+              onChange={updateInvoiceForm}
+              required
+              className="mt-1 w-full border border-slate-300 rounded-md px-2 py-1.5"
+            />
+          </label>
+          <fieldset className="md:col-span-4 text-sm text-slate-600">
+            <legend className="mb-1">Apartamentos</legend>
+            {units.length === 0 ? (
+              <p className="text-slate-400">El edificio no tiene apartamentos registrados.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {units.map((unit) => (
+                  <label key={unit.id} className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={invoiceForm.unitIds.includes(unit.id)}
+                      onChange={() => toggleInvoiceUnit(unit.id)}
+                    />
+                    {unit.tower ? `${unit.tower} - ${unit.number}` : unit.number}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <div className="md:col-span-4 flex justify-end gap-2">
+            <Btn
+              type="button"
+              variant="secondary"
+              onClick={() => setShowInvoiceForm(false)}
+              disabled={invoiceSaving}
+            >
+              Cancelar
+            </Btn>
+            <Btn type="submit" disabled={invoiceSaving || !activeBuildingId || units.length === 0}>
+              {invoiceSaving ? 'Generando...' : 'Generar facturas'}
+            </Btn>
+          </div>
+        </form>
       )}
 
       {showPaymentForm && (

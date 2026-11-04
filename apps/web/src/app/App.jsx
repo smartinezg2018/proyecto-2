@@ -183,6 +183,7 @@ export default function App() {
           <ModuleFacturacion
             activeBuildingId={activeBuildingId}
             canManageInterest={hasPermission(permissions, 'billing.charge.create')}
+            canCreateInvoices={hasPermission(permissions, 'billing.invoice.create')}
           />
         );
       case 'presupuesto':

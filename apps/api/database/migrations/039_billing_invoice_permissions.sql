@@ -1,0 +1,12 @@
+INSERT INTO profile_permissions (profile_id, permission_id)
+SELECT p.id, perm.id
+FROM profiles p
+CROSS JOIN permissions perm
+WHERE p.name = 'Administrador de edificio'
+  AND perm.code IN ('billing.invoice.create', 'billing.invoice.view', 'billing.charge.create')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM profile_permissions pp
+    WHERE pp.profile_id = p.id
+      AND pp.permission_id = perm.id
+  );

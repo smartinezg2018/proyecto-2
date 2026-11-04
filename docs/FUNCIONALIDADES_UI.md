@@ -34,9 +34,17 @@ El menú izquierdo muestra solo las secciones permitidas al perfil. En la barra 
 
 Resume el edificio seleccionado: activos, pólizas, cartera en mora y ejecución del presupuesto. También muestra alertas urgentes y un vistazo del recaudo y de los mantenimientos en curso.
 
-**Ejemplo:** en El Nogal el panel indica cuántos activos están en mantenimiento y qué unidades llevan más de 60 días en mora.
+**Qué se ve:**
 
-![Menú y selector de edificio](capturas/02-menu-edificio.png)
+- **Tarjetas superiores:** Activos registrados (con cuántos están en mantenimiento), Pólizas activas (cuántas vencen pronto), Cartera en mora y Ejecución presupuestal del año.
+- **Alertas urgentes:** pólizas o vencimientos próximos, con los días restantes.
+- **Recaudo vs Mora:** barras de los últimos 6 meses.
+- **Estado de cartera:** gráfico con unidades al día y en mora, y el total en mora.
+- **Mantenimientos en proceso:** intervenciones activas con tipo y prioridad.
+
+**Ejemplo:** en Bonaire el panel muestra 1 activo registrado, 1 póliza que vence en 13 días y una ejecución presupuestal del 38 %.
+
+![Panel general](capturas/03-panel.png)
 
 ---
 
@@ -141,58 +149,94 @@ Tres pestañas:
 
 ## 9. Facturación
 
-Muestra capital facturado, pagos y saldo pendiente. En **Estado de cartera** se ve qué unidades están al día o en mora. En **Historial de facturación** se consultan las facturas. El botón **Registrar pago** aplica un abono a un apartamento (transferencia, efectivo, cheque o PSE).
+Muestra el control de cartera, facturación y pagos del edificio. Los botones **Generar Factura** y **Registrar Pago** están arriba a la derecha.
 
-**Ejemplo:** pago de `$350.000` del apartamento `0301`, medio transferencia, referencia `TRX-88421`, aplicado a las facturas más antiguas.
+- **Tarjetas:** Capital facturado, Pagos aplicados y Saldo pendiente (con cuántos apartamentos están en mora).
+- **Pestaña Estado de Cartera:** campo **Tasa anual de mora (%)** con *Guardar y recalcular*. Filtros por Apartamento, Periodo y Estado. La tabla muestra Capital, Otros conceptos, Intereses, Pagos, Saldo total y Estado (*Al día* o *En mora*).
 
-![Cartera y registro de pago](capturas/09-facturacion.png)
+![Estado de cartera](capturas/09-facturacion.png)
+
+- **Pestaña Historial de Facturación:** se elige un apartamento y se consultan sus facturas, filtrando por periodo y estado. *Limpiar filtros* reinicia la consulta.
+
+![Historial de facturación](capturas/09-facturacion-historial.png)
+
+- **Registrar Pago:** abre un formulario con Apartamento, Fecha, Valor, Medio (transferencia, efectivo, cheque o PSE) y Referencia. La casilla *Aplicar automáticamente a facturas por antigüedad* abona primero a las facturas más viejas. Se confirma con *Guardar pago*.
+
+![Registrar pago](capturas/09-registrar-pago.png)
+
+**Ejemplo:** pago de `$350.000` del apartamento `101`, medio transferencia, referencia `TRX-88421`, aplicado a las facturas más antiguas.
 
 ---
 
 ## 10. Presupuesto
 
-Arma el presupuesto anual del edificio y registra lo que se va ejecutando por rubro. Permite armar un presupuesto a partir de la ejecución del año anterior, comparar lo aprobado con lo gastado y ver el reporte.
+Arma el presupuesto anual del edificio, registra lo ejecutado por partida y lo compara con lo aprobado. La página se recorre de arriba hacia abajo:
 
-**Ejemplo:** rubro *Mantenimiento de ascensores*, proyectado `$12.000.000`. Se registra una ejecución de `$1.800.000` por la visita de marzo y el disponible baja.
+1. **Presupuesto desde ejecución anterior:** se indica el año ejecutado y el año destino, y *Consultar ejecución* trae el gasto real como base editable.
+2. **Registrar presupuesto anual:** vigencia, estado inicial (borrador, etc.) y una tabla de partidas con Código, Nombre, Clasificación (gasto o ingreso) y Valor. *Agregar partida* añade filas y *Registrar presupuesto* guarda. Cada registro crea una versión, listada en **Versiones registradas**.
+3. **Registrar ejecución presupuestal:** se elige la partida (se ve el disponible), la fecha, el valor ejecutado y una descripción. La tabla inferior muestra Presupuestado, Ejecutado y Disponible por partida.
+4. **Comparar presupuesto y ejecución:** *Comparar* señala desviaciones por partida y alertas de sobreejecución o baja ejecución.
+5. **Reporte presupuestal:** filtros por vigencia, periodo y código de partida. Permite *Generar reporte*, *Descargar CSV* e *Imprimir*.
+6. **Resultados:** tarjetas de Presupuesto total, Ejecutado y Disponible, selector de metodología (Base 0, Mixta, Histórica), gráfico de Proyectado vs Ejecutado por rubro y tabla con variación y barra de progreso (en rojo si se sobrepasa el 100 %).
 
-![Presupuesto anual y ejecución](capturas/10-presupuesto.png)
+El botón **Registrar Ejecución** (arriba a la derecha) lleva directo al formulario de ejecución.
+
+![Presupuesto anual](capturas/10-presupuesto.png)
+![Presupuesto: recorrido completo](capturas/10-presupuesto-completo.png)
+
+**Ejemplo:** partida `ASC` (ascensor), presupuestada en `$2.000.000`. Tras registrar `$1.900.000` ejecutados, el disponible baja a `$100.000`.
 
 ---
 
 ## 11. Proyectos
 
-Lista los proyectos del edificio y los filtra por estado, tipo y fechas. Al abrir uno se registran cotizaciones, avances y el cierre, con responsable y documento de soporte.
+Lista los proyectos del edificio, que se filtran por **Estado**, **Tipo** y rango de fechas **Desde / Hasta**. Cada proyecto es una tarjeta con su estado (por ejemplo *Aprobado*), presupuesto, responsable, fechas de inicio y fin, avance y valor ejecutado.
 
-**Ejemplo:** proyecto *Impermeabilización de cubierta*, tipo obra, responsable *Obras Andinas*, fecha de inicio 1 de marzo y fin 30 de abril. Un avance del 40 % queda con evidencia del acta.
+Dentro de la tarjeta hay tres bloques con su enlace de acción:
+
+- **Cotizaciones:** *Registrar cotización*.
+- **Avances:** *Registrar avance* (porcentaje y evidencia).
+- **Cierre:** *Cerrar proyecto*.
 
 ![Proyectos](capturas/11-proyectos.png)
+
+**Nuevo proyecto** abre el formulario con Nombre, Tipo (obra, mejora, etc.), Objetivo, Presupuesto (COP), Fechas de inicio y fin, Responsable y Referencia de aprobación (acta de asamblea o resolución). Todos son obligatorios.
+
+![Registrar proyecto](capturas/11-nuevo-proyecto.png)
+
+**Ejemplo:** proyecto *pintar fachada*, tipo mejora, presupuesto `$15.000.000`, responsable *pintufresh*, del 2 al 13 de noviembre, aprobado en el acta 25.
 
 ---
 
 ## 12. Usuarios
 
-Registra usuarios administrativos (identificación, nombre, correo, contraseña y estado). En la ficha se asignan perfiles y los edificios que puede ver. El correo no se puede repetir.
+Dos bloques en la misma pantalla:
 
-**Ejemplo:** se crea a *Laura Pérez* (`laura.perez@example.com`) con perfil Operador y solo el edificio El Nogal. Al entrar, su menú queda reducido a ese edificio.
+- **Registrar usuario:** Identificación, Nombre, Correo electrónico, Contraseña y Estado (activo o inactivo), todos obligatorios. El correo no se puede repetir.
+- **Tabla de usuarios:** Nombre, Correo y Estado de cada usuario.
+- **Asignar perfiles y edificios:** se elige un usuario y se marcan sus perfiles y los edificios que puede ver.
 
 ![Usuarios y asignaciones](capturas/12-usuarios.png)
+
+**Ejemplo:** se crea a *Laura Pérez* (`laura.perez@example.com`) con perfil Operador y solo un edificio asignado. Al entrar, su menú se reduce a las secciones del Operador.
 
 ---
 
 ## 13. Perfiles
 
-Crea perfiles con nombre, descripción y los permisos que habilitan cada sección del menú.
-
-**Ejemplo:** perfil *Auxiliar de cartera* con permiso de facturación y de consulta de inmuebles, sin acceso a usuarios ni a auditoría.
+Arriba hay una tabla con los perfiles existentes (Administrador general, Administrador de edificio, Auditor y Operador) y su descripción. Debajo está **Crear perfil**: Nombre, Descripción y la lista **Funcionalidades permitidas**, una casilla por permiso (listar edificios, registrar usuarios, consultar auditoría, etc.). Los permisos marcados definen qué secciones aparecen en el menú.
 
 ![Perfiles](capturas/13-perfiles.png)
+![Perfiles: permisos completos](capturas/13-perfiles-completo.png)
+
+**Ejemplo:** perfil *Auxiliar de cartera* con los permisos de facturación y de listar inmuebles, sin usuarios ni auditoría.
 
 ---
 
 ## 14. Auditoría
 
-Lista quién hizo cada operación, cuándo, sobre qué entidad y en qué edificio. Se filtra por usuario, fechas, módulo y edificio.
-
-**Ejemplo:** después de registrar el ascensor y cambiar su estado, el filtro por entidad *activo* muestra esas dos operaciones con el usuario Ana Martínez.
+Registra quién hizo cada operación. Los filtros son **Usuario**, **Edificio**, **Módulo**, **Entidad** y rango **Desde / Hasta**; *Buscar* aplica la consulta. La tabla muestra Fecha, Usuario, Acción, Módulo, Entidad, Edificio y el Detalle de los datos guardados.
 
 ![Auditoría](capturas/14-auditoria.png)
+
+**Ejemplo:** tras registrar el ascensor `ASC-01` y crear un proyecto, la tabla muestra ambas acciones (*create* en `assets` y en `projects`) a nombre de Ana Martínez, en el edificio Bonaire.

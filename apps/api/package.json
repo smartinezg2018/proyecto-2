@@ -9,6 +9,7 @@
     "test": "node --test",
     "db:migrate": "node database/migrations/run.js",
     "db:seed": "node database/seeds/run.js",
+    "db:seed-budget-demo": "node database/seeds/bonaireBudgetDemo.js",
     "db:import-buildings": "node database/seeds/importRealBuildings.js"
   },
   "dependencies": {
