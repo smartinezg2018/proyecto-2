@@ -70,7 +70,7 @@ const SUPPLIER_ROLE_LABELS = Object.fromEntries(
 
 const HISTORY_FIELD_LABELS = {
   status: 'Estado',
-  name: 'Nombre',
+  name: 'Marca',
   description: 'Descripción',
   type: 'Tipo',
   location: 'Ubicación',
@@ -490,7 +490,7 @@ export function ModuleInventario() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              {['Código', 'Nombre', 'Tipo', 'Estado', 'Ubicación'].map((heading) => (
+              {['Código', 'Marca', 'Tipo', 'Estado', 'Ubicación'].map((heading) => (
                 <th
                   key={heading}
                   className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
@@ -557,7 +557,7 @@ export function ModuleInventario() {
           <form onSubmit={submitCreate} className="grid gap-4 sm:grid-cols-2">
             {[
               ['code', 'Código'],
-              ['name', 'Nombre'],
+              ['name', 'Marca'],
               ['location', 'Ubicación'],
               ['acquisitionDate', 'Fecha de adquisición']
             ].map(([name, label]) => (
@@ -663,7 +663,7 @@ export function ModuleInventario() {
                 <strong>Código:</strong> {selectedAsset.code}
               </p>
               <p>
-                <strong>Nombre:</strong> {selectedAsset.name}
+                <strong>Marca:</strong> {selectedAsset.name}
               </p>
               <p>
                 <strong>Tipo:</strong> {ASSET_TYPE_LABELS[selectedAsset.type] || selectedAsset.type}
@@ -1072,7 +1072,7 @@ export function ModuleInventario() {
           </div>
           <form onSubmit={submitEdit} className="grid gap-4 sm:grid-cols-2">
             <label>
-              <span className="mb-1 block text-xs font-bold text-slate-500">Nombre *</span>
+              <span className="mb-1 block text-xs font-bold text-slate-500">Marca *</span>
               <input
                 name="name"
                 value={editForm.name}
