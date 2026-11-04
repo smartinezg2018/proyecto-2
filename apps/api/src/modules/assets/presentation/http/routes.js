@@ -240,12 +240,13 @@ assetsRoutes.get(
   ensureAssetBuildingAccess,
   asyncHandler(async (request, response) => {
     const asset = await assetUseCases.getById(request.params.assetId);
-    const [supplier, acquisitionCost] = await Promise.all([
+    const [supplier, acquisitionCost, policies] = await Promise.all([
       supplierUseCases.getByAsset(request.params.assetId),
-      assetCostUseCases.getAcquisitionCost(request.params.assetId)
+      assetCostUseCases.getAcquisitionCost(request.params.assetId),
+      assetRepository.findPoliciesByAsset(request.params.assetId)
     ]);
     response.json({
-      data: { ...asset, supplier, acquisitionCost },
+      data: { ...asset, supplier, acquisitionCost, policies },
       meta: { requestId: request.id }
     });
   })

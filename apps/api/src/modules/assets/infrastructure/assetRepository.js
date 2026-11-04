@@ -165,4 +165,22 @@ export class AssetRepository {
 
     return history.map(mapHistory);
   }
+
+  async findPoliciesByAsset(assetId) {
+    const [policies] = await sequelize.query(
+      `SELECT p.id, p.building_id AS buildingId, p.number, p.insurer,
+              p.coverage, p.insured_value AS insuredValue,
+              DATE_FORMAT(p.valid_from, '%Y-%m-%d') AS validFrom,
+              DATE_FORMAT(p.valid_until, '%Y-%m-%d') AS validUntil
+         FROM insurance_policy_assets ipa
+         JOIN insurance_policies p ON p.id = ipa.policy_id
+        WHERE ipa.asset_id = ?
+        ORDER BY p.valid_until, p.id`,
+      { replacements: [assetId] }
+    );
+    return policies.map((policy) => ({
+      ...policy,
+      insuredValue: Number(policy.insuredValue)
+    }));
+  }
 }

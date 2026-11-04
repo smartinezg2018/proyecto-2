@@ -52,6 +52,34 @@ export const createInsurancePolicySchema = z
     path: ['validUntil']
   });
 
+export const updateInsurancePolicySchema = createInsurancePolicySchema;
+
+export const assignInsurancePolicyAssetsSchema = z.object({
+  assetIds: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(100)
+    .refine((ids) => new Set(ids).size === ids.length, 'Los activos no se pueden repetir.')
+});
+
+const policyFilterDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarDate, 'La fecha no es vÃ¡lida.');
+
+export const listInsurancePoliciesQuerySchema = z
+  .object({
+    insurer: z.string().trim().min(1).max(150).optional(),
+    status: z.enum(['vigente', 'proxima_a_vencer', 'vencida', 'pendiente_de_inicio']).optional(),
+    expiresFrom: policyFilterDateSchema.optional(),
+    expiresTo: policyFilterDateSchema.optional()
+  })
+  .refine(
+    (filters) =>
+      !filters.expiresFrom || !filters.expiresTo || filters.expiresFrom <= filters.expiresTo,
+    { message: 'El rango de vencimiento no es vÃ¡lido.', path: ['expiresTo'] }
+  );
+
 export const createInsuranceQuoteSchema = z.object({
   insurer: z.string().trim().min(1, 'La aseguradora es obligatoria.'),
   coverage: z.string().trim().min(1, 'La cobertura es obligatoria.'),

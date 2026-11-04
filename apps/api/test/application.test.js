@@ -111,14 +111,7 @@ describe('Sprint - pruebas funcionales de API', { concurrency: false }, async ()
   }
 
   async function pendingCheck(id, title, callback) {
-    await test(
-      id + ' - ' + title,
-      {
-        concurrency: false,
-        skip: 'Contrato pendiente de implementación en HU-034, HU-035 o HU-036.'
-      },
-      callback
-    );
+    await test(id + ' - ' + title, { concurrency: false }, callback);
   }
 
   function expectStatus(response, status) {

@@ -133,7 +133,11 @@ test('HU-054 / CP-054-01: registra presupuesto anual con partidas e ingreso/gast
     },
     async createAnnualBudget(input) {
       created = input;
-      return { id: 40, ...input, lines: input.lines.map((line, index) => ({ id: index + 1, ...line })) };
+      return {
+        id: 40,
+        ...input,
+        lines: input.lines.map((line, index) => ({ id: index + 1, ...line }))
+      };
     }
   });
 
@@ -211,10 +215,10 @@ test('HU-054 rechaza códigos duplicados y estados inválidos', async () => {
       }),
     { code: 'DUPLICATE_BUDGET_LINES', statusCode: 400 }
   );
-  await assert.rejects(
-    () => useCases.updateAnnualBudgetStatus(4, 1, 'publicado', 1),
-    { code: 'INVALID_BUDGET_STATUS', statusCode: 400 }
-  );
+  await assert.rejects(() => useCases.updateAnnualBudgetStatus(4, 1, 'publicado', 1), {
+    code: 'INVALID_BUDGET_STATUS',
+    statusCode: 400
+  });
 });
 
 test('HU-055 / CP-055-01: registra ejecución asociada a una partida y actualiza saldo', async () => {
@@ -422,4 +426,27 @@ test('HU-057 usa el año completo cuando no se especifica un periodo', async () 
     lineCode: null
   });
   assert.equal(report.totalAvailable, 0);
+});
+
+test('HU-056 / UT-056-02: controla presupuesto cero y límites de alertas', async () => {
+  const useCases = createBudgetUseCases({
+    async findBudgetComparison() {
+      return {
+        budgetId: 1,
+        budgetStatus: 'aprobado',
+        lines: [
+          { code: 'CERO', budgetedAmount: 0, executedAmount: 0 },
+          { code: 'CERO-EJ', budgetedAmount: 0, executedAmount: 10 },
+          { code: 'LIMITE', budgetedAmount: 100, executedAmount: 50 },
+          { code: 'BAJA', budgetedAmount: 100, executedAmount: 49.99 }
+        ]
+      };
+    }
+  });
+  const result = await useCases.compareBudgetExecution(1, 2026);
+  assert.equal(result.lines[0].variancePercent, 0);
+  assert.equal(result.lines[1].variancePercent, null);
+  assert.equal(result.lines[1].alert, 'sobreejecucion');
+  assert.equal(result.lines[2].alert, 'normal');
+  assert.equal(result.lines[3].alert, 'baja_ejecucion');
 });

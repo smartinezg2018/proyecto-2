@@ -353,3 +353,80 @@ test('HU-048 rechaza cuando no existe recibo de caja', async () => {
     statusCode: 404
   });
 });
+
+test('HU-041 / UT-041-02: rechaza periodo anterior y apartamentos repetidos', async () => {
+  const useCases = createBillingUseCases({ createExtraordinaryCharges: async () => [] });
+  const base = {
+    buildingId: 4,
+    unitIds: [10],
+    originPeriod: '2026-10',
+    startPeriod: '2026-09',
+    concept: 'Obra',
+    totalAmount: 100000,
+    installments: 2,
+    approvalReference: 'ACTA-1'
+  };
+  await assert.rejects(() => useCases.generateExtraordinaryCharges(base, 7), {
+    code: 'INVALID_CHARGE_PERIOD'
+  });
+  await assert.rejects(
+    () =>
+      useCases.generateExtraordinaryCharges(
+        { ...base, startPeriod: '2026-10', unitIds: [10, 10] },
+        7
+      ),
+    { code: 'DUPLICATE_UNITS' }
+  );
+});
+
+test('HU-042 / UT-042-02: rechaza periodo anterior y apartamentos repetidos', async () => {
+  const useCases = createBillingUseCases({ createRetroactiveCharges: async () => [] });
+  const base = {
+    buildingId: 4,
+    unitIds: [10],
+    originPeriod: '2026-10',
+    startPeriod: '2026-09',
+    concept: 'Ajuste',
+    totalAmount: 100000,
+    installments: 2
+  };
+  await assert.rejects(() => useCases.generateRetroactiveCharges(base, 7), {
+    code: 'INVALID_CHARGE_PERIOD'
+  });
+  await assert.rejects(
+    () =>
+      useCases.generateRetroactiveCharges(
+        { ...base, startPeriod: '2026-10', unitIds: [10, 10] },
+        7
+      ),
+    { code: 'DUPLICATE_UNITS' }
+  );
+});
+
+test('HU-047 / UT-047-01: pasa filtros al historial de facturación', async () => {
+  let received;
+  const useCases = createBillingUseCases({
+    async findInvoiceHistory(input) {
+      received = input;
+      return [];
+    }
+  });
+  await useCases.listInvoiceHistory(4, { unitId: 10, period: '2026-10', status: 'pendiente' });
+  assert.deepEqual(received, { buildingId: 4, unitId: 10, period: '2026-10', status: 'pendiente' });
+});
+
+test('HU-047 / UT-047-02: rechaza factura inexistente', async () => {
+  const useCases = createBillingUseCases({ findInvoiceDetail: async () => null });
+  await assert.rejects(() => useCases.getInvoiceDetail(4, 99), {
+    code: 'INVOICE_NOT_FOUND',
+    statusCode: 404
+  });
+});
+
+test('HU-051 / UT-051-02: rechaza colilla de factura inexistente', async () => {
+  const useCases = createBillingUseCases({ findPaymentSlip: async () => null });
+  await assert.rejects(() => useCases.generatePaymentSlip(99), {
+    code: 'INVOICE_NOT_FOUND',
+    statusCode: 404
+  });
+});

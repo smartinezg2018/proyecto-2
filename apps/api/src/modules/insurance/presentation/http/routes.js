@@ -4,15 +4,19 @@ import { requireAuth } from '../../../auth/presentation/http/middleware/requireA
 import { requirePermission } from '../../../auth/presentation/http/middleware/requirePermission.js';
 import { ensureBuildingAccess } from '../../../auth/presentation/http/middleware/ensureBuildingAccess.js';
 import { BuildingRepository } from '../../../administration/infrastructure/buildingRepository.js';
+import { AuditRepository } from '../../../administration/infrastructure/auditRepository.js';
 import { AssetRepository } from '../../../assets/infrastructure/assetRepository.js';
 import { InsuranceQuoteRepository } from '../../infrastructure/insuranceQuoteRepository.js';
 import { createInsuranceQuoteUseCases } from '../../application/insuranceQuoteUseCases.js';
 import {
   createInsuranceQuoteSchema,
+  assignInsurancePolicyAssetsSchema,
   createInsurancePolicySchema,
   createInsuranceClaimSchema,
   insuranceAlertSettingsSchema,
-  listInsuranceClaimsQuerySchema
+  listInsuranceClaimsQuerySchema,
+  listInsurancePoliciesQuerySchema,
+  updateInsurancePolicySchema
 } from './schemas.js';
 import { InsurancePolicyRepository } from '../../infrastructure/insurancePolicyRepository.js';
 import { createInsurancePolicyUseCases } from '../../application/insurancePolicyUseCases.js';
@@ -31,6 +35,7 @@ const policyUseCases = createInsurancePolicyUseCases(
   new InsurancePolicyRepository(),
   new BuildingRepository()
 );
+const auditRepository = new AuditRepository();
 const claimUseCases = createInsuranceClaimUseCases(
   new InsuranceClaimRepository(),
   new InsurancePolicyRepository(),
@@ -112,8 +117,12 @@ insuranceRoutes.get(
   requirePermission('insurance.view'),
   ensureBuildingAccess,
   asyncHandler(async (request, response) => {
+    const parsed = listInsurancePoliciesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new AppError('Los filtros de pÃ³lizas no son vÃ¡lidos.', 400, 'VALIDATION_ERROR');
+    }
     response.json({
-      data: await policyUseCases.list(request.params.buildingId),
+      data: await policyUseCases.list(request.params.buildingId, parsed.data),
       meta: { requestId: request.id }
     });
   })
@@ -130,6 +139,49 @@ insuranceRoutes.post(
       data: await policyUseCases.create(request.params.buildingId, request.body, request.user.id),
       meta: { requestId: request.id }
     });
+  })
+);
+
+insuranceRoutes.put(
+  '/buildings/:buildingId/policies/:policyId',
+  requireAuth,
+  requirePermission('insurance.update'),
+  ensureBuildingAccess,
+  validateBody(updateInsurancePolicySchema),
+  asyncHandler(async (request, response) => {
+    const policy = await policyUseCases.update(
+      request.params.buildingId,
+      request.params.policyId,
+      request.body,
+      request.user.id
+    );
+    await auditRepository.record({
+      userId: request.user.id,
+      action: 'update',
+      module: 'insurance',
+      entity: 'insurance_policy',
+      entityId: policy.id,
+      buildingId: Number(request.params.buildingId),
+      metadata: { number: policy.number, insurer: policy.insurer }
+    });
+    response.json({ data: policy, meta: { requestId: request.id } });
+  })
+);
+
+insuranceRoutes.put(
+  '/buildings/:buildingId/policies/:policyId/assets',
+  requireAuth,
+  requirePermission('insurance.update'),
+  ensureBuildingAccess,
+  validateBody(assignInsurancePolicyAssetsSchema),
+  asyncHandler(async (request, response) => {
+    const assignment = await policyUseCases.assignAssets(
+      request.params.buildingId,
+      request.params.policyId,
+      request.body.assetIds,
+      request.user.id
+    );
+    response.json({ data: assignment, meta: { requestId: request.id } });
   })
 );
 
